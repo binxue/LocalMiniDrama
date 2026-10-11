@@ -1,0 +1,22 @@
+// Isolated research: invokes the existing story service; never opens production DB.
+const fs=require('fs'),path=require('path'),crypto=require('crypto'),https=require('https');
+if (!process.env.RESEARCH_RUNTIME_DIR || !process.env.DEEPSEEK_CONFIG_FILE) throw Error('Explicit isolated RESEARCH_RUNTIME_DIR and authorized DEEPSEEK_CONFIG_FILE required');
+const root=path.resolve(process.env.RESEARCH_RUNTIME_DIR);
+if (root===path.resolve(__dirname,'..') || root===path.resolve(__dirname,'../..')) throw Error('Runtime must be outside application source');
+const out=path.join(root,'research');fs.mkdirSync(out,{recursive:true});
+process.chdir(root);
+const Database=require('better-sqlite3');
+const db=new Database(path.join(root,'data/drama.db'));
+const configService=require('../src/services/aiConfigService');
+const log={info(){},warn(){},error(){}};
+const ds=JSON.parse(fs.readFileSync(process.env.DEEPSEEK_CONFIG_FILE,'utf8'));
+if(!db.prepare("SELECT id FROM ai_service_configs WHERE provider='deepseek'").get()) configService.createConfig(db,log,{name:'Isolated official DeepSeek',service_type:'text',provider:'deepseek',base_url:ds.deepseek_base_url.replace(/\/$/,'')+'/v1',api_key:ds.deepseek_api_key,model:['deepseek-flash'],default_model:'deepseek-flash',endpoint:'/chat/completions',is_default:true,settings:JSON.stringify({max_tokens:8192})});
+const premise=process.env.RECONSTRUCTION_INPUT ? fs.readFileSync(process.env.RECONSTRUCTION_INPUT,'utf8') : '现代都市亲情悬疑短剧《别替我签字》：婚礼前夜，急诊护士沈念发现，母亲所谓的自愿卖房协议竟由准丈夫代签，卖房款被拿去偿还他妹妹的债。准丈夫用她曾经签字担保的秘密逼她在次日婚礼上认账。沈念决定当着两家人的面追回母亲的房子，但母亲为了保住她的婚姻竟先替对方撒谎。故事以婚礼现场的关系决裂开场，前三集只展开这一场家人之间的利益争夺，不靠富豪救场、突然身份反转或万能录音解决。';
+fs.writeFileSync(path.join(out,process.env.RECONSTRUCTION_INPUT?'reconstruction-input.json':'input.json'),JSON.stringify({premise,hash:crypto.createHash('sha256').update(premise).digest('hex'),model:'deepseek-flash',temperature:0.8,max_tokens:8192,episodes:3},null,2));
+let label;const original=https.request;
+https.request=function(options,cb){let requestText='';const req=original.call(this,options,res=>{const chunks=[];res.on('data',c=>chunks.push(c));res.on('end',()=>fs.writeFileSync(path.join(out,label+'-response.sse'),Buffer.concat(chunks)));cb(res);});const write=req.write.bind(req);req.write=function(c,...args){requestText+=c.toString();return write(c,...args)};req.on('finish',()=>fs.writeFileSync(path.join(out,label+'-request.json'),requestText));return req;};
+const prompts=require('../src/services/promptI18n');const drama=require('../src/services/dramaService');const story=require('../src/services/storyGenerationService');
+async function run(){for(label of (process.env.RECONSTRUCTION_INPUT ? ['reconstructed'] : ['native','enhanced'])){if(fs.existsSync(path.join(out,label+'-attempt.json'))) throw Error('Attempt exists: no automatic retry');fs.writeFileSync(path.join(out,label+'-attempt.json'),JSON.stringify({started:new Date().toISOString()}));if(label==='native'){const baseline=require(path.join(root,'baseline-promptI18n.js'));prompts.getStoryExpansionSystemPrompt=baseline.getStoryExpansionSystemPrompt;prompts.buildStoryExpansionUserPrompt=baseline.buildStoryExpansionUserPrompt;}else{delete require.cache[require.resolve('../src/services/promptI18n')];Object.assign(prompts,require('../src/services/promptI18n'));}const start=Date.now();try{const result=await story.generateStory(db,log,{premise,episode_count:3,style:'modern',type:'drama',model:'deepseek-flash'});fs.writeFileSync(path.join(out,label+'-episodes.json'),JSON.stringify(result,null,2));fs.writeFileSync(path.join(out,label+'-golden-three.txt'),result.episodes.map(e=>'第'+e.episode+'集 '+e.title+'\n\n'+e.content).join('\n\n════════════════\n\n'));const valid=result.episodes.length===3&&result.episodes.every(e=>e.content.length>=500);const p=drama.createDrama(db,log,{title:label+'《别替我签字》',description:premise});drama.saveEpisodes(db,log,p.id,{episodes:result.episodes.map(e=>({episode_number:e.episode,title:e.title,script_content:e.content}))});fs.writeFileSync(path.join(out,label+'-result.json'),JSON.stringify({valid,elapsed_ms:Date.now()-start,project_id:p.id,lengths:result.episodes.map(e=>e.content.length)},null,2));console.log(label,valid,result.episodes.map(e=>e.content.length));}catch(e){fs.writeFileSync(path.join(out,label+'-failure.json'),JSON.stringify({error:e.message,elapsed_ms:Date.now()-start}));console.log(label,'FAILED',e.message);}}db.close();}
+run().catch(e=>{console.error(e.message);process.exitCode=1});
+
+
