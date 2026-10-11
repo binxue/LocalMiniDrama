@@ -138,6 +138,18 @@ function setupRouter(cfg, db, log) {
     }
   });
 
+  // 轻量后台编剧团队：只返回隔离草稿，不自动写入 Store/Canon。
+  r.post('/generation/story-team', async (req, res) => {
+    try {
+      const storyTeamService = require('../services/storyTeamService');
+      const result = await storyTeamService.generateStoryTeam(db, log, req.body || {});
+      response.success(res, result);
+    } catch (err) {
+      log.error('generation/story-team', { error: err.message });
+      response.internalError(res, err.message || '编剧团队生成失败');
+    }
+  });
+
   // ---------- character-library ----------
   r.get('/character-library', charLibrary.list);
   r.post('/character-library', charLibrary.create);

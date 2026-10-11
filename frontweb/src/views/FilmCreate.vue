@@ -231,6 +231,9 @@
                   <el-button type="primary" :loading="isStoryGenRunning" @click="onGenerateStory">
                     生成剧本
                   </el-button>
+                  <el-button :loading="teamGenerating" :disabled="!storyInput.trim()" @click="onGenerateStoryTeam">
+                    编剧团队草稿
+                  </el-button>
                   <el-button plain @click="showNovelImport = true">
                     <el-icon><DocumentAdd /></el-icon>
                     导入小说
@@ -2707,6 +2710,7 @@ const storyStyle = ref('')
 const storyType = ref('')
 const storyEpisodeCount = ref(1)
 const storyGenerating = ref(false)
+const teamGenerating = ref(false)
 /** 剧本工作台：create 创作 | select 选择预览 */
 const scriptWorkbenchMode = ref('create')
 const showSelectScriptDialog = ref(false)
@@ -5041,6 +5045,28 @@ async function onGenerateStory() {
       })
     },
   })
+}
+
+async function onGenerateStoryTeam() {
+  teamGenerating.value = true
+  try {
+    const result = await generationAPI.generateStoryTeam({
+      premise: storyInput.value,
+      episode_count: storyEpisodeCount.value || 3,
+      model: undefined,
+    })
+    const episodes = result?.final?.episodes || []
+    if (!episodes.length) throw new Error('编剧团队没有返回可读正文')
+    // 研究草稿只进入编辑器内存，不自动写入 Store/Canon；作者仍通过“保存当前集”明确采用。
+    scriptTitle.value = episodes[0].title || scriptTitle.value
+    scriptContent.value = episodes[0].content || ''
+    selectedEpisodeId.value = null
+    ElMessage.success(`编剧团队已完成 ${episodes.length} 集草稿与独立审稿，第1集待你确认保存`)
+  } catch (e) {
+    ElMessage.error(e.message || '编剧团队生成失败')
+  } finally {
+    teamGenerating.value = false
+  }
 }
 
 function openSelectScriptDialog() {
