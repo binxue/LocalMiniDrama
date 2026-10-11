@@ -18,4 +18,6 @@ Follow-up: optimized storyboard prompt was confirmed present in the re-opened ed
 
 production-candidate.txt/json is a further Agent Writer revision, not a new Provider result. Project address/photo is a disclosed ordinary connecting detail added by that editor, not a fact evidenced in raw Provider output. Keep it outside Canon. Independent review remains the acceptance authority for this frozen candidate; commercial author acceptance is not implied.
 
+shooting-draft.txt/json is the final bounded editorial candidate (hash JSON `87FC6883150DE00199A75E3843B2EF3E0E6151975718A194B7800D09C7D03E12`). It fixes the candidate's continuity issues: the address is introduced before the loan, the two documents have separate uses, the 21:00 move and 09:00 verification are consistent, and the buyer records evidence without deciding debt. The address/photo is explicitly agent-added connective material, not Provider evidence. Project 6 is an isolated browser-persisted draft; it is not Canon or author accepted.
+
 Tests: backend 78/78, frontend 10/10; frontend build passed; research scripts syntax checks passed. Unrelated missing example ZIP and default-index defect preserved; independent index used. No production data or Zemora Novel modified.
