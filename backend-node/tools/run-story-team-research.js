@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const Database = require('better-sqlite3');
-const { generateStoryTeam } = require('../src/services/storyTeamService');
+const { generateStoryTeam, repairStoryTeam } = require('../src/services/storyTeamService');
 
 const runtime = process.env.RESEARCH_RUNTIME_DIR;
 if (!runtime || path.resolve(runtime) === path.resolve(__dirname, '..')) {
@@ -15,7 +15,12 @@ const premise = fs.readFileSync(process.env.RESEARCH_INPUT, 'utf8').trim();
 const db = new Database(path.join(runtime, 'data', 'drama.db'));
 const log = { info() {}, warn() {}, error() {} };
 
-generateStoryTeam(db, log, { premise, episode_count: 3, model: 'deepseek-flash' })
+const existing = process.env.RESEARCH_TEAM_RESULT;
+const operation = existing
+  ? repairStoryTeam(db, log, JSON.parse(fs.readFileSync(existing, 'utf8')), { model: 'deepseek-flash' })
+  : generateStoryTeam(db, log, { premise, episode_count: 3, model: 'deepseek-flash' });
+
+operation
   .then((result) => {
     fs.writeFileSync(path.join(out, 'input.json'), JSON.stringify({ premise, hash: crypto.createHash('sha256').update(premise).digest('hex') }, null, 2));
     fs.writeFileSync(path.join(out, 'team-result.json'), JSON.stringify(result, null, 2));
