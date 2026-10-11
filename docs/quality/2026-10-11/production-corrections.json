@@ -1,0 +1,341 @@
+{
+  "editor": "Agent deterministic production correction; not Provider regeneration",
+  "timing": "provisional 4 Chinese characters/sec plus 2sec; requires performance timing",
+  "changes": [
+    {
+      "asset": "prop",
+      "id": 1,
+      "patch": {
+        "name": "售房协议",
+        "description": "林秀兰本人签署的房屋出售协议。婚宴上沈念将其放在话筒架上质问母亲售房后的住处；30万元为售房订金，随后被母亲借给周敏。与沈念另行签署的30万元旧担保严格区分。"
+      }
+    },
+    {
+      "asset": "storyboard",
+      "id": 2,
+      "patch": {
+        "duration": 6,
+        "video_prompt": "场景：婚宴厅主舞台，二十桌宾客分列两侧，红毯从舞台延伸至入口，舞台背景为粉色花艺拱门，午间，婚宴厅内暖黄灯光，水晶吊灯投下密集光斑。镜头标题：司仪递话筒。动作：司仪站在舞台中央，将话筒递给沈念，镜头从司仪肩后缓推向沈念正面。沈念接过话筒但目光没有看周维，而是越过二十桌宾客，缓缓落在母亲林秀兰身上。。对话：司仪：\"请新娘说一句，你愿不愿意。\"。结果：沈念手握话筒，目光锁定远处母亲，嘴唇微启，全场安静等待。。景别：中景。镜头角度：中景·平视·正面（medium shot (waist-up to full body), character and immediate surroundings visible, moderate depth of field, eye-level shot, neutral perspective, natural horizontal framing, shooting from the front）。运镜：推镜。氛围：暖黄主光从顶部打亮舞台，宾客席间散落冷白补光，空气中浮动着午宴的油烟与花香，氛围表面喜庆却暗藏紧绷。情绪：紧张。音效：宴会厅嘈杂人声渐弱，话筒轻微电流声，司仪声音爽朗热情。时长：6秒。风格：photorealistic, ultra-detailed, 8k uhd, sharp focus, natural lighting, real skin texture, hyperrealism, professional photography, RAW photo。=VideoRatio: 16:9"
+      }
+    },
+    {
+      "asset": "storyboard",
+      "id": 4,
+      "patch": {
+        "duration": 6,
+        "video_prompt": "场景：婚宴厅主舞台，周维从沈念右侧跨步上前，举起另一支话筒，午间，舞台顶光在周维脸上投下硬朗阴影。镜头标题：周维抢话。动作：周维从画面右侧跨步进入，举起话筒面向宾客，笑容饱满。镜头横摇跟随他的动作，将沈念留在画面左边缘。。对话：周维：\"岳母支持小家庭，以后跟我们住！\"。结果：周维话音落下，宾客席响起整齐掌声，他转头看向沈念，笑意未达眼底。。景别：中景。镜头角度：中景·平视·正面（medium shot (waist-up to full body), character and immediate surroundings visible, moderate depth of field, eye-level shot, neutral perspective, natural horizontal framing, shooting from the front）。运镜：横摇。氛围：顶光从周维头顶直下，眼窝投下阴影，掌声如潮水般涌来，暖黄灯光下喜庆表象与暗流并存。情绪：虚伪。音效：周维声音洪亮圆滑，宾客掌声热烈，夹杂零星叫好声。时长：6秒。风格：photorealistic, ultra-detailed, 8k uhd, sharp focus, natural lighting, real skin texture, hyperrealism, professional photography, RAW photo。=VideoRatio: 16:9"
+      }
+    },
+    {
+      "asset": "storyboard",
+      "id": 5,
+      "patch": {
+        "description": "【镜头类型】特写\n【运镜】推镜\n【动作】沈念的手将一份折叠的售房协议展开，平放在话筒架底座上，手指用力压平纸张边角。镜头从俯视特写缓推向协议上的签名处。\n【对话】沈念：\"三十万进了我妈账户，当天转给你妹妹。你说借三天，今天第五天了。\"\n【解说】\n【结果】协议平铺在话筒架上，签名处清晰可见，沈念的手收回，指尖微微发白。\n【情绪】决绝",
+        "action": "沈念的手将一份折叠的售房协议展开，平放在话筒架底座上，手指用力压平纸张边角。镜头从俯视特写缓推向协议上的签名处。",
+        "image_prompt": "婚宴厅主舞台话筒架旁，白色桌布上放置着话筒架底座，午间，舞台顶光在协议纸面形成强烈反光，特写·俯拍·正面，沈念的手将一份折叠的售房协议展开，平放在话筒架底座上，手指用力压平纸张边角。镜头从俯视特写缓推向协议上的签名处，决绝，photorealistic, ultra-detailed, 8k uhd, sharp focus, natural lighting, real skin texture, hyperrealism, professional photography, RAW photo，首帧静止画面",
+        "video_prompt": "场景：婚宴厅主舞台话筒架旁，白色桌布上放置着话筒架底座，午间，舞台顶光在协议纸面形成强烈反光。镜头标题：协议落架。动作：沈念的手将一份折叠的售房协议展开，平放在话筒架底座上，手指用力压平纸张边角。镜头从俯视特写缓推向协议上的签名处。。对话：沈念：\"三十万进了我妈账户，当天转给你妹妹。你说借三天，今天第五天了。\"。结果：协议平铺在话筒架上，签名处清晰可见，沈念的手收回，指尖微微发白。。景别：特写。镜头角度：特写·俯拍·正面（close-up shot (face/bust framing), subject fills most of frame, shallow depth of field, background softly blurred, high-angle bird's eye view, camera above looking down, background shows floor/ground with downward perspective distortion, shooting from the front）。运镜：推镜。氛围：顶光直射纸面形成高反差，白纸黑字如刀锋般锐利，背景掌声骤停，空气凝固。情绪：决绝。音效：纸张展开的清脆摩擦声，沈念声音冷硬如冰，全场瞬间安静。时长：6秒。风格：photorealistic, ultra-detailed, 8k uhd, sharp focus, natural lighting, real skin texture, hyperrealism, professional photography, RAW photo。=VideoRatio: 16:9",
+        "duration": 10
+      }
+    },
+    {
+      "asset": "storyboard",
+      "id": 6,
+      "patch": {
+        "duration": 12,
+        "video_prompt": "场景：婚宴厅宾客席，林秀兰坐在第二排，手袋放在膝上，周围宾客目光聚焦舞台，午间，宾客席间光线偏暗，侧光勾勒林秀兰轮廓。镜头标题：母亲攥袋。动作：林秀兰双手攥紧膝上的手袋，指节发白，嘴唇翕动。镜头从近景缓推，背景宾客虚化，她独自坐在人群中如孤岛。。对话：林秀兰：\"他发过项目照片和地址，我看过。说三天回款，我才借。协议也是我自己签的，今天别问了。\"。结果：林秀兰说完垂下眼睑，手袋被攥出深深褶皱，邻座宾客侧目低语。。景别：近景。镜头角度：特写·平视·正面（close-up shot (face/bust framing), subject fills most of frame, shallow depth of field, background softly blurred, eye-level shot, neutral perspective, natural horizontal framing, shooting from the front）。运镜：推镜。氛围：侧光从左侧打来，右脸陷入阴影，周围宾客虚化成模糊色块，氛围压抑而孤立。情绪：羞愧。音效：林秀兰声音低沉沙哑，带着恳求的颤音，周围宾客窃窃私语。时长：12秒。风格：photorealistic, ultra-detailed, 8k uhd, sharp focus, natural lighting, real skin texture, hyperrealism, professional photography, RAW photo。=VideoRatio: 16:9"
+      }
+    },
+    {
+      "asset": "storyboard",
+      "id": 7,
+      "patch": {
+        "duration": 8,
+        "video_prompt": "场景：婚宴厅主舞台，周维侧身靠近沈念，嘴唇几乎贴着她耳廓，午间，舞台侧光在两人面部形成明暗交界。镜头标题：周维耳语。动作：周维侧身靠近沈念，嘴唇贴近她耳边，压低声音。镜头从侧面特写缓推，两人面部占据画面，背景完全虚化。。对话：周维：\"你给我签的担保，也还没解决。一定要让所有人知道？\"。结果：周维说完微微退开，嘴角挂着若有若无的笑，沈念面无表情直视前方。。景别：特写。镜头角度：特写·平视·左侧（close-up shot (face/bust framing), subject fills most of frame, shallow depth of field, background softly blurred, eye-level shot, neutral perspective, natural horizontal framing, shooting from the left side, profile view）。运镜：推镜。氛围：侧光将两人面部切成明暗两半，周维半张脸在阴影中，氛围阴冷而充满威胁。情绪：威胁。音效：周维声音压至极低，气息声清晰可闻，阴冷如蛇。时长：8秒。风格：photorealistic, ultra-detailed, 8k uhd, sharp focus, natural lighting, real skin texture, hyperrealism, professional photography, RAW photo。=VideoRatio: 16:9"
+      }
+    },
+    {
+      "asset": "storyboard",
+      "id": 9,
+      "patch": {
+        "action": "周维抓住沈念手腕，她甩开，话筒撞在桌边发出刺耳啸叫。",
+        "result": "沈念脱开周维的手；话筒留在桌边，不飞出或滚入桌下。",
+        "image_prompt": "婚宴厅内，周维抓住沈念手腕；沈念准备甩开，话筒在桌边。中景，写实摄影。",
+        "video_prompt": "周维抓住沈念手腕，她甩开，话筒撞在桌边发出刺耳啸叫。 沈念脱开周维的手；话筒留在桌边，不飞出或滚入桌下。"
+      }
+    },
+    {
+      "asset": "storyboard",
+      "id": 10,
+      "patch": {
+        "duration": 7,
+        "video_prompt": "场景：婚宴厅主舞台，周维站在舞台边缘面向二十桌宾客，手中举着泛黄的担保复印件，午间，舞台顶光从周维头顶打下，面部半明半暗。镜头标题：举担保书。动作：周维从口袋抽出旧担保复印件，高举过头顶，转身面向宾客。镜头从仰视中景向后拉，展现二十桌宾客齐刷刷投来的目光。。对话：周维：\"三十万借款，她签过字。现在翻脸就想不认？\"。结果：担保复印件在灯光下泛着旧纸的黄，宾客席议论声如潮水涌起，周维站在舞台中央如审判者。。景别：中景。镜头角度：中景·仰拍·正面（medium shot (waist-up to full body), character and immediate surroundings visible, moderate depth of field, low-angle upward shot, camera below eye-line, slight upward tilt, empowering perspective, shooting from the front）。运镜：拉镜。氛围：顶光从周维头顶直下形成强烈轮廓光，他面部半明半暗如双面人，宾客席隐入昏暗，氛围充满压迫与对峙。情绪：愤怒。音效：周维声音高亢煽动，纸张抖动声，宾客议论声如蜂群嗡鸣。时长：7秒。风格：photorealistic, ultra-detailed, 8k uhd, sharp focus, natural lighting, real skin texture, hyperrealism, professional photography, RAW photo。=VideoRatio: 16:9"
+      }
+    },
+    {
+      "asset": "storyboard",
+      "id": 11,
+      "patch": {
+        "duration": 8,
+        "video_prompt": "场景：婚宴厅主舞台，沈念站在话筒架旁，周维持担保书站在她右侧两步外，午间，舞台侧光从左侧打来，沈念右脸半明半暗。镜头标题：沈念回应。动作：沈念直视周维，目光冷静如冰，嘴角没有一丝弧度。镜头从近景缓推至特写，背景周维举着纸的手虚化。。对话：沈念：\"我签过的会查清。不是你喊一声，我就替所有人认账。\"。结果：沈念说完微微抬起下巴，目光如刀扫过周维，周维持纸的手僵在半空。。景别：近景。镜头角度：特写·平视·正面（close-up shot (face/bust framing), subject fills most of frame, shallow depth of field, background softly blurred, eye-level shot, neutral perspective, natural horizontal framing, shooting from the front）。运镜：推镜。氛围：侧光在沈念面部形成锐利明暗分界，右眼在阴影中却格外明亮，氛围冷峻而坚定。情绪：坚定。音效：沈念声音平静而锋利，每个字如冰珠落盘，宾客议论声被压下去。时长：8秒。风格：photorealistic, ultra-detailed, 8k uhd, sharp focus, natural lighting, real skin texture, hyperrealism, professional photography, RAW photo。=VideoRatio: 16:9"
+      }
+    },
+    {
+      "asset": "storyboard",
+      "id": 15,
+      "patch": {
+        "duration": 10,
+        "video_prompt": "场景：婚宴厅出口通道服务台，白色大理石台面上放着结算单和计算器，午后，走廊冷白顶光直射结算单。镜头标题：结算差额。动作：经理手指点在结算单上的数字处，镜头从俯视特写缓推，结算单上\"三万八千六\"被红笔圈出。。对话：经理：\"未开的酒水退掉。已上的菜和约定费用，扣完订金，还差三万八千六。\"。结果：沈念的手伸入画面，拿起结算单，指尖微微发抖。。景别：特写。镜头角度：特写·俯拍·正面（close-up shot (face/bust framing), subject fills most of frame, shallow depth of field, background softly blurred, high-angle bird's eye view, camera above looking down, background shows floor/ground with downward perspective distortion, shooting from the front）。运镜：推镜。氛围：冷白顶光直射纸面，数字如刀刻般清晰，走廊安静得能听见日光灯管的电流声。情绪：压力。音效：经理声音公事公办，计算器按键声，纸张翻动声。时长：10秒。风格：photorealistic, ultra-detailed, 8k uhd, sharp focus, natural lighting, real skin texture, hyperrealism, professional photography, RAW photo。=VideoRatio: 16:9"
+      }
+    },
+    {
+      "asset": "storyboard",
+      "id": 16,
+      "patch": {
+        "title": "余额仅剩1840",
+        "action": "沈念点开银行转账，输入38600元，按下确认。转账成功后，余额从40440元变为1840元。",
+        "result": "转账成功，账户余额1840元。沈念握着手机，手仍在抖。",
+        "image_prompt": "手机转账画面：支付前余额40440元；沈念确认支付38600元；支付成功后余额1840元。不得在确认前显示扣款后的余额。静止首帧显示支付确认界面。",
+        "video_prompt": "手机转账画面：支付前余额40440元；沈念确认支付38600元；支付成功后余额1840元。不得在确认前显示扣款后的余额。按确认、显示成功、核对余额依次发生。"
+      }
+    },
+    {
+      "asset": "storyboard",
+      "id": 18,
+      "patch": {
+        "duration": 7,
+        "video_prompt": "场景：婚宴厅出口通道，林秀兰站在宴会厅门口，沈念从服务台方向走来拉住她的手臂，午后，出口通道光线冷暖交界。镜头标题：拉母离开。动作：沈念快步走向母亲，拉住她的手臂往出口方向带。镜头跟拍两人，沈念边走边说话，林秀兰脚步迟疑。。对话：沈念：\"医院旁边的出租屋没退。妈，你先跟我住。\"。结果：林秀兰被拉着走了两步，回头看向宴会厅内，脚步越来越慢。。景别：中景。镜头角度：中景·平视·正面（medium shot (waist-up to full body), character and immediate surroundings visible, moderate depth of field, eye-level shot, neutral perspective, natural horizontal framing, shooting from the front）。运镜：跟镜。氛围：出口处光线冷暖交织，沈念白色婚纱在冷光中发亮，林秀兰深色衣服融入阴影，氛围急切而沉重。情绪：急切。音效：沈念声音急促而坚定，两人脚步声一快一慢，婚纱拖地摩擦声。时长：7秒。风格：photorealistic, ultra-detailed, 8k uhd, sharp focus, natural lighting, real skin texture, hyperrealism, professional photography, RAW photo。=VideoRatio: 16:9"
+      }
+    },
+    {
+      "asset": "storyboard",
+      "id": 19,
+      "patch": {
+        "duration": 7,
+        "video_prompt": "场景：婚宴厅出口通道，周维从宴会厅追出来，站在沈念和林秀兰身后三步远，午后，走廊光线从宴会厅暖光过渡到出口冷白。镜头标题：周维追出。动作：周维从宴会厅追出，西装外套敞开，领带歪斜。他站在通道中间，声音从身后传来。镜头手持跟拍他追出的动作，画面有轻微晃动。。对话：周维：\"你让妈挤那个单间？婚房本来给她留了卧室！\"。结果：沈念停下脚步但没有回头，林秀兰从她手中抽出手臂，转身面对周维。。景别：中景。镜头角度：中景·平视·正面（medium shot (waist-up to full body), character and immediate surroundings visible, moderate depth of field, eye-level shot, neutral perspective, natural horizontal framing, shooting from the front）。运镜：手持。氛围：走廊顶灯在周维头顶形成苍白光晕，他站在冷暖交界处，面部一半暖光一半冷光，氛围撕裂而讽刺。情绪：讽刺。音效：周维声音高亢带着表演性质的委屈，皮鞋急促敲击地面。时长：7秒。风格：photorealistic, ultra-detailed, 8k uhd, sharp focus, natural lighting, real skin texture, hyperrealism, professional photography, RAW photo。=VideoRatio: 16:9"
+      }
+    },
+    {
+      "asset": "storyboard",
+      "id": 20,
+      "patch": {
+        "duration": 9,
+        "video_prompt": "场景：婚宴厅出口通道，林秀兰站在沈念与周维之间，手中握着老房钥匙，午后，走廊冷白顶光聚焦手部。镜头标题：钥匙易手。动作：林秀兰抽开女儿的手，从手袋里摸出老房钥匙，递向周维。镜头从俯视特写缓推，钥匙在冷光下泛着铜色，从母亲手心交到周维手心。。对话：林秀兰：\"维维，帮我把东西搬过去。念念今天气头上，过两天就好了。\"。结果：钥匙落入周维掌心，他合拢手指握住。沈念站在几步外，看着钥匙离开母亲手心的全过程，眼中最后一点光熄灭。。景别：特写。镜头角度：特写·俯拍·正面（close-up shot (face/bust framing), subject fills most of frame, shallow depth of field, background softly blurred, high-angle bird's eye view, camera above looking down, background shows floor/ground with downward perspective distortion, shooting from the front）。运镜：推镜。氛围：冷白顶光聚焦在交接钥匙的手上，周围环境压暗，铜钥匙在冷光中泛着旧色，氛围如坠冰窖。情绪：绝望。音效：钥匙金属碰撞声清脆刺耳，林秀兰声音疲惫而讨好，沈念呼吸声停了一拍。时长：9秒。风格：photorealistic, ultra-detailed, 8k uhd, sharp focus, natural lighting, real skin texture, hyperrealism, professional photography, RAW photo。=VideoRatio: 16:9"
+      }
+    },
+    {
+      "asset": "storyboard",
+      "id": 21,
+      "patch": {
+        "duration": 15,
+        "video_prompt": "场景：婚宴厅出口通道，周维站在门口对着手机发语音，沈念在画面边缘，午后，走廊光线偏冷，周维面部半明半暗。镜头标题：搬空旧物。动作：周维对着手机发语音，嘴角带着得逞的笑。沈念从画面边缘抬头，目光如刀。镜头从周维横摇到沈念，再摇回周维。。对话：周维：\"老房现在清。工具、破凳子，那些旧东西都不要。\" 沈念：\"你答应给她搬家，不是替她扔东西！\" 周维：\"你不嫁了，还管我家放什么？\"。结果：周维说完收起手机，挑衅地看着沈念。沈念提起裙摆，转身跑向出口。。景别：中景。镜头角度：中景·平视·正面（medium shot (waist-up to full body), character and immediate surroundings visible, moderate depth of field, eye-level shot, neutral perspective, natural horizontal framing, shooting from the front）。运镜：横摇。氛围：走廊冷光从上方压下，周维面部在阴影中显出冷漠，沈念白色婚纱在奔跑中如一道光，氛围愤怒而悲凉。情绪：愤怒。音效：周维语音发送提示音，沈念声音尖锐愤怒，婚纱拖地急促摩擦声。时长：15秒。风格：photorealistic, ultra-detailed, 8k uhd, sharp focus, natural lighting, real skin texture, hyperrealism, professional photography, RAW photo。=VideoRatio: 16:9"
+      }
+    },
+    {
+      "asset": "storyboard",
+      "id": 22,
+      "patch": {
+        "duration": 7,
+        "video_prompt": "场景：酒店大堂通往出口的通道，玻璃门外是午后街道，阳光从门外倾泻而入，午后，酒店大堂出口处自然光与室内冷光交汇。镜头标题：跑向门口。动作：沈念提着裙摆跑向玻璃门，母亲在身后叫她，她没有回头。镜头跟拍她奔跑的背影，她推开玻璃门，午后阳光瞬间将她吞没。。对话：林秀兰（画外）：\"念念——\" 周维（画外）：\"门我开，今天一定搬空。\"。结果：沈念冲出玻璃门，阳光将她的白色婚纱照得刺眼。她站在街边，身后是母亲的呼喊和周维的语音，面前是午后空旷的街道。。景别：远景。镜头角度：远景·平视·正面（wide shot (full body with environment), subject small relative to scene, deep depth of field, environment context prominent, eye-level shot, neutral perspective, natural horizontal framing, shooting from the front）。运镜：跟镜。氛围：玻璃门外午后阳光强烈，逆光将沈念轮廓镀上金边，室内冷光在身后渐远，氛围从压抑转向空旷而未知。情绪：决绝。音效：玻璃门推开沉重声响，沈念脚步声急促，母亲呼喊声从身后传来渐弱，街道车流声涌入。时长：7秒。风格：photorealistic, ultra-detailed, 8k uhd, sharp focus, natural lighting, real skin texture, hyperrealism, professional photography, RAW photo。=VideoRatio: 16:9"
+      }
+    }
+  ],
+  "scripts_unchanged": true,
+  "followup_changes": [
+    {
+      "path": "/props/2",
+      "patch": {
+        "description": "周维举向宾客的旧担保复印件，对应沈念另行签署的30万元担保。沈念承认自己签过，要求查清；她拒绝混同或追加其他债务，不能描述为否认全部责任。"
+      }
+    },
+    {
+      "path": "/props/5",
+      "patch": {
+        "description": "酒店经理在转账成功后交给沈念的宴席结清回执。证明宴席费用结清，不证明银行余额；1840元余额由手机画面呈现。"
+      }
+    },
+    {
+      "path": "/storyboards/22",
+      "patch": {
+        "result": "沈念推门冲出酒店，继续向外奔去；镜头结束于她离开，不新增站在街边的停顿。",
+        "video_prompt": "沈念提起裙摆跑向门口，母亲在身后叫她，她不回头。周维画外语音：门我开，今天一定搬空。结束于沈念推门冲出酒店继续行动，不停在街边。"
+      }
+    },
+    {
+      "path": "/storyboards/20",
+      "patch": {
+        "action": "林秀兰从手袋取出老房钥匙递给周维，钥匙从母亲手心交到周维手心。不重复表演上一镜已发生的抽开女儿手臂。"
+      }
+    }
+  ],
+  "functional_role_design": [
+    {
+      "name": "司仪",
+      "role": "功能配角",
+      "description": "婚礼主持人，只负责开场询问。Agent制作设计，原文未指定外貌。",
+      "appearance": "成年婚礼主持人，深色正装，手持话筒；制作设计待导演确定。"
+    },
+    {
+      "name": "酒店经理",
+      "role": "功能配角",
+      "description": "核算宴席费用并交付结清回执。Agent制作设计，原文未指定外貌。",
+      "appearance": "成年酒店经理，酒店制服，持合同和结算单；制作设计待导演确定。"
+    }
+  ],
+  "linkage_prompt_updates": [
+    {
+      "id": 2,
+      "patch": {
+        "character_ids": [
+          6,
+          7,
+          8,
+          9
+        ],
+        "image_prompt": "婚宴厅主舞台，二十桌宾客分列两侧，红毯从舞台延伸至入口，舞台背景为红金花艺拱门，午间，婚宴厅内暖黄灯光，水晶吊灯投下密集光斑，中景·平视·正面，司仪站在舞台中央，将话筒递给沈念，镜头从司仪肩后缓推向沈念正面。沈念接过话筒但目光没有看周维，而是越过二十桌宾客，缓缓落在母亲林秀兰身上，紧张，photorealistic, ultra-detailed, 8k uhd, sharp focus, natural lighting, real skin texture, hyperrealism, professional photography, RAW photo，首帧静止画面",
+        "video_prompt": "场景：婚宴厅主舞台，二十桌宾客分列两侧，红毯从舞台延伸至入口，舞台背景为红金花艺拱门，午间，婚宴厅内暖黄灯光，水晶吊灯投下密集光斑。镜头标题：司仪递话筒。动作：司仪站在舞台中央，将话筒递给沈念，镜头从司仪肩后缓推向沈念正面。沈念接过话筒但目光没有看周维，而是越过二十桌宾客，缓缓落在母亲林秀兰身上。。对话：司仪：\"请新娘说一句，你愿不愿意。\"。结果：沈念手握话筒，目光锁定远处母亲，嘴唇微启，全场安静等待。。景别：中景。镜头角度：中景·平视·正面（medium shot (waist-up to full body), character and immediate surroundings visible, moderate depth of field, eye-level shot, neutral perspective, natural horizontal framing, shooting from the front）。运镜：推镜。氛围：暖黄主光从顶部打亮舞台，宾客席间散落冷白补光，空气中浮动着午宴的油烟与花香，氛围表面喜庆却暗藏紧绷。情绪：紧张。音效：宴会厅嘈杂人声渐弱，话筒轻微电流声，司仪声音爽朗热情。时长：6秒。风格：photorealistic, ultra-detailed, 8k uhd, sharp focus, natural lighting, real skin texture, hyperrealism, professional photography, RAW photo。=VideoRatio: 16:9"
+      }
+    },
+    {
+      "id": 3,
+      "patch": {
+        "video_prompt": "场景：婚宴厅主舞台，沈念站在话筒架前，身后是周维模糊的身影，午间，婚宴厅内暖黄灯光，侧光勾勒沈念面部轮廓。镜头标题：沈念问母。动作：沈念紧握话筒，目光越过镜头方向望向远处，眼眶微红但语气克制。镜头从近景缓推至特写，背景宾客虚化成暖色光斑。。对话：沈念：\"妈，房子卖了，你住哪？\"。结果：沈念问完，嘴唇抿紧，话筒因手部细微颤抖而轻微晃动。。景别：近景。镜头角度：特写·平视·正面（close-up shot (face/bust framing), subject fills most of frame, shallow depth of field, background softly blurred, eye-level shot, neutral perspective, natural horizontal framing, shooting from the front）。运镜：推镜。氛围：暖黄侧光从右侧打来，左脸落入柔和阴影，背景虚化光斑如散落的烛火，氛围由喜庆转向凝重。情绪：隐忍。音效：话筒轻微摩擦声，沈念声音略带颤抖但清晰有力。时长：5秒。风格：photorealistic, ultra-detailed, 8k uhd, sharp focus, natural lighting, real skin texture, hyperrealism, professional photography, RAW photo。=VideoRatio: 16:9"
+      }
+    },
+    {
+      "id": 4,
+      "patch": {
+        "video_prompt": "场景：婚宴厅主舞台，周维从沈念右侧跨步上前，举起另一支话筒，午间，舞台顶光在周维脸上投下硬朗阴影。镜头标题：周维抢话。动作：周维从画面右侧跨步进入，举起话筒面向宾客，笑容饱满。镜头横摇跟随他的动作，将沈念留在画面左边缘。。对话：周维：\"岳母支持小家庭，以后跟我们住！\"。结果：周维话音落下，宾客席响起整齐掌声，他转头看向沈念，笑意未达眼底。。景别：中景。镜头角度：中景·平视·正面（medium shot (waist-up to full body), character and immediate surroundings visible, moderate depth of field, eye-level shot, neutral perspective, natural horizontal framing, shooting from the front）。运镜：横摇。氛围：顶光从周维头顶直下，眼窝投下阴影，掌声如潮水般涌来，暖黄灯光下喜庆表象与暗流并存。情绪：虚伪。音效：周维声音洪亮圆滑，宾客掌声热烈，夹杂零星叫好声。时长：6秒。风格：photorealistic, ultra-detailed, 8k uhd, sharp focus, natural lighting, real skin texture, hyperrealism, professional photography, RAW photo。=VideoRatio: 16:9"
+      }
+    },
+    {
+      "id": 5,
+      "patch": {
+        "video_prompt": "场景：婚宴厅主舞台话筒架旁，白色桌布上放置着话筒架底座，午间，舞台顶光在协议纸面形成强烈反光。镜头标题：协议落架。动作：沈念的手将一份折叠的售房协议展开，平放在话筒架底座上，手指用力压平纸张边角。镜头从俯视特写缓推向协议上的签名处。。对话：沈念：\"三十万进了我妈账户，当天转给你妹妹。你说借三天，今天第五天了。\"。结果：协议平铺在话筒架上，签名处清晰可见，沈念的手收回，指尖微微发白。。景别：特写。镜头角度：特写·俯拍·正面（close-up shot (face/bust framing), subject fills most of frame, shallow depth of field, background softly blurred, high-angle bird's eye view, camera above looking down, background shows floor/ground with downward perspective distortion, shooting from the front）。运镜：推镜。氛围：顶光直射纸面形成高反差，白纸黑字如刀锋般锐利，背景掌声骤停，空气凝固。情绪：决绝。音效：纸张展开的清脆摩擦声，沈念声音冷硬如冰，全场瞬间安静。时长：10秒。风格：photorealistic, ultra-detailed, 8k uhd, sharp focus, natural lighting, real skin texture, hyperrealism, professional photography, RAW photo。=VideoRatio: 16:9"
+      }
+    },
+    {
+      "id": 6,
+      "patch": {
+        "video_prompt": "场景：婚宴厅宾客席，林秀兰坐在第二排，手袋放在膝上，周围宾客目光聚焦舞台，午间，宾客席间光线偏暗，侧光勾勒林秀兰轮廓。镜头标题：母亲攥袋。动作：林秀兰双手攥紧膝上的手袋，指节发白，嘴唇翕动。镜头从近景缓推，背景宾客虚化，她独自坐在人群中如孤岛。。对话：林秀兰：\"他发过项目照片和地址，我看过。说三天回款，我才借。协议也是我自己签的，今天别问了。\"。结果：林秀兰说完垂下眼睑，手袋被攥出深深褶皱，邻座宾客侧目低语。。景别：近景。镜头角度：特写·平视·正面（close-up shot (face/bust framing), subject fills most of frame, shallow depth of field, background softly blurred, eye-level shot, neutral perspective, natural horizontal framing, shooting from the front）。运镜：推镜。氛围：侧光从左侧打来，右脸陷入阴影，周围宾客虚化成模糊色块，氛围压抑而孤立。情绪：羞愧。音效：林秀兰声音低沉沙哑，带着恳求的颤音，周围宾客窃窃私语。时长：12秒。风格：photorealistic, ultra-detailed, 8k uhd, sharp focus, natural lighting, real skin texture, hyperrealism, professional photography, RAW photo。=VideoRatio: 16:9"
+      }
+    },
+    {
+      "id": 7,
+      "patch": {
+        "video_prompt": "场景：婚宴厅主舞台，周维侧身靠近沈念，嘴唇几乎贴着她耳廓，午间，舞台侧光在两人面部形成明暗交界。镜头标题：周维耳语。动作：周维侧身靠近沈念，嘴唇贴近她耳边，压低声音。镜头从侧面特写缓推，两人面部占据画面，背景完全虚化。。对话：周维：\"你给我签的担保，也还没解决。一定要让所有人知道？\"。结果：周维说完微微退开，嘴角挂着若有若无的笑，沈念面无表情直视前方。。景别：特写。镜头角度：特写·平视·左侧（close-up shot (face/bust framing), subject fills most of frame, shallow depth of field, background softly blurred, eye-level shot, neutral perspective, natural horizontal framing, shooting from the left side, profile view）。运镜：推镜。氛围：侧光将两人面部切成明暗两半，周维半张脸在阴影中，氛围阴冷而充满威胁。情绪：威胁。音效：周维声音压至极低，气息声清晰可闻，阴冷如蛇。时长：8秒。风格：photorealistic, ultra-detailed, 8k uhd, sharp focus, natural lighting, real skin texture, hyperrealism, professional photography, RAW photo。=VideoRatio: 16:9"
+      }
+    },
+    {
+      "id": 8,
+      "patch": {
+        "video_prompt": "场景：婚宴厅主舞台，沈念左手无名指，手袋开口在画面下方，午间，舞台顶光聚焦手部，戒指反射冷光。镜头标题：摘下戒指。动作：沈念低头看着左手，右手缓缓将结婚戒指从无名指上褪下。镜头从俯视特写缓推，戒指脱离手指的瞬间在灯光下闪了一下，然后被放入手袋。。对话：沈念：\"这婚不结了。\"。结果：戒指落入黑色手袋深处消失，沈念合上手袋扣，金属扣发出清脆声响。。景别：特写。镜头角度：特写·俯拍·正面（close-up shot (face/bust framing), subject fills most of frame, shallow depth of field, background softly blurred, high-angle bird's eye view, camera above looking down, background shows floor/ground with downward perspective distortion, shooting from the front）。运镜：推镜。氛围：顶光聚焦手部形成强烈高光，周围环境压暗，戒指冷光一闪如刀锋，氛围决绝而冰冷。情绪：决绝。音效：戒指滑落金属摩擦声，手袋扣合清脆一响，沈念声音平静如死水。时长：6秒。风格：photorealistic, ultra-detailed, 8k uhd, sharp focus, natural lighting, real skin texture, hyperrealism, professional photography, RAW photo。=VideoRatio: 16:9"
+      }
+    },
+    {
+      "id": 10,
+      "patch": {
+        "video_prompt": "场景：婚宴厅主舞台，周维站在舞台边缘面向二十桌宾客，手中举着泛黄的担保复印件，午间，舞台顶光从周维头顶打下，面部半明半暗。镜头标题：举担保书。动作：周维从口袋抽出旧担保复印件，高举过头顶，转身面向宾客。镜头从仰视中景向后拉，展现二十桌宾客齐刷刷投来的目光。。对话：周维：\"三十万借款，她签过字。现在翻脸就想不认？\"。结果：担保复印件在灯光下泛着旧纸的黄，宾客席议论声如潮水涌起，周维站在舞台中央如审判者。。景别：中景。镜头角度：中景·仰拍·正面（medium shot (waist-up to full body), character and immediate surroundings visible, moderate depth of field, low-angle upward shot, camera below eye-line, slight upward tilt, empowering perspective, shooting from the front）。运镜：拉镜。氛围：顶光从周维头顶直下形成强烈轮廓光，他面部半明半暗如双面人，宾客席隐入昏暗，氛围充满压迫与对峙。情绪：愤怒。音效：周维声音高亢煽动，纸张抖动声，宾客议论声如蜂群嗡鸣。时长：7秒。风格：photorealistic, ultra-detailed, 8k uhd, sharp focus, natural lighting, real skin texture, hyperrealism, professional photography, RAW photo。=VideoRatio: 16:9"
+      }
+    },
+    {
+      "id": 11,
+      "patch": {
+        "video_prompt": "场景：婚宴厅主舞台，沈念站在话筒架旁，周维持担保书站在她右侧两步外，午间，舞台侧光从左侧打来，沈念右脸半明半暗。镜头标题：沈念回应。动作：沈念直视周维，目光冷静如冰，嘴角没有一丝弧度。镜头从近景缓推至特写，背景周维举着纸的手虚化。。对话：沈念：\"我签过的会查清。不是你喊一声，我就替所有人认账。\"。结果：沈念说完微微抬起下巴，目光如刀扫过周维，周维持纸的手僵在半空。。景别：近景。镜头角度：特写·平视·正面（close-up shot (face/bust framing), subject fills most of frame, shallow depth of field, background softly blurred, eye-level shot, neutral perspective, natural horizontal framing, shooting from the front）。运镜：推镜。氛围：侧光在沈念面部形成锐利明暗分界，右眼在阴影中却格外明亮，氛围冷峻而坚定。情绪：坚定。音效：沈念声音平静而锋利，每个字如冰珠落盘，宾客议论声被压下去。时长：8秒。风格：photorealistic, ultra-detailed, 8k uhd, sharp focus, natural lighting, real skin texture, hyperrealism, professional photography, RAW photo。=VideoRatio: 16:9"
+      }
+    },
+    {
+      "id": 12,
+      "patch": {
+        "video_prompt": "场景：婚宴厅主舞台，林秀兰从宾客席冲上舞台，张开双臂挡在沈念面前，午间，舞台灯光从上方洒下，林秀兰背对光源形成半剪影。镜头标题：母亲挡前。动作：林秀兰从画面右侧冲入，张开双臂挡在沈念面前，背对宾客。镜头手持跟拍她冲上舞台的动作，画面有轻微晃动。。对话：林秀兰：\"先结婚，有什么回家说！\"。结果：林秀兰站在沈念与宾客之间，后背微微弓起如护崽的母兽，沈念在她身后低头看着母亲的后背。。景别：中景。镜头角度：中景·平视·正面（medium shot (waist-up to full body), character and immediate surroundings visible, moderate depth of field, eye-level shot, neutral perspective, natural horizontal framing, shooting from the front）。运镜：手持。氛围：顶光从林秀兰头顶洒下，她背对光源形成半剪影，面部在阴影中焦急而恳切，氛围紧张而心酸。情绪：焦急。音效：林秀兰声音尖锐急促，脚步急促踩在红毯上沉闷有声。时长：5秒。风格：photorealistic, ultra-detailed, 8k uhd, sharp focus, natural lighting, real skin texture, hyperrealism, professional photography, RAW photo。=VideoRatio: 16:9"
+      }
+    },
+    {
+      "id": 13,
+      "patch": {
+        "video_prompt": "场景：婚宴厅主舞台，沈念站在母亲身后，两人相距不到半步，午间，舞台顶光在两人之间形成柔和过渡。镜头标题：母女对视。动作：沈念低头看着母亲拦在面前的背，目光从母亲肩头移向她的侧脸。镜头从特写缓推，两人面部占据画面，背景完全虚化。。对话：沈念：\"你怕我难看，还是怕他不娶我？\"。结果：林秀兰嘴唇动了动，没有发出声音，目光躲闪看向地面。沈念眼中闪过一丝失望，睫毛轻颤。。景别：特写。镜头角度：特写·平视·正面（close-up shot (face/bust framing), subject fills most of frame, shallow depth of field, background softly blurred, eye-level shot, neutral perspective, natural horizontal framing, shooting from the front）。运镜：推镜。氛围：顶光柔化两人轮廓，林秀兰侧脸在阴影中显出细纹，沈念眼中映着母亲躲闪的目光，氛围心碎而安静。情绪：心碎。音效：沈念声音轻而颤抖，几乎耳语，林秀兰嘴唇翕动无声，周围一片死寂。时长：6秒。风格：photorealistic, ultra-detailed, 8k uhd, sharp focus, natural lighting, real skin texture, hyperrealism, professional photography, RAW photo。=VideoRatio: 16:9"
+      }
+    },
+    {
+      "id": 14,
+      "patch": {
+        "character_ids": [
+          6,
+          10
+        ],
+        "video_prompt": "场景：婚宴厅出口通道，一侧是宴会厅大门，另一侧通往酒店大堂，墙上挂着消防栓和指示牌，午后，婚宴厅出口处光线由暖黄过渡到走廊冷白。镜头标题：找经理。动作：沈念提着裙摆快步穿过出口通道，找到站在服务台旁的酒店经理。经理从文件夹中抽出宴席合同和结算单。镜头跟拍沈念背影，她停下脚步转身面对经理。。结果：经理将结算单递到沈念面前，手指点着上面的数字，沈念低头查看。。景别：中景。镜头角度：中景·平视·正面（medium shot (waist-up to full body), character and immediate surroundings visible, moderate depth of field, eye-level shot, neutral perspective, natural horizontal framing, shooting from the front）。运镜：跟镜。氛围：出口处光线从宴会厅暖黄过渡到走廊冷白，沈念白色婚纱在冷光下显得刺目，氛围从喧嚣转入冰冷的现实。情绪：疲惫。音效：脚步声急促踩在大理石地面，宴会厅内音乐声从身后传来逐渐减弱。时长：5秒。风格：photorealistic, ultra-detailed, 8k uhd, sharp focus, natural lighting, real skin texture, hyperrealism, professional photography, RAW photo。=VideoRatio: 16:9"
+      }
+    },
+    {
+      "id": 15,
+      "patch": {
+        "character_ids": [
+          6,
+          10
+        ],
+        "video_prompt": "场景：婚宴厅出口通道服务台，白色大理石台面上放着结算单和计算器，午后，走廊冷白顶光直射结算单。镜头标题：结算差额。动作：经理手指点在结算单上的数字处，镜头从俯视特写缓推，结算单上\"三万八千六\"被红笔圈出。。对话：经理：\"未开的酒水退掉。已上的菜和约定费用，扣完订金，还差三万八千六。\"。结果：沈念的手伸入画面，拿起结算单，指尖微微发抖。。景别：特写。镜头角度：特写·俯拍·正面（close-up shot (face/bust framing), subject fills most of frame, shallow depth of field, background softly blurred, high-angle bird's eye view, camera above looking down, background shows floor/ground with downward perspective distortion, shooting from the front）。运镜：推镜。氛围：冷白顶光直射纸面，数字如刀刻般清晰，走廊安静得能听见日光灯管的电流声。情绪：压力。音效：经理声音公事公办，计算器按键声，纸张翻动声。时长：10秒。风格：photorealistic, ultra-detailed, 8k uhd, sharp focus, natural lighting, real skin texture, hyperrealism, professional photography, RAW photo。=VideoRatio: 16:9"
+      }
+    },
+    {
+      "id": 17,
+      "patch": {
+        "character_ids": [
+          6,
+          10
+        ],
+        "video_prompt": "场景：婚宴厅出口通道服务台，经理将结清回执递给沈念，午后，走廊冷白灯光从侧面打来。镜头标题：结清回执。动作：经理将结清回执递过来，沈念接过折好放入手袋。镜头从近景缓推，她的手还在抖，折纸的动作重复了两次才折整齐。。结果：回执被塞进手袋，沈念深吸一口气，转身看向宴会厅方向，母亲的身影在门口出现。。景别：近景。镜头角度：特写·平视·正面（close-up shot (face/bust framing), subject fills most of frame, shallow depth of field, background softly blurred, eye-level shot, neutral perspective, natural horizontal framing, shooting from the front）。运镜：推镜。氛围：冷白灯光从侧面勾勒沈念轮廓，她白色婚纱在走廊里显得疲惫而沉重，氛围压抑而疲惫。情绪：疲惫。音效：纸张折叠声，沈念深呼吸声，远处宴会厅传来模糊人声。时长：5秒。风格：photorealistic, ultra-detailed, 8k uhd, sharp focus, natural lighting, real skin texture, hyperrealism, professional photography, RAW photo。=VideoRatio: 16:9"
+      }
+    },
+    {
+      "id": 18,
+      "patch": {
+        "video_prompt": "场景：婚宴厅出口通道，林秀兰站在宴会厅门口，沈念从服务台方向走来拉住她的手臂，午后，出口通道光线冷暖交界。镜头标题：拉母离开。动作：沈念快步走向母亲，拉住她的手臂往出口方向带。镜头跟拍两人，沈念边走边说话，林秀兰脚步迟疑。。对话：沈念：\"医院旁边的出租屋没退。妈，你先跟我住。\"。结果：林秀兰被拉着走了两步，回头看向宴会厅内，脚步越来越慢。。景别：中景。镜头角度：中景·平视·正面（medium shot (waist-up to full body), character and immediate surroundings visible, moderate depth of field, eye-level shot, neutral perspective, natural horizontal framing, shooting from the front）。运镜：跟镜。氛围：出口处光线冷暖交织，沈念白色婚纱在冷光中发亮，林秀兰深色衣服融入阴影，氛围急切而沉重。情绪：急切。音效：沈念声音急促而坚定，两人脚步声一快一慢，婚纱拖地摩擦声。时长：7秒。风格：photorealistic, ultra-detailed, 8k uhd, sharp focus, natural lighting, real skin texture, hyperrealism, professional photography, RAW photo。=VideoRatio: 16:9"
+      }
+    },
+    {
+      "id": 19,
+      "patch": {
+        "video_prompt": "场景：婚宴厅出口通道，周维从宴会厅追出来，站在沈念和林秀兰身后三步远，午后，走廊光线从宴会厅暖光过渡到出口冷白。镜头标题：周维追出。动作：周维从宴会厅追出，西装外套敞开，领带歪斜。他站在通道中间，声音从身后传来。镜头手持跟拍他追出的动作，画面有轻微晃动。。对话：周维：\"你让妈挤那个单间？婚房本来给她留了卧室！\"。结果：沈念停下脚步但没有回头，林秀兰从她手中抽出手臂，转身面对周维。。景别：中景。镜头角度：中景·平视·正面（medium shot (waist-up to full body), character and immediate surroundings visible, moderate depth of field, eye-level shot, neutral perspective, natural horizontal framing, shooting from the front）。运镜：手持。氛围：走廊顶灯在周维头顶形成苍白光晕，他站在冷暖交界处，面部一半暖光一半冷光，氛围撕裂而讽刺。情绪：讽刺。音效：周维声音高亢带着表演性质的委屈，皮鞋急促敲击地面。时长：7秒。风格：photorealistic, ultra-detailed, 8k uhd, sharp focus, natural lighting, real skin texture, hyperrealism, professional photography, RAW photo。=VideoRatio: 16:9"
+      }
+    },
+    {
+      "id": 20,
+      "patch": {
+        "image_prompt": "婚宴厅出口通道，林秀兰站在沈念与周维之间，手中握着老房钥匙，午后，走廊冷白顶光聚焦手部，特写·俯拍·正面，林秀兰从手袋里摸出老房钥匙，递向周维。镜头从俯视特写缓推，钥匙在冷光下泛着铜色，从母亲手心交到周维手心，绝望，photorealistic, ultra-detailed, 8k uhd, sharp focus, natural lighting, real skin texture, hyperrealism, professional photography, RAW photo，首帧静止画面",
+        "video_prompt": "场景：婚宴厅出口通道，林秀兰站在沈念与周维之间，手中握着老房钥匙，午后，走廊冷白顶光聚焦手部。镜头标题：钥匙易手。动作：林秀兰从手袋里摸出老房钥匙，递向周维。镜头从俯视特写缓推，钥匙在冷光下泛着铜色，从母亲手心交到周维手心。。对话：林秀兰：\"维维，帮我把东西搬过去。念念今天气头上，过两天就好了。\"。结果：钥匙落入周维掌心，他合拢手指握住。沈念站在几步外，看着钥匙离开母亲手心的全过程，眼中最后一点光熄灭。。景别：特写。镜头角度：特写·俯拍·正面（close-up shot (face/bust framing), subject fills most of frame, shallow depth of field, background softly blurred, high-angle bird's eye view, camera above looking down, background shows floor/ground with downward perspective distortion, shooting from the front）。运镜：推镜。氛围：冷白顶光聚焦在交接钥匙的手上，周围环境压暗，铜钥匙在冷光中泛着旧色，氛围如坠冰窖。情绪：绝望。音效：钥匙金属碰撞声清脆刺耳，林秀兰声音疲惫而讨好，沈念呼吸声停了一拍。时长：9秒。风格：photorealistic, ultra-detailed, 8k uhd, sharp focus, natural lighting, real skin texture, hyperrealism, professional photography, RAW photo。=VideoRatio: 16:9"
+      }
+    },
+    {
+      "id": 21,
+      "patch": {
+        "video_prompt": "场景：婚宴厅出口通道，周维站在门口对着手机发语音，沈念在画面边缘，午后，走廊光线偏冷，周维面部半明半暗。镜头标题：搬空旧物。动作：周维对着手机发语音，嘴角带着得逞的笑。沈念从画面边缘抬头，目光如刀。镜头从周维横摇到沈念，再摇回周维。。对话：周维：\"老房现在清。工具、破凳子，那些旧东西都不要。\" 沈念：\"你答应给她搬家，不是替她扔东西！\" 周维：\"你不嫁了，还管我家放什么？\"。结果：周维说完收起手机，挑衅地看着沈念。沈念提起裙摆，转身跑向出口。。景别：中景。镜头角度：中景·平视·正面（medium shot (waist-up to full body), character and immediate surroundings visible, moderate depth of field, eye-level shot, neutral perspective, natural horizontal framing, shooting from the front）。运镜：横摇。氛围：走廊冷光从上方压下，周维面部在阴影中显出冷漠，沈念白色婚纱在奔跑中如一道光，氛围愤怒而悲凉。情绪：愤怒。音效：周维语音发送提示音，沈念声音尖锐愤怒，婚纱拖地急促摩擦声。时长：15秒。风格：photorealistic, ultra-detailed, 8k uhd, sharp focus, natural lighting, real skin texture, hyperrealism, professional photography, RAW photo。=VideoRatio: 16:9"
+      }
+    }
+  ],
+  "description_sync": [
+    {
+      "id": 9,
+      "patch": {
+        "description": "周维抓住沈念手腕，她甩开，话筒撞在桌边发出刺耳啸叫。 沈念脱开周维的手；话筒留在桌边，不飞出或滚入桌下。"
+      }
+    },
+    {
+      "id": 16,
+      "patch": {
+        "description": "沈念点开银行转账，输入38600元，按下确认。转账成功后，余额从40440元变为1840元。 转账成功，账户余额1840元。沈念握着手机，手仍在抖。"
+      }
+    },
+    {
+      "id": 20,
+      "patch": {
+        "description": "林秀兰从手袋取出老房钥匙递给周维，钥匙从母亲手心交到周维手心。不重复表演上一镜已发生的抽开女儿手臂。 钥匙落入周维掌心，他合拢手指握住。沈念站在几步外，看着钥匙离开母亲手心的全过程，眼中最后一点光熄灭。"
+      }
+    },
+    {
+      "id": 22,
+      "patch": {
+        "description": "沈念提着裙摆跑向玻璃门，母亲在身后叫她，她没有回头。镜头跟拍她奔跑的背影，她推开玻璃门，午后阳光瞬间将她吞没。 沈念推门冲出酒店，继续向外奔去；镜头结束于她离开，不新增站在街边的停顿。"
+      }
+    }
+  ],
+  "deposit_term_correction": "售房定金"
+}

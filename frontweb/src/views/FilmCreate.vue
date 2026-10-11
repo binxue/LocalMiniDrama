@@ -192,12 +192,17 @@
             <div class="script-pane-inner">
               <div class="script-sub-block">
                 <h2 class="section-title">故事生成</h2>
-                <p class="section-desc">输入一段故事梗概，AI 帮你扩写成完整剧本，或直接导入小说章节</p>
+                <p class="section-desc">输入故事创意或分集事件方案，AI 扩写成完整剧本；生成后可逐集阅读、修改和保存，也可直接导入小说章节。</p>
+                <details class="section-desc" style="margin-bottom: 10px;">
+                  <summary>已有具体剧情？查看事件方案示例</summary>
+                  <p>婚礼上，女主发现母亲把售房定金借给新郎家。第1集：当众退婚，新郎公开旧担保反制；她支付宴席费用后只剩1840元，母亲却把老房钥匙交给新郎，女主赶去阻止清空旧物。第2集：她在老房抢救母亲的工作工具；母亲亲眼发现所谓留好的卧室其实被占用，决定取回钥匙。第3集：母亲拒绝继续替别人签字，自己决定售房和款项去向，母女一起查找回款证据。</p>
+                  <p>这是自由文本示例，不会自动加入请求。可以写清人物关系、已定事实和每集实际发生的事件；生成结果仍需编剧核对，示例也不代表商业质量验收。</p>
+                </details>
                 <el-input
                   v-model="storyInput"
                   type="textarea"
                   :rows="4"
-                  placeholder="例如：一个少女在森林里遇见会说话的狐狸，一起寻找失落的宝石..."
+                  placeholder="写一个创意，或粘贴已有的人物关系、故事事实与前三集事件方案……"
                   class="story-textarea"
                 />
                 <div class="row gap" style="margin-top: 10px; flex-wrap: wrap;">
