@@ -1153,7 +1153,7 @@
                 <span>图片提示词</span>
               </div>
               <div v-if="!storyboardUseFirstLastFrame" class="sb-prompt-row">
-                <span class="sb-prompt-text">{{ sb.image_prompt || '暂无图片提示词' }}</span>
+                <span class="sb-prompt-text">{{ sb.polished_prompt || sb.image_prompt || '暂无图片提示词' }}</span>
                 <el-button size="small" link type="primary" @click="onOpenSbPromptDialog(sb)">编辑</el-button>
               </div>
               <template v-if="storyboardIncludeNarration || (sbNarration[sb.id] || '').trim() || (sb.narration || '').trim()">

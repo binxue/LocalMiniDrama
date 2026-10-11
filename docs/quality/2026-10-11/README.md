@@ -14,4 +14,8 @@ Readable manuscripts and exact hashes are in manifest.json. Raw requests/SSE rem
 
 Real Generate button created and saved three episodes in project 4; original sample projects 1–3 remain. Editor title change/save/restore/reload passed on project 2. Real character and scene extraction yielded five/four persisted resources; refresh passed. Manual storyboard creation/prompt editor save was exercised, but rendered preview still says no image prompt: do not claim full storyboard prompt persistence accepted. Image/video generation was not executed; video-chain tests passed, paid production unverified. Project 5 contains separately labelled Agent-edited three-episode review draft; no Canon or author adoption.
 
-Tests: backend 78/78, frontend 10/10; research scripts syntax checks passed. Unrelated missing example ZIP and default-index defect preserved; independent index used. No production data or Zemora Novel modified.
+Follow-up: optimized storyboard prompt was confirmed present in the re-opened editor after refresh. List preview incorrectly showed only image_prompt; fixed it to use polished_prompt first, matching actual image generation precedence. Build and real browser reload confirmed the saved prompt displayed. No paid image/video generation performed.
+
+production-candidate.txt/json is a further Agent Writer revision, not a new Provider result. Project address/photo is a disclosed ordinary connecting detail added by that editor, not a fact evidenced in raw Provider output. Keep it outside Canon. Independent review remains the acceptance authority for this frozen candidate; commercial author acceptance is not implied.
+
+Tests: backend 78/78, frontend 10/10; frontend build passed; research scripts syntax checks passed. Unrelated missing example ZIP and default-index defect preserved; independent index used. No production data or Zemora Novel modified.
