@@ -4,6 +4,9 @@ const { safeParseAIJSON } = require('../utils/safeJson');
 function parseObject(raw, label) {
   try {
     const value = safeParseAIJSON(raw);
+    if (Array.isArray(value) && (label === 'editor' || label === 'editor-recheck')) {
+      return { accepted: false, findings: value };
+    }
     if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('expected object');
     return value;
   } catch (err) {
@@ -41,23 +44,23 @@ async function generateStoryTeam(db, log, body = {}) {
   const stages = {};
 
   const producer = await call(db, log, 'producer',
-    `为以下短剧创意制定前三集的商业创作任务。只返回 JSON 对象，字段为 premise、audience_hook、characters、stakes、episode_plan、guardrails。每集 episode_plan 必须含 goal、action、opposition、cost、payoff、cliffhanger。不得编造法律或专业确定性结论。\n\n${premise}`,
-    '你是总编剧兼制作人。把创意变成可执行的事件计划，优先保证人物主动行动、具体代价、对手反制和状态变化。', { model, max_tokens: 3000 });
+    `为以下短剧创意完成前三集的实质故事讨论和取舍。只返回 JSON 对象，字段为 premise、audience_hook、characters、stakes、causal_events、rejected_options、episode_plan、guardrails、continuity_checks。causal_events 必须逐条包含 trigger、motivation、choice、opposition、observable_consequence、next_effect、emotional_turn；每集 episode_plan 必须引用这些事件并含 goal、action、opposition、cost、payoff、cliffhanger。rejected_options 要说明被舍弃的俗套或逻辑冲突方案及原因。若产权、医疗、餐饮或其他专业事实不确定，改写为可观察的文件、付款、行为，不下确定结论。先解决事件冲突，再交给 Writer。\n\n${premise}`,
+    '你是总编剧兼制作人。先做故事决策，不写正文。检查每个事件的起因、人物动机、主动选择、真实后果和后续影响是否闭合；发现因果或时间线冲突时必须在方案阶段修正。优先情绪价值和可信选择，不用后来补损失掩盖前面错误。', { model, max_tokens: 4200 });
   audit.push(producer);
   const plan = parseObject(producer.raw, 'producer');
   stages.plan = { status: 'complete', role: 'producer' };
 
   const writer = await call(db, log, 'writer',
-    `依据故事创意和已确认的策划，写出 ${count} 集可拍的短剧正文。只返回 JSON 对象 {"episodes":[{"episode":1,"title":"...","content":"..."}]}。每集必须有可观察行动、反制、代价、结果和集尾卡点；不得新增策划中没有依据的法律、医疗或产权结论。\n创意：${premise}\n策划：${JSON.stringify(plan)}`,
-    '你是分集编剧。只写正文，不解释方法，不输出分镜 JSON。保持连续性和具体事件。', { model, max_tokens: Math.max(5000, count * 1800) });
+    `依据故事创意和已确认的因果事件策划，写出 ${count} 集可拍的短剧正文。只返回 JSON 对象 {"episodes":[{"episode":1,"title":"...","content":"..."}]}。必须把 causal_events 写成真实场景：角色动作、对白、阻力、情绪变化和可见结果，不能用剧情概述替代关键戏。每集只推进策划中已确认的事件，不新增未经依据的法律、医疗或产权结论。\n创意：${premise}\n策划：${JSON.stringify(plan)}`,
+    '你是分集编剧。只写正文，不解释方法，不输出分镜 JSON。把事件因果写成可拍场面，保持人物选择、时间线和连续性。', { model, max_tokens: Math.max(5000, count * 1800) });
   audit.push(writer);
   const draft = parseObject(writer.raw, 'writer');
   if (!Array.isArray(draft.episodes) || draft.episodes.length !== count) throw new Error('writer 未返回完整集数');
   stages.draft = { status: 'complete', role: 'writer' };
 
   const editor = await call(db, log, 'editor',
-    `独立审阅以下短剧前三集，只返回 JSON 对象 {"accepted":boolean,"findings":[{"episode":1,"severity":"high|medium|low","evidence":"原文证据","problem":"问题","recommendation":"具体剧情修订"}],"rewrite_brief":"若需改稿，说明必须重写的事件"}。不要因为格式完整就通过；重点检查主动行动、代价、反制、不可逆结果、情绪兑现、连续性和可拍性。\n${JSON.stringify(draft)}`,
-    '你是独立剧本编辑。必须引用正文证据，拒绝空泛评分。', { model, max_tokens: 2800 });
+    `独立审阅以下短剧前三集，只返回 JSON 对象 {"accepted":boolean,"findings":[{"episode":1,"severity":"high|medium|low","evidence":"原文证据","problem":"问题","recommendation":"具体剧情修订"}],"rewrite_brief":"若需改稿，说明必须重写的事件"}。不要因为格式完整就通过；除主动行动、代价、反制、不可逆结果、情绪兑现、集尾钩子外，必须检查每个事件的起因与结果、人物行为合理性、时间线、场景连续性、前后道具和专业事实边界。严重因果矛盾可以否决整段事件设计。\n${JSON.stringify(draft)}`,
+    '你是独立剧本编辑。必须引用正文证据，拒绝空泛评分；发现错误故事决策时明确要求推翻场次，而非补解释性对白。', { model, max_tokens: 3400 });
   audit.push(editor);
   const review = parseObject(editor.raw, 'editor');
   stages.initial_review = { status: 'complete', role: 'editor' };
