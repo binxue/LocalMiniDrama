@@ -1,0 +1,96 @@
+{
+  "actual_calls": 6,
+  "automatic_retries": 0,
+  "calls_with_usage": 4,
+  "unmeasured_calls": [
+    "browser character extraction",
+    "browser scene extraction"
+  ],
+  "known_tokens": 31441,
+  "estimate_usd_off_peak": 0.017342586,
+  "pricing_url": "https://api-docs.deepseek.com/quick_start/pricing",
+  "billing_verified": false,
+  "extraction_cost_excluded": true,
+  "calls": [
+    {
+      "evidence": "enhanced-response.sse",
+      "sha256": "dc62fdea686cfd21cf3875e695869e145fca5f25022e759d036c28ee192c0696",
+      "usage": {
+        "prompt_tokens": 544,
+        "completion_tokens": 7002,
+        "total_tokens": 7546,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 5310
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 544
+      },
+      "finish_reasons": [
+        "stop"
+      ]
+    },
+    {
+      "evidence": "native-response.sse",
+      "sha256": "ca16b031f4ef7ead91a174f0fd7207892991ab2e45d5979382009cf17da31d1f",
+      "usage": {
+        "prompt_tokens": 426,
+        "completion_tokens": 7495,
+        "total_tokens": 7921,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 5265
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 426
+      },
+      "finish_reasons": [
+        "stop"
+      ]
+    },
+    {
+      "evidence": "reconstructed-response.sse",
+      "sha256": "2a3f4a4be1ae975fd0823e5dba1258cd1f8a04647c1d97201c94181de66bf691",
+      "usage": {
+        "prompt_tokens": 1022,
+        "completion_tokens": 7386,
+        "total_tokens": 8408,
+        "prompt_tokens_details": {
+          "cached_tokens": 256
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 6074
+        },
+        "prompt_cache_hit_tokens": 256,
+        "prompt_cache_miss_tokens": 766
+      },
+      "finish_reasons": [
+        "stop"
+      ]
+    },
+    {
+      "evidence": "1791707766664-1-response.sse",
+      "sha256": "3c3cba75ef570320be6958495074b209a5bd0302093b24a006ba0abcba02dbff",
+      "usage": {
+        "prompt_tokens": 1223,
+        "completion_tokens": 6343,
+        "total_tokens": 7566,
+        "prompt_tokens_details": {
+          "cached_tokens": 256
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 4660
+        },
+        "prompt_cache_hit_tokens": 256,
+        "prompt_cache_miss_tokens": 967
+      },
+      "finish_reasons": [
+        "stop"
+      ]
+    }
+  ]
+}

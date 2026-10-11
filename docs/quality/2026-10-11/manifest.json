@@ -1,0 +1,12 @@
+{
+  "native-golden-three.txt": "70dc29cdc80bcf520367fc8546fab271aa44a747a1a8e24f0e9edab6acde1127",
+  "enhanced-golden-three.txt": "b2b78840e0b3e8e16bdb06ebf248bfa853fe4ce3ec370ccd4cbec4e0441d2833",
+  "reconstructed-golden-three.txt": "df6553e59ee0f839409f8e18de416792eb0e6f7bc7954144b31af7cb22cc4541",
+  "browser-final-golden-three.txt": "8a535e0468c380e196ba687525c0db47d69643599af9e54690a3f21b7889234a",
+  "reviewed-golden-three.txt": "eb04e1dd8641508c8a2b344a0a13fb676f6e1765b0dae2ec0de364da7e3fdeea",
+  "independent-review.md": "88c888d1389878ff5011e7faa65df5172c7697ae15825a6be619cadec34663fb",
+  "reconstruction-review.md": "1fc49558357c82c22b2a4e7ae2cb09ded503af2b9a38a97eb0d5d7eb9f800748",
+  "browser-final-review.md": "45d1415d090822c713bfeea2e7041ff9f5834ef6d048563d797952df27393101",
+  "delivery-audit.md": "6cc5ed6c4d8c9ee61004264b3447950531df80cbf3472c80f610fac50816c9b6",
+  "reviewed-review.md": "2368129ecbb93992bc1c2ee1f58f9834a7ef67c9bd40a3e246e8bfa807aaae7d"
+}
