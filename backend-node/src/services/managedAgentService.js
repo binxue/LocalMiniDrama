@@ -79,24 +79,28 @@ async function sendMessage(sessionId, text) {
   return runArk(['agent', 'session', 'events', 'send', sessionId, '--type', 'user.message', '--text', text, '--format', 'json'], 60000);
 }
 
+const EVENTS_LIST_TIMEOUT = 120000;
+
 async function poll(sessionId, onEvents, maxPolls = 40) {
   let events = [];
   const deadline = Date.now() + 300000;
-  let interruptionSent = false;
+  let pollError = null;
   for (let i = 0; i < maxPolls; i += 1) {
     if (Date.now() >= deadline) break;
-    const out = await runArk(['--page-all', '--page-limit', '10', 'agent', 'session', 'events', 'list', sessionId, '--order', 'asc', '--limit', '100', '--format', 'json']);
-    const data = parseJson(out)?.data || [];
+    let data;
+    try {
+      const out = await runArk(['--page-all', '--page-limit', '10', 'agent', 'session', 'events', 'list', sessionId, '--order', 'asc', '--limit', '100', '--format', 'json'], EVENTS_LIST_TIMEOUT);
+      data = parseJson(out)?.data || [];
+    } catch (err) {
+      pollError = redact(err.message);
+      break;
+    }
     events = [...new Map([...events, ...data].map(e => [e.id, e])).values()];
     onEvents(events);
     if (events.some(e => ['session.status_idle', 'session.status_failed', 'session.status_terminated', 'session.error', 'session.requires_action'].includes(e.type))) break;
-    if (!interruptionSent && events.some(e => e.type === 'span.model_request_end' && e.is_error)) {
-      await runArk(['agent', 'session', 'events', 'send', sessionId, '--type', 'user.interrupt', '--format', 'json']);
-      interruptionSent = true;
-    }
     await new Promise(resolve => setTimeout(resolve, 5000));
   }
-  return events;
+  return { events, pollError };
 }
 
 function extract(events) {
@@ -125,16 +129,17 @@ async function execute(db, log, taskId) {
     const sent = await sendMessage(sessionId, task.input_text);
     update(db, taskId, { send_json: sent });
     update(db, taskId, { task_status: 'running' });
-    const events = await poll(sessionId, data => {
+    const polled = await poll(sessionId, data => {
       const partial = extract(data);
       update(db, taskId, { events_json: JSON.stringify(data), usage_json: JSON.stringify(partial.usage) });
     });
+    const events = polled.events;
     const result = extract(events);
     const idle = events.some(e => e.type === 'session.status_idle');
     const failed = events.some(e => ['session.status_failed', 'session.status_terminated', 'session.error'].includes(e.type) || (e.type === 'span.model_request_end' && e.is_error));
     const status = failed ? 'failed' : (idle && result.text.trim() ? 'completed' : 'incomplete');
-    if (!idle && !failed) await runArk(['agent', 'session', 'events', 'send', sessionId, '--type', 'user.interrupt', '--format', 'json']);
-    update(db, taskId, { task_status: status, output_text: result.text || null, output_version: result.text ? sha(result.text) : null, events_json: JSON.stringify(events), usage_json: JSON.stringify(result.usage), error_text: status === 'completed' ? null : `云端终态 ${result.terminal || 'unknown'}，正文消息=${result.messages}`, completed_at: status === 'completed' || status === 'failed' ? now() : null });
+    const recoveryError = polled.pollError ? `事件回查暂时失败，Session 仍可恢复：${polled.pollError}` : `云端终态 ${result.terminal || 'unknown'}，正文消息=${result.messages}`;
+    update(db, taskId, { task_status: status, output_text: result.text || null, output_version: result.text ? sha(result.text) : null, events_json: JSON.stringify(events), usage_json: JSON.stringify(result.usage), error_text: status === 'completed' ? null : recoveryError, completed_at: status === 'completed' || status === 'failed' ? now() : null });
     log.info('Managed Agent task finished', { task_id: taskId, status, session_id: sessionId });
   } catch (err) {
     update(db, taskId, { task_status: 'failed', error_text: redact(err.message), completed_at: now() });
@@ -161,7 +166,13 @@ function getTask(db, taskId) { ensureTable(db); return row(db, taskId); }
 async function refreshTask(db, taskId) {
   const task = getTask(db, taskId);
   if (!task || !task.session_id) throw new Error('没有可回查的 Session');
-  const out = await runArk(['--page-all', '--page-limit', '10', 'agent', 'session', 'events', 'list', task.session_id, '--order', 'asc', '--limit', '100', '--format', 'json']);
+  let out;
+  try {
+    out = await runArk(['--page-all', '--page-limit', '10', 'agent', 'session', 'events', 'list', task.session_id, '--order', 'asc', '--limit', '100', '--format', 'json'], EVENTS_LIST_TIMEOUT);
+  } catch (err) {
+    update(db, taskId, { error_text: `事件回查暂时失败，Session 仍可恢复：${redact(err.message)}` });
+    return row(db, taskId);
+  }
   const events = [...new Map([...(task.events || []), ...(parseJson(out).data || [])].map(e => [e.id, e])).values()];
   const result = extract(events);
   const idle = events.some(e => e.type === 'session.status_idle');
