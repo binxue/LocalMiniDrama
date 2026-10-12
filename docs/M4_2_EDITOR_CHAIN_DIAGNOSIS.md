@@ -32,3 +32,11 @@
 ## 下一步
 
 在人工确认继续后，先回查两个既有 Session；仅在确认均无可恢复 `agent.message` 时，最多进行一次有界 Editor 复审。取得真实终态后再做页面刷新恢复验收。
+
+## M4.3 有界复审结果（2026-10-13）
+
+- 两个既有 Session 回查结果：`sesn-20261012152610-rwdqe` 为 idle 但 `agent.message=0`；`sesn-20261012155634-9ce2u` 事件为空，均不可复用。
+- 依据既有 Writer Task `mat_80054521-fcdc-4317-b8e1-ef15dfaf021b`，仅提交一次 Editor recovery：Task `mat_bbab0fca-52d7-4ee0-8ed8-bb643d1e4b42`。
+- 新任务记录到 1 次模型请求，输入 8,286、输出 210、未完成请求 1；没有 `agent.message`，没有 PASS/CONDITIONAL PASS/FAIL。
+- 事件最终为 `session.status_idle`，但事件中出现 `user.interrupt`。这证明 5688 当前运行进程未加载 M4.2 修复后的服务代码，不能把本次运行作为修复后链路验证；没有再次提交或重试。
+- Revision 仍为 reviewing，候选正文与原稿均未修改，批准状态为 `not_approved`。由于没有有效 Editor 终态，浏览器业务验收和 M4 人工审阅准入仍未完成。

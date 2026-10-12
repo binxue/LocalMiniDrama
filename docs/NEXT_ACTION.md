@@ -1,6 +1,6 @@
 # Current Action
 
-LOCALMINIDRAMA_M4_2_EDITOR_CHAIN_RECOVERY
+LOCALMINIDRAMA_M4_3_EDITOR_REVIEW_BLOCKED_RUNTIME_RESTART
 
 ## M1 Git baseline（2026-10-12）
 
@@ -14,7 +14,7 @@ LOCALMINIDRAMA_M4_2_EDITOR_CHAIN_RECOVERY
 
 M1 已实现现有 Managed Agent 单任务服务、隔离持久记录、有界事件读取与明确错误状态。真实 Producer 正文返回与重启恢复已验证；独立Node进程运行于127.0.0.1:5688。证据：H:/localminidrama-runtime-creative-20261011-source/evidence/m1-independent-runtime-20261012。
 
-当前动作：M4.2已完成Independent Editor执行链只读取证与最小恢复修复。旧Session没有agent.message和有效审核终态；本地服务不再因事件轮询窗口主动中断云端Session，也不再把事件回查超时伪标记为云端失败。后续仅可在有限窗口内回查既有Session，取得真实PASS/CONDITIONAL PASS/FAIL后再进入人工审阅。证据见M4_2_EDITOR_CHAIN_DIAGNOSIS.md。
+当前动作：M4.3已回查两个旧Editor Session并仅提交一次有界复审；新任务仍无agent.message，且事件出现user.interrupt，确认5688运行进程未加载M4.2修复代码。Revision保持reviewing，未取得PASS/CONDITIONAL PASS/FAIL，未进行浏览器准入验收。需先在受控服务进程加载当前代码，再决定是否继续回查；不得重复提交Editor任务。证据见M4_2_EDITOR_CHAIN_DIAGNOSIS.md。
 
 剧本助手终点为人工批准后的Script Handoff；CONDITIONAL PASS不代表批准。雨林计时、分镜、救鸟实现及样片移交视频模块待办，不阻塞剧本M1。不修改冻结稿、Canon或生产数据库。
 
