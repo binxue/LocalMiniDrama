@@ -193,8 +193,12 @@ function listTasks(db, limit = 50) { ensureTable(db); return db.prepare('SELECT 
 
 function recoverOnStartup(db, log) {
   ensureTable(db);
-  const result = db.prepare("UPDATE managed_agent_tasks SET task_status = 'interrupted', error_text = ?, updated_at = ?, completed_at = ? WHERE task_status IN ('queued', 'starting', 'submitted', 'running')")
-    .run('服务重启时任务未达到可验证终态', now(), now());
+  const stamp = now();
+  const recoverable = db.prepare("UPDATE managed_agent_tasks SET task_status = 'awaiting_recovery', error_text = ?, updated_at = ?, completed_at = NULL WHERE session_id IS NOT NULL AND task_status IN ('queued', 'starting', 'submitted', 'running')")
+    .run('服务重启后保留云端 Session，等待只读回查', stamp);
+  const interrupted = db.prepare("UPDATE managed_agent_tasks SET task_status = 'interrupted', error_text = ?, updated_at = ?, completed_at = ? WHERE session_id IS NULL AND task_status IN ('queued', 'starting', 'submitted', 'running')")
+    .run('服务重启时任务尚未创建云端 Session', stamp, stamp);
+  const result = { changes: recoverable.changes + interrupted.changes, recoverable: recoverable.changes, interrupted: interrupted.changes };
   if (result.changes) log.warn('Managed Agent tasks interrupted after restart', { count: result.changes });
   return result.changes;
 }

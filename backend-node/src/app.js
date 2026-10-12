@@ -61,6 +61,8 @@ function createApp() {
       status: 'ok',
       app: config.app.name,
       version: config.app.version,
+      managed_agent_build: 'm4.3-session-isolation-recovery',
+      process_cwd: process.cwd(),
     });
   });
 

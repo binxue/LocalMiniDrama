@@ -66,3 +66,11 @@
 ### 结论
 
 隔离绑定和防重复提交已落地，但 Independent Editor 仍未取得有效终态；M4 不能进入人工审阅准入，原稿、候选稿和 Canon 均未改变。
+
+## M4 阻塞收口与运行版本（2026-10-13）
+
+- 5688 原运行进程命令行为 `H:\localminidrama-active\backend-node\src/server.js`，曾使用配置版本 `1.2.8-m1`，但没有可辨识的代码构建标识。
+- 停止旧进程后，以当前仓库代码、Runtime 工作目录和既有 Runtime 配置重新启动；`/health` 现返回 `managed_agent_build=m4.3-session-isolation-recovery` 及实际 `process_cwd`，可证明后续验收使用了修复代码。
+- `recoverOnStartup()` 现在对已有 `session_id` 的活动任务标记 `awaiting_recovery`，不写 `completed_at`；没有云端 Session 的任务才标记 `interrupted`。
+- 指定 Editor Task `mat_03fc8cc1-1196-49f5-a0ab-0a588f59c38e` 只读回查仍无 `agent.message`，没有有效审核结论；没有创建新任务。
+- 浏览器中原稿/候选/差异的页面能力未能进入审核验收，因为 Revision 没有可验证 Editor 终态；不宣称刷新恢复业务通过。

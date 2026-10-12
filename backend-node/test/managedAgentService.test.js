@@ -53,3 +53,16 @@ test('Windows local paths are rejected before cloud submission', () => {
   assert.throws(() => service.createTask(db, { info() {}, error() {} }, { agent_id: 'agent-20261011131513-17rey', work_id: 'w', input: '读取 H:\\互动剧\\雨林\\故事.md' }), /Windows 本地路径/);
   db.close();
 });
+
+test('restart keeps tasks with cloud sessions recoverable', () => {
+  const db = new Database(':memory:');
+  service.ensureTable(db);
+  const stamp = new Date().toISOString();
+  db.prepare(`INSERT INTO managed_agent_tasks (task_id, work_id, agent_id, session_id, task_status, input_version, input_text, attempt_id, created_at, updated_at) VALUES (?, ?, ?, ?, 'running', ?, ?, ?, ?, ?), (?, ?, ?, NULL, 'running', ?, ?, ?, ?, ?)`)
+    .run('mat_session', 'a', 'agent-20261011131513-17rey', 'ses_a', 'a'.repeat(64), 'x', 'att_a', stamp, stamp, 'mat_no_session', 'b', 'agent-20261011131513-17rey', 'b'.repeat(64), 'y', 'att_b', stamp, stamp);
+  service.recoverOnStartup(db, { warn() {} });
+  assert.equal(service.getTask(db, 'mat_session').task_status, 'awaiting_recovery');
+  assert.equal(service.getTask(db, 'mat_session').completed_at, null);
+  assert.equal(service.getTask(db, 'mat_no_session').task_status, 'interrupted');
+  db.close();
+});
