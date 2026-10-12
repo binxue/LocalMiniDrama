@@ -3,6 +3,8 @@ const crypto = require('crypto');
 const managed = require('./managedAgentService');
 
 const PRODUCER = 'agent-20261011131513-17rey';
+const EXPERTS = new Set(['agent-20261011131619-47ft8', 'agent-20261011131626-3w9ao', 'agent-20261011131703-mbc7o']);
+const EDITOR = 'agent-20261011131710-ncebb';
 const hash = value => crypto.createHash('sha256').update(value).digest('hex');
 const ACTIVE = new Set(['queued', 'starting', 'submitted', 'running']);
 
@@ -14,6 +16,77 @@ function ensureTable(db) {
     context_json TEXT NOT NULL, created_at TEXT NOT NULL,
     UNIQUE(work_id, client_message_id), FOREIGN KEY(task_id) REFERENCES managed_agent_tasks(task_id)
   )`);
+  db.exec(`CREATE TABLE IF NOT EXISTS script_assistant_runs (
+    run_id TEXT PRIMARY KEY, work_id TEXT NOT NULL, request TEXT NOT NULL, status TEXT NOT NULL,
+    plan_task_id TEXT, expert_task_ids_json TEXT NOT NULL DEFAULT '[]', editor_task_id TEXT,
+    final_task_id TEXT, selected_agents_json TEXT NOT NULL DEFAULT '[]', result_json TEXT,
+    error_text TEXT, created_at TEXT NOT NULL, completed_at TEXT
+  )`);
+}
+
+function runs(db, workId) {
+  ensureTable(db);
+  return db.prepare('SELECT * FROM script_assistant_runs WHERE work_id = ? ORDER BY created_at DESC').all(workId).map(r => ({...r,
+    expert_task_ids: JSON.parse(r.expert_task_ids_json), selected_agents: JSON.parse(r.selected_agents_json), result: r.result_json ? JSON.parse(r.result_json) : null }));
+}
+
+function taskDone(db, id) { const t = managed.getTask(db, id); return t && ['completed','failed','incomplete','interrupted'].includes(t.task_status) ? t : null; }
+async function waitTask(db, id, timeout = 360000) {
+  const start = Date.now();
+  while (Date.now() - start < timeout) { const t = taskDone(db, id); if (t) return t; await new Promise(r => setTimeout(r, 1500)); }
+  throw new Error(`Agent任务 ${id} 超时`);
+}
+function planAgents(text) {
+  const found = [...EXPERTS].filter(id => text.includes(id));
+  const labels = [{ key: 'relationship', id: 'agent-20261011131626-3w9ao' }, { key: 'interactive', id: 'agent-20261011131703-mbc7o' }, { key: 'story', id: 'agent-20261011131619-47ft8' }];
+  for (const item of labels) if (new RegExp(item.key, 'i').test(text) && !found.includes(item.id)) found.push(item.id);
+  return found.slice(0, 2);
+}
+function runView(db, id) { return db.prepare('SELECT * FROM script_assistant_runs WHERE run_id = ?').get(id); }
+
+async function executeRun(db, log, config, runId) {
+  const run = runView(db, runId); if (!run || run.status !== 'queued') return;
+  const work = loadWork(config, run.work_id);
+  const source = buildInput(work, messages(db, run.work_id), run.request).input;
+  const bounded = (value, limit) => String(value || '').slice(0, limit);
+  try {
+    db.prepare('UPDATE script_assistant_runs SET status=? WHERE run_id=?').run('planning', runId);
+    const planInput = `${source}\n\nM3编排任务：先制定可执行计划。必须明确是否调用关系、互动或故事专家；至少选择一名相关专家，并明确之后交给 Independent Editor。只输出计划，不写第四集。计划中写出所选Agent的真实ID或 relationship/interactive/story 标签。`;
+    const planTask = managed.createTask(db, log, { agent_id: PRODUCER, work_id: run.work_id, input: planInput, orchestration: true });
+    db.prepare('UPDATE script_assistant_runs SET plan_task_id=?, status=? WHERE run_id=?').run(planTask.task_id, 'planning', runId);
+    const plan = await waitTask(db, planTask.task_id);
+    if (plan.task_status !== 'completed') throw new Error('Producer计划未完成：' + (plan.error_text || plan.task_status));
+    const selected = planAgents(plan.output_text || '');
+    if (!selected.length) throw new Error('Producer计划未选择白名单专家');
+    db.prepare('UPDATE script_assistant_runs SET selected_agents_json=?, status=? WHERE run_id=?').run(JSON.stringify(selected), 'experts', runId);
+    const expertIds = [];
+    for (const agent of selected) {
+      const label = agent === 'agent-20261011131626-3w9ao' ? 'Relationship Writer' : agent === 'agent-20261011131703-mbc7o' ? 'Interactive Designer' : 'Story Writer';
+      const input = `${bounded(source, 4800)}\n\nProducer计划：\n${bounded(plan.output_text, 2200)}\n\n你是${label}。只诊断或提出局部建议，不重写整集。给出具体证据、风险和最小建议，供Producer后续决策。`;
+      const t = managed.createTask(db, log, { agent_id: agent, work_id: run.work_id, input, orchestration: true }); expertIds.push(t.task_id);
+      db.prepare('UPDATE script_assistant_runs SET expert_task_ids_json=? WHERE run_id=?').run(JSON.stringify(expertIds), runId);
+      const done = await waitTask(db, t.task_id); if (done.task_status !== 'completed') throw new Error(`${label}未完成：${done.error_text || done.task_status}`);
+    }
+    const expertText = expertIds.map(id => { const t = managed.getTask(db, id); return `专家输出(${t.agent_id})：\n${bounded(t.output_text, 1400)}`; }).join('\n\n');
+    const editorInput = `${bounded(source, 3800)}\n\nProducer计划：\n${bounded(plan.output_text, 1800)}\n\n专家意见：\n${expertText}\n\n你是Independent Editor。独立检查原任务，明确 PASS、CONDITIONAL PASS 或 FAIL，引用具体问题。不要重写原稿，不要把候选稿当Canon。`;
+    const editorTask = managed.createTask(db, log, { agent_id: EDITOR, work_id: run.work_id, input: editorInput, orchestration: true });
+    db.prepare('UPDATE script_assistant_runs SET editor_task_id=?, status=? WHERE run_id=?').run(editorTask.task_id, 'reviewing', runId);
+    const editor = await waitTask(db, editorTask.task_id); if (editor.task_status !== 'completed') throw new Error('Editor未完成：' + (editor.error_text || editor.task_status));
+    const finalInput = `${bounded(source, 3200)}\n\nProducer原计划：\n${bounded(plan.output_text, 1500)}\n\n专家意见：\n${expertText}\n\nIndependent Editor独立评审：\n${bounded(editor.output_text, 1800)}\n\n你仍是Producer。根据真实专家与Editor结果作最终交付决策。只输出：状态（候选稿/需返修/停止）、依据、建议的最小下一步。不得写第四集，不得声称用户已批准或已写入Canon。`;
+    const finalTask = managed.createTask(db, log, { agent_id: PRODUCER, work_id: run.work_id, input: finalInput, orchestration: true });
+    db.prepare('UPDATE script_assistant_runs SET final_task_id=?, status=? WHERE run_id=?').run(finalTask.task_id, 'deciding', runId);
+    const final = await waitTask(db, finalTask.task_id); if (final.task_status !== 'completed') throw new Error('Producer最终决策未完成');
+    const result = { candidate_status: 'candidate', approval: 'not_recorded', canon: 'not_established', plan: plan.output_text, expert_outputs: expertIds.map(id => managed.getTask(db,id).output_text), editor_review: editor.output_text, producer_decision: final.output_text, task_ids: { plan: planTask.task_id, experts: expertIds, editor: editorTask.task_id, final: finalTask.task_id } };
+    db.prepare('UPDATE script_assistant_runs SET status=?, result_json=?, completed_at=? WHERE run_id=?').run('completed', JSON.stringify(result), new Date().toISOString(), runId);
+  } catch (err) { log.error('script assistant orchestration failed', { run_id: runId, error: err.message }); db.prepare('UPDATE script_assistant_runs SET status=?, error_text=?, completed_at=? WHERE run_id=?').run('failed', err.message, new Date().toISOString(), runId); }
+}
+
+function createRun(db, log, config, workId, request) {
+  if (typeof request !== 'string' || !request.trim() || request.length > 1200) throw new Error('编排任务需为1–1200字符');
+  const work = loadWork(config, workId); if (work.sources.some(s => !s.available)) throw new Error('作品资料缺失，不能启动编排');
+  if (runs(db, workId).some(r => ['queued','planning','experts','reviewing','deciding'].includes(r.status))) throw new Error('本作品已有进行中的编排任务');
+  const runId = `mar_${crypto.randomUUID()}`; db.prepare('INSERT INTO script_assistant_runs(run_id,work_id,request,status,created_at) VALUES(?,?,?,?,?)').run(runId, workId, request.trim(), 'queued', new Date().toISOString());
+  setImmediate(() => executeRun(db, log, config, runId)); return runView(db, runId);
 }
 
 function works(config) {
@@ -173,4 +246,4 @@ function budget(db) {
   return { used, limit: 5, remaining: Math.max(0, 5 - used), in_flight: db.prepare("SELECT count(*) n FROM managed_agent_tasks WHERE task_status IN ('queued','starting','submitted','running')").get().n };
 }
 
-module.exports = { ensureTable, works, loadWork, summary, messages, buildInput, createMessage, budget, PRODUCER };
+module.exports = { ensureTable, works, loadWork, summary, messages, buildInput, createMessage, budget, runs, createRun, PRODUCER };

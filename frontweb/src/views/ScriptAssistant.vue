@@ -33,6 +33,24 @@
           <el-button size="small" @click="reload" :disabled="loading">刷新记录</el-button>
         </div>
         <p class="conversation-note">讨论与建议不会改写剧本。分镜、视频生成及制作验收由视频模块负责。</p>
+        <el-radio-group v-model="mode" size="small" class="mode-switch">
+          <el-radio-button label="chat">普通问答</el-radio-button>
+          <el-radio-button label="team">Producer 编排</el-radio-button>
+        </el-radio-group>
+        <section v-if="mode === 'team'" class="orchestration-panel">
+          <h3>多 Agent 创作协作</h3>
+          <p class="muted">Producer 先制定计划，再按计划调用白名单专家和 Independent Editor。结果始终是候选稿，等待人工批准。</p>
+          <el-input v-model="runRequest" type="textarea" :rows="3" :maxlength="1200" placeholder="例如：检查《雨林》第三集的连续性和人物关系，必要时提出局部修改建议，交给独立 Editor 审核，不要写第四集。" />
+          <el-button type="primary" :loading="runSending" :disabled="!runRequest.trim()" @click="startRun">启动编排</el-button>
+          <article v-for="run in runs" :key="run.run_id" class="run-card">
+            <div><strong>{{ run.status }}</strong><span class="muted"> · {{ run.run_id }}</span></div>
+            <p class="muted">所选 Agent：{{ run.selected_agents?.join(', ') || 'Producer 正在制定计划' }}</p>
+            <p v-if="run.result?.editor_review" class="reply-text"><strong>Independent Editor：</strong>{{ run.result.editor_review }}</p>
+            <p v-if="run.result?.producer_decision" class="reply-text"><strong>Producer 决策：</strong>{{ run.result.producer_decision }}</p>
+            <p v-if="run.error_text" class="error-text">{{ run.error_text }}</p>
+            <p class="muted">候选稿 · 人工批准未记录 · 未确立 Canon</p>
+          </article>
+        </section>
         <div v-if="!messages.length" class="empty-chat">
           <el-icon :size="32"><ChatDotRound /></el-icon>
           <h3>从已有作品开始聊</h3>
@@ -81,11 +99,12 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ArrowLeft, ChatDotRound } from '@element-plus/icons-vue'
-import { getAssistantWorks, getAssistantContext, getAssistantMessages, sendAssistantMessage, refreshAssistantMessage, getAssistantSource } from '@/api/scriptAssistant'
+import { getAssistantWorks, getAssistantContext, getAssistantMessages, sendAssistantMessage, refreshAssistantMessage, getAssistantSource, getAssistantRuns, createAssistantRun } from '@/api/scriptAssistant'
 
 const router = useRouter(), route = useRoute()
 const works = ref([]), selected = ref(''), context = ref(null), messages = ref([]), draft = ref(''), budget = ref({})
 const loading = ref(false), sending = ref(false), error = ref(''), showSource = ref(false), sourceView = ref(null)
+const mode = ref('chat'), runRequest = ref(''), runs = ref([]), runSending = ref(false)
 const prompts = ['我们前三集剧本现在是什么状态？', '第一集和第三集之间，有哪些需要注意的连续性问题？', '你建议先修改前三集，还是开始第四集？说明依据。']
 let timer, requestKey = null, submittedText = null, generation = 0, alive = true
 const isActive = task => ['queued', 'starting', 'submitted', 'running'].includes(task?.task_status)
@@ -100,13 +119,18 @@ async function reloadMessages() {
 async function reload() {
   if (!selected.value) return
   error.value = ''
-  try { await reloadMessages(); context.value = await getAssistantContext(selected.value) } catch (e) { error.value = e.message }
+  try { await reloadMessages(); context.value = await getAssistantContext(selected.value); runs.value = (await getAssistantRuns(selected.value)).runs } catch (e) { error.value = e.message }
 }
 async function changeWork() {
   generation++; messages.value = []; context.value = null; error.value = ''; loading.value = true
   requestKey = null; submittedText = null
   await router.replace({ query: { work: selected.value } })
-  try { context.value = await getAssistantContext(selected.value); await reloadMessages() } catch (e) { error.value = e.message } finally { loading.value = false }
+  try { context.value = await getAssistantContext(selected.value); await reloadMessages(); runs.value = (await getAssistantRuns(selected.value)).runs } catch (e) { error.value = e.message } finally { loading.value = false }
+}
+async function startRun() {
+  if (!runRequest.value.trim() || runSending.value) return
+  runSending.value = true; error.value = ''
+  try { await createAssistantRun(selected.value, runRequest.value.trim()); runRequest.value = ''; await reload() } catch (e) { error.value = e.message } finally { runSending.value = false }
 }
 async function send() {
   if (!canSend.value) return
@@ -130,7 +154,7 @@ onMounted(async () => {
     if (selected.value) await changeWork()
   } catch (e) { error.value = e.response?.status === 404 ? '本服务尚未启用剧本助手，请使用已配置的 M1 工作台服务。' : e.message }
   finally { loading.value = false }
-  timer = setInterval(() => { if (selected.value && messages.value.some(m => isActive(m.task))) reloadMessages().catch(e => { error.value = e.message }) }, 5000)
+  timer = setInterval(() => { if (selected.value && (messages.value.some(m => isActive(m.task)) || runs.value.some(r => ['queued','planning','experts','reviewing','deciding'].includes(r.status)))) reload().catch(e => { error.value = e.message }) }, 5000)
 })
 onUnmounted(() => { alive = false; clearInterval(timer) })
 </script>
@@ -150,6 +174,7 @@ h2 { font-size: 16px; margin: 0 0 16px; } .context-panel h2:not(:first-child) { 
 .source-item .el-button { white-space: normal; text-align: left; height: auto; }
 .conversation-top, .agent-label, .composer-footer { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .conversation-top h2 { margin: 0; } .conversation-note { margin-bottom: 25px; }
+.mode-switch { margin-bottom: 18px; } .orchestration-panel { border: 1px solid var(--border-color, #ddd); border-radius: 9px; padding: 16px; margin-bottom: 22px; } .orchestration-panel h3 { margin: 0 0 8px; } .orchestration-panel .el-button { margin-top: 12px; } .run-card { border-top: 1px solid var(--border-color, #ddd); margin-top: 16px; padding-top: 14px; }
 .empty-chat { text-align: center; padding: 50px 12px; color: var(--text-secondary); }
 .empty-chat .el-button { display: block; margin: 12px auto; white-space: normal; height: auto; padding: 12px; }
 .chat-turn { margin-bottom: 28px; } .user-message { padding: 14px 18px; border-radius: 10px; background: var(--bg-page); margin-left: 35px; }

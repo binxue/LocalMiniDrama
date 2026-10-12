@@ -21,6 +21,8 @@ module.exports = function scriptAssistant(db, log, config) {
       service.loadWork(config, req.params.work_id);
       return { messages: service.messages(db, req.params.work_id), budget: service.budget(db) };
     }),
+    runs: wrap(req => { service.loadWork(config, req.params.work_id); return { runs: service.runs(db, req.params.work_id), budget: service.budget(db) }; }),
+    createRun: wrap(req => service.createRun(db, log, config, req.params.work_id, req.body?.request)),
     create: wrap(req => service.createMessage(db, log, config, req.params.work_id, req.body)),
     refresh: wrap(async req => {
       const m = service.messages(db, req.params.work_id).find(m => String(m.id) === req.params.message_id);
