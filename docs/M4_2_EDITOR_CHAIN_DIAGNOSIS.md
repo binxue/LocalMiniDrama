@@ -96,6 +96,18 @@
 - 浏览器分项未通过/未完成：当前 5679 页面由 `H:\localminidrama-clean` 历史进程提供，非本工程 5688 修复服务；打开 `/script-assistant` 为空，不能证明当前候选差异、审核意见和批准按钮在正确工作台可见。未将该页面冒充为通过。
 - 未点击批准、未写 Canon、未修改三集正文。
 
+## M4 最终浏览器验收（2026-10-13）
+
+- 5679 继续保留为历史 `H:\localminidrama-clean` 实例，未停止或覆盖。
+- 5688 为当前 Managed Agent 后端，健康版本标识为 `m4.3-session-isolation-recovery`，Runtime 工作目录为 `H:\localminidrama-runtime-creative-20261011-source`。
+- 当前工程前端 Vite 配置原先错误代理到 5679；已最小修复为代理 `/api` 和 `/static` 到 5688。没有复制数据库或新建工作台。
+- 当前前端开发地址：`http://127.0.0.1:3013/script-assistant?work=rainforest`。进程来自 `H:\localminidrama-active\frontweb` 的 Vite，端口 3013。
+- 浏览器实证：页面显示《雨林》、三集 CONDITIONAL PASS 候选状态、第三集 Revision `rev_e310cfe1-f800-4854-bbb6-b81573f30311`、原稿 SHA、候选 SHA、Editor `CONDITIONAL PASS` 全文意见和“批准状态：not_approved”。
+- 切换到 Producer 编排视图后，候选正文和 Editor 五项意见可见；“批准为待发布版本”按钮存在但未点击。
+- 浏览器刷新后重新选择 Producer 编排，Revision、候选正文、差异所需的原稿/候选哈希、Editor 意见和 `not_approved` 状态仍存在，证明数据来自后端持久化。
+- 5679 页面曾为空是历史前端/API 组合造成的；本次没有把历史页面结果算作验收证据。3013 当前页面加载正常，API `/api/v1/script-assistant/works` 通过代理返回 `rainforest`。
+- 前端构建通过；后端全量测试此前 85/85 通过。本轮未调用任何 Managed Agent。
+
 ### 用量
 
 - 本轮新增真实 Editor 调用：0（复用了已提交的 M4.3 Session，未创建新 Session）。
