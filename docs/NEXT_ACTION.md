@@ -1,6 +1,16 @@
 # Current Action
 
-LOCALMINIDRAMA_SCRIPT_ASSISTANT_M1_CLOSEOUT
+LOCALMINIDRAMA_M1_ACCEPTED_ENGINEERING_BASELINE_WAIT_M2
+
+## M1 Git baseline（2026-10-12）
+
+- Repository：binxue/LocalMiniDrama；source：H:/localminidrama-active。
+- Branch：codex/localminidrama-quality；M1 implementation commit：5b835d2e26511c2e30ad2150522ea25f7f4c6338。本节后续文档提交可由git log解析，不把提交自身SHA写成循环依赖。
+- M1工程收口：真实Producer新任务、正文/事件/tokens、服务重启持久化已验证；实际关闭Codex未执行，不冒充人工步骤。后端80/80、前端10/10测试通过。
+- 同步方式：仅专用开发分支普通push，随后fetch与远端HEAD/文件清单验证；不合并main。实时远端状态以Git为准。
+- 索引恢复：归档旧索引补丁及无活动Git进程的空锁文件；read-tree仅恢复HEAD索引，源码哈希未变。历史UI/证据改动、示例ZIP缺失及临时文件未提交，继续保留。
+- M2入口：从此M1实现提交及当前文档提交继续，复用backend-node服务；需用户下一步授权。M2尚未启动，当前暂停。
+- Runtime证据仍在H:/localminidrama-runtime-creative-20261011-source/evidence，未上传原始对话、数据库、配置凭证或日志。其他两个仓库、视频模块与雨林冻结正文未修改。
 
 M1 已实现现有 Managed Agent 单任务服务、隔离持久记录、有界事件读取与明确错误状态。真实 Producer 正文返回与重启恢复已验证；独立Node进程运行于127.0.0.1:5688。证据：H:/localminidrama-runtime-creative-20261011-source/evidence/m1-independent-runtime-20261012。
 
