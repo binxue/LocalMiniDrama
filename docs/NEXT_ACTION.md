@@ -1,6 +1,6 @@
 # Current Action
 
-LOCALMINIDRAMA_M4_CONDITIONAL_PASS_BROWSER_ACCEPTED
+LOCALMINIDRAMA_CHAT_QUOTA_UNBLOCKED
 
 ## M1 Git baseline（2026-10-12）
 
@@ -14,7 +14,7 @@ LOCALMINIDRAMA_M4_CONDITIONAL_PASS_BROWSER_ACCEPTED
 
 M1 已实现现有 Managed Agent 单任务服务、隔离持久记录、有界事件读取与明确错误状态。真实 Producer 正文返回与重启恢复已验证；独立Node进程运行于127.0.0.1:5688。证据：H:/localminidrama-runtime-creative-20261011-source/evidence/m1-independent-runtime-20261012。
 
-当前动作：M4最终浏览器验收已完成。当前前端3013代理到5688，真实显示雨林Revision、原稿/候选哈希、候选正文、Editor CONDITIONAL PASS意见和not_approved状态；刷新恢复通过。M4仍是有条件通过，不得自动批准、写Canon或启动第四集。证据见M4_2_EDITOR_CHAIN_DIAGNOSIS.md。
+当前动作：额度管理修复已完成。聊天与编排额度分开统计，聊天默认不限额，历史测试任务不再阻塞普通Producer对话；配置上限仍可通过LOCALMINIDRAMA_CHAT_DAILY_LIMIT启用。前端3013代理到5688，真实Producer消息已发送、完成并在刷新后恢复；本次任务仅调用Producer，不启动编排、Writer或Editor。保留并发防重、Attempt唯一性、Session隔离和失败恢复。证据保存在Runtime现有任务记录及本次验收日志；下一步等待M2/M3方向，不修改Canon、剧本或视频数据。
 
 剧本助手终点为人工批准后的Script Handoff；CONDITIONAL PASS不代表批准。雨林计时、分镜、救鸟实现及样片移交视频模块待办，不阻塞剧本M1。不修改冻结稿、Canon或生产数据库。
 

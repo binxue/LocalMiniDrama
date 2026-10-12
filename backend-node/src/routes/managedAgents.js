@@ -4,7 +4,12 @@ const service = require('../services/managedAgentService');
 const guard = req => {
     const ip = req.socket.remoteAddress;
     if (!['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(ip)) throw new Error('仅允许本机调用');
-    if (req.headers.origin && req.headers.origin !== `http://${req.headers.host}`) throw new Error('拒绝跨域 Agent 调用');
+    if (req.headers.origin) {
+      let origin;
+      try { origin = new URL(req.headers.origin); } catch { throw new Error('拒绝无效 Origin'); }
+      const localHost = ['127.0.0.1', 'localhost', '[::1]'].includes(origin.hostname);
+      if (!localHost || origin.protocol !== 'http:') throw new Error('拒绝跨域 Agent 调用');
+    }
 };
 
 module.exports = function routes(db, log) {

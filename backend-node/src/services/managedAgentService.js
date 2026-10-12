@@ -48,7 +48,7 @@ function ensureTable(db) {
     completed_at TEXT, updated_at TEXT NOT NULL
   )`);
   const columns = new Set(db.prepare('PRAGMA table_info(managed_agent_tasks)').all().map(c => c.name));
-  for (const column of ['model_id', 'session_create_json', 'send_json', 'attempt_id', 'episode_id', 'revision_id', 'source_sha256', 'candidate_sha256', 'context_hash']) {
+  for (const column of ['model_id', 'session_create_json', 'send_json', 'attempt_id', 'episode_id', 'revision_id', 'source_sha256', 'candidate_sha256', 'context_hash', 'task_mode']) {
     if (!columns.has(column)) db.exec(`ALTER TABLE managed_agent_tasks ADD COLUMN ${column} TEXT`);
   }
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_managed_agent_session_unique ON managed_agent_tasks(session_id) WHERE session_id IS NOT NULL");
@@ -157,11 +157,12 @@ function createTask(db, log, { agent_id: agentId, work_id: workId, input, orches
   if (db.prepare('SELECT 1 FROM managed_agent_tasks WHERE attempt_id = ?').get(attemptId)) throw new Error('attempt_id 已存在，禁止重复提交');
   const insert = db.transaction(() => {
     if (db.prepare("SELECT count(*) n FROM managed_agent_tasks WHERE task_status IN ('queued','starting','submitted','running')").get().n) throw new Error('已有进行中的 Agent 任务');
-    if (!orchestration && db.prepare('SELECT count(*) n FROM managed_agent_tasks WHERE created_at >= ?').get(new Date(Date.now() - 86400000).toISOString()).n >= 5) throw new Error('24小时调用上限5次');
+    const chatLimit = Number(process.env.LOCALMINIDRAMA_CHAT_DAILY_LIMIT || 0);
+    if (!orchestration && chatLimit > 0 && db.prepare("SELECT count(*) n FROM managed_agent_tasks WHERE task_mode = 'chat' AND created_at >= ?").get(new Date(Date.now() - 86400000).toISOString()).n >= chatLimit) throw new Error(`聊天额度已达到配置上限（${chatLimit}/24小时），请等待滚动窗口恢复`);
     const taskId = `mat_${crypto.randomUUID()}`;
     const stamp = now();
-    db.prepare(`INSERT INTO managed_agent_tasks (task_id, work_id, agent_id, task_status, input_version, input_text, attempt_id, episode_id, revision_id, source_sha256, candidate_sha256, context_hash, created_at, updated_at) VALUES (?, ?, ?, 'queued', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-      .run(taskId, workId, agentId, sha(input), input, attemptId, episodeId, revisionId, sourceSha, candidateSha, contextHash, stamp, stamp);
+    db.prepare(`INSERT INTO managed_agent_tasks (task_id, work_id, agent_id, task_status, input_version, input_text, attempt_id, episode_id, revision_id, source_sha256, candidate_sha256, context_hash, task_mode, created_at, updated_at) VALUES (?, ?, ?, 'queued', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(taskId, workId, agentId, sha(input), input, attemptId, episodeId, revisionId, sourceSha, candidateSha, contextHash, orchestration ? 'orchestration' : 'chat', stamp, stamp);
     return taskId;
   });
   const taskId = insert();

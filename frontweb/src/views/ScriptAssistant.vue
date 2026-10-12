@@ -87,9 +87,9 @@
         </article>
         <form class="composer" @submit.prevent="send">
           <el-input v-model="draft" type="textarea" :rows="3" :maxlength="1200" show-word-limit placeholder="向 Producer 提问，例如：前三集现在是什么状态？" aria-label="给 Producer 的消息" />
-          <div class="composer-footer"><span>24小时任务额度：{{ budget.remaining ?? '—' }} / {{ budget.limit || 5 }} 剩余 · 不自动重试</span>
+          <div class="composer-footer"><span>聊天额度：{{ budget.chat?.limit ? `${budget.chat.remaining} / ${budget.chat.limit}` : '不限' }} · 编排额度：{{ budget.orchestration?.limit ? `${budget.orchestration.remaining} / ${budget.orchestration.limit}` : '不限' }} · 不自动重试</span>
             <el-button native-type="submit" type="primary" :loading="sending" :disabled="!canSend">发送给 Producer</el-button></div>
-          <p v-if="budget.remaining === 0" class="muted">当前配额已用完。已有记录可继续查看，新任务需等待滚动配额恢复。</p>
+          <p v-if="budget.chat?.limit && budget.chat.remaining === 0" class="muted">聊天额度已达到配置上限，请等待24小时滚动窗口恢复。</p>
         </form>
       </main>
     </div>
@@ -114,7 +114,7 @@ const revisions = ref([]), revisionSending = ref(false)
 const prompts = ['我们前三集剧本现在是什么状态？', '第一集和第三集之间，有哪些需要注意的连续性问题？', '你建议先修改前三集，还是开始第四集？说明依据。']
 let timer, requestKey = null, submittedText = null, generation = 0, alive = true
 const isActive = task => ['queued', 'starting', 'submitted', 'running'].includes(task?.task_status)
-const canSend = computed(() => selected.value && draft.value.trim() && !sending.value && !messages.value.some(m => isActive(m.task)) && budget.value.remaining > 0 && !context.value?.gaps?.length)
+const canSend = computed(() => selected.value && draft.value.trim() && !sending.value && !messages.value.some(m => isActive(m.task)) && (!budget.value.chat?.limit || budget.value.chat.remaining > 0) && !context.value?.gaps?.length)
 const statusLabel = state => ({ queued: '排队', starting: '创建 Session', submitted: '已提交', running: '执行中', completed: '回复已返回', failed: '执行失败', incomplete: '正文不完整', interrupted: '服务重启中断' }[state] || state)
 async function reloadMessages() {
   const id = selected.value, token = generation

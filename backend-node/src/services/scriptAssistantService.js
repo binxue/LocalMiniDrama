@@ -270,9 +270,12 @@ function createMessage(db, log, config, workId, payload) {
 
 function budget(db) {
   managed.ensureTable(db);
-  const used = db.prepare('SELECT count(*) n FROM managed_agent_tasks WHERE created_at >= ?')
-    .get(new Date(Date.now() - 86400000).toISOString()).n;
-  return { used, limit: 5, remaining: Math.max(0, 5 - used), in_flight: db.prepare("SELECT count(*) n FROM managed_agent_tasks WHERE task_status IN ('queued','starting','submitted','running')").get().n };
+  const since = new Date(Date.now() - 86400000).toISOString();
+  const chatUsed = db.prepare("SELECT count(*) n FROM managed_agent_tasks WHERE task_mode = 'chat' AND created_at >= ?").get(since).n;
+  const orchestrationUsed = db.prepare("SELECT count(*) n FROM managed_agent_tasks WHERE task_mode = 'orchestration' AND created_at >= ?").get(since).n;
+  const chatLimit = Number(process.env.LOCALMINIDRAMA_CHAT_DAILY_LIMIT || 0);
+  const orchestrationLimit = Number(process.env.LOCALMINIDRAMA_ORCHESTRATION_DAILY_LIMIT || 5);
+  return { chat: { used: chatUsed, limit: chatLimit, remaining: chatLimit > 0 ? Math.max(0, chatLimit - chatUsed) : null }, orchestration: { used: orchestrationUsed, limit: orchestrationLimit, remaining: orchestrationLimit > 0 ? Math.max(0, orchestrationLimit - orchestrationUsed) : null }, in_flight: db.prepare("SELECT count(*) n FROM managed_agent_tasks WHERE task_status IN ('queued','starting','submitted','running')").get().n };
 }
 
 module.exports = { ensureTable, works, loadWork, summary, messages, buildInput, createMessage, budget, runs, createRun, revisions, createRevision, approveRevision, refreshRevision, createEditorRecovery, PRODUCER };
