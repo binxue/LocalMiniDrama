@@ -25,6 +25,7 @@ const sceneModelMapRoutes = require('./sceneModelMap');
 function setupRouter(cfg, db, log) {
   const r = express.Router();
   const managedAgentRoutes = cfg.managed_agent?.enabled ? require('./managedAgents')(db, log) : null;
+  const assistant = managedAgentRoutes && cfg.script_assistant?.manifest_path ? require('./scriptAssistant')(db, log, cfg) : null;
   const drama = dramaRoutes(db, cfg, log);
   const task = taskRoutes(db, log);
   const settings = settingsRoutes(db, cfg, log);
@@ -161,6 +162,15 @@ function setupRouter(cfg, db, log) {
   }
 
   // ---------- character-library ----------
+  if (assistant) {
+    r.get('/script-assistant/works', assistant.works);
+    r.get('/script-assistant/works/:work_id/context', assistant.context);
+    r.get('/script-assistant/works/:work_id/sources/:source_id', assistant.source);
+    r.get('/script-assistant/works/:work_id/messages', assistant.messages);
+    r.post('/script-assistant/works/:work_id/messages', assistant.create);
+    r.post('/script-assistant/works/:work_id/messages/:message_id/refresh', assistant.refresh);
+  }
+
   r.get('/character-library', charLibrary.list);
   r.post('/character-library', charLibrary.create);
   r.get('/character-library/:id', charLibrary.get);

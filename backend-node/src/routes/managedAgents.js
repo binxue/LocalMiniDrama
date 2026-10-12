@@ -1,13 +1,14 @@
 const response = require('../response');
 const service = require('../services/managedAgentService');
 
-module.exports = function routes(db, log) {
-  service.ensureTable(db);
-  const guard = req => {
+const guard = req => {
     const ip = req.socket.remoteAddress;
     if (!['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(ip)) throw new Error('仅允许本机调用');
     if (req.headers.origin && req.headers.origin !== `http://${req.headers.host}`) throw new Error('拒绝跨域 Agent 调用');
-  };
+};
+
+module.exports = function routes(db, log) {
+  service.ensureTable(db);
   return {
     refresh: async (req, res) => {
       try { guard(req); response.success(res, await service.refreshTask(db, req.params.task_id)); }
@@ -33,3 +34,4 @@ module.exports = function routes(db, log) {
     },
   };
 };
+module.exports.guard = guard;

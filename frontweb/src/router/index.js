@@ -4,6 +4,12 @@ const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
     {
+      path: '/script-assistant',
+      name: 'script-assistant',
+      component: () => import('@/views/ScriptAssistant.vue'),
+      meta: { title: 'AI 剧本创作助手' }
+    },
+    {
       path: '/',
       name: 'list',
       component: () => import('@/views/FilmList.vue'),
