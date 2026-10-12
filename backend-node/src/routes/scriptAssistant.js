@@ -26,6 +26,8 @@ module.exports = function scriptAssistant(db, log, config) {
     revisions: wrap(req => ({ revisions: service.revisions(db, req.params.work_id) })),
     createRevision: wrap(req => service.createRevision(db, log, config, req.params.work_id, req.body?.source_id)),
     approveRevision: wrap(req => service.approveRevision(db, req.params.revision_id, req.body?.actor || 'user')),
+    refreshRevision: wrap(req => service.refreshRevision(db, req.params.revision_id)),
+    recoverEditor: wrap(req => service.createEditorRecovery(db, log, req.params.revision_id)),
     create: wrap(req => service.createMessage(db, log, config, req.params.work_id, req.body)),
     refresh: wrap(async req => {
       const m = service.messages(db, req.params.work_id).find(m => String(m.id) === req.params.message_id);

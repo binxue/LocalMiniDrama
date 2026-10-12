@@ -14,7 +14,7 @@ LOCALMINIDRAMA_M1_ACCEPTED_ENGINEERING_BASELINE_WAIT_M2
 
 M1 已实现现有 Managed Agent 单任务服务、隔离持久记录、有界事件读取与明确错误状态。真实 Producer 正文返回与重启恢复已验证；独立Node进程运行于127.0.0.1:5688。证据：H:/localminidrama-runtime-creative-20261011-source/evidence/m1-independent-runtime-20261012。
 
-当前动作：M3已完成一条真实Producer主导编排链路并保存候选结果；后续等待用户决定是否返修或批准，不自动写入Canon、启动第四集或进入视频制作。M3证据见工程报告及Runtime任务记录。
+当前动作：M4.1已完成旧Editor Session取证和一次结构化复审尝试，但Editor仍未取得可验证终态；候选稿等待人工审阅，不自动写入Canon、启动第四集或进入视频制作。证据见M4_1_ACCEPTANCE.md。
 
 剧本助手终点为人工批准后的Script Handoff；CONDITIONAL PASS不代表批准。雨林计时、分镜、救鸟实现及样片移交视频模块待办，不阻塞剧本M1。不修改冻结稿、Canon或生产数据库。
 

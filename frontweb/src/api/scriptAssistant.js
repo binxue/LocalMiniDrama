@@ -11,3 +11,5 @@ export const createAssistantRun = (id, requestText) => request.post(`${work(id)}
 export const getAssistantRevisions = id => request.get(`${work(id)}/revisions`)
 export const createAssistantRevision = (id, sourceId) => request.post(`${work(id)}/revisions`, { source_id: sourceId })
 export const approveAssistantRevision = id => request.post(`/script-assistant/revisions/${encodeURIComponent(id)}/approve`, { actor: 'user' })
+export const refreshAssistantRevision = id => request.post(`/script-assistant/revisions/${encodeURIComponent(id)}/refresh`)
+export const recoverAssistantEditor = id => request.post(`/script-assistant/revisions/${encodeURIComponent(id)}/recover-editor`)

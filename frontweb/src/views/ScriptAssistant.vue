@@ -54,7 +54,7 @@
         <section v-if="mode === 'team'" class="orchestration-panel">
           <h3>第三集定向修订</h3><p class="muted">基于最近一次 Editor 意见调用 Story Writer，原稿保持不变，候选版本独立复审。</p>
           <el-button type="warning" :loading="revisionSending" @click="startRevision">修订第三集 v2</el-button>
-          <article v-for="revision in revisions" :key="revision.revision_id" class="run-card"><strong>{{ revision.status }}</strong><span class="muted"> {{ revision.revision_id }}</span><p>原稿 SHA256：{{ revision.source_sha256 }}<br>候选 SHA256：{{ revision.candidate_sha256 || '等待生成' }}<br>批准状态：{{ revision.approval_status }}</p><pre v-if="revision.candidate_text" class="source-document">{{ revision.candidate_text }}</pre><p v-if="revision.editor_review" class="reply-text"><strong>Editor：</strong>{{ revision.editor_review }}</p><el-button v-if="revision.status === 'completed' && revision.approval_status === 'not_approved'" type="primary" size="small" @click="approveRevision(revision.revision_id)">批准为待发布版本</el-button></article>
+          <article v-for="revision in revisions" :key="revision.revision_id" class="run-card"><strong>{{ revision.status }}</strong><span class="muted"> {{ revision.revision_id }}</span><p>原稿 SHA256：{{ revision.source_sha256 }}<br>候选 SHA256：{{ revision.candidate_sha256 || '等待生成' }}<br>批准状态：{{ revision.approval_status }}</p><pre v-if="revision.candidate_text" class="source-document">{{ revision.candidate_text }}</pre><p v-if="revision.editor_review" class="reply-text"><strong>Editor：</strong>{{ revision.editor_review }}</p><el-button v-if="revision.status === 'failed' && revision.editor_task_id" size="small" @click="recoverRevision(revision.revision_id)">回查原 Editor Session</el-button><el-button v-if="revision.status === 'completed' && revision.approval_status === 'not_approved'" type="primary" size="small" @click="approveRevision(revision.revision_id)">批准为待发布版本</el-button></article>
         </section>
         <div v-if="!messages.length" class="empty-chat">
           <el-icon :size="32"><ChatDotRound /></el-icon>
@@ -104,7 +104,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ArrowLeft, ChatDotRound } from '@element-plus/icons-vue'
-import { getAssistantWorks, getAssistantContext, getAssistantMessages, sendAssistantMessage, refreshAssistantMessage, getAssistantSource, getAssistantRuns, createAssistantRun, getAssistantRevisions, createAssistantRevision, approveAssistantRevision } from '@/api/scriptAssistant'
+import { getAssistantWorks, getAssistantContext, getAssistantMessages, sendAssistantMessage, refreshAssistantMessage, getAssistantSource, getAssistantRuns, createAssistantRun, getAssistantRevisions, createAssistantRevision, approveAssistantRevision, refreshAssistantRevision, recoverAssistantEditor } from '@/api/scriptAssistant'
 
 const router = useRouter(), route = useRoute()
 const works = ref([]), selected = ref(''), context = ref(null), messages = ref([]), draft = ref(''), budget = ref({})
@@ -135,6 +135,8 @@ async function changeWork() {
 }
 async function startRevision() { if (revisionSending.value) return; revisionSending.value=true; error.value=''; try { await createAssistantRevision(selected.value,'ep3'); await reload() } catch(e) { error.value=e.message } finally { revisionSending.value=false } }
 async function approveRevision(id) { try { await approveAssistantRevision(id); await reload() } catch(e) { error.value=e.message } }
+async function recoverRevision(id) { try { await refreshAssistantRevision(id); await reload() } catch(e) { error.value=e.message } }
+async function recoverEditor(id) { try { await recoverAssistantEditor(id); await reload() } catch(e) { error.value=e.message } }
 async function startRun() {
   if (!runRequest.value.trim() || runSending.value) return
   runSending.value = true; error.value = ''
