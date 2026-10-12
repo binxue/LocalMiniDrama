@@ -40,3 +40,29 @@
 - 新任务记录到 1 次模型请求，输入 8,286、输出 210、未完成请求 1；没有 `agent.message`，没有 PASS/CONDITIONAL PASS/FAIL。
 - 事件最终为 `session.status_idle`，但事件中出现 `user.interrupt`。这证明 5688 当前运行进程未加载 M4.2 修复后的服务代码，不能把本次运行作为修复后链路验证；没有再次提交或重试。
 - Revision 仍为 reviewing，候选正文与原稿均未修改，批准状态为 `not_approved`。由于没有有效 Editor 终态，浏览器业务验收和 M4 人工审阅准入仍未完成。
+
+## M4.3 Session 隔离治理（2026-10-13）
+
+### 修复
+
+- `managed_agent_tasks` 兼容迁移新增 `attempt_id`、`episode_id`、`revision_id`、`source_sha256`、`candidate_sha256`、`context_hash`，并为非空 `session_id` 建立唯一索引。
+- 新任务在 SQLite 事务中生成唯一 Attempt 并检查活动任务，避免并发重复提交；已有 Attempt 不得重复使用。
+- 修订 Writer/Editor 任务显式绑定作品、集数、Revision、原稿/候选哈希和上下文哈希；Editor 不再只靠 Prompt 传递身份。
+- 拒绝把 Windows 本地路径传入云端；refresh 只回查原 Session，不创建新 Session。
+
+### 专项测试
+
+- Managed Agent 隔离专项：4/4 通过，覆盖 Session 唯一绑定、跨版本字段、Attempt 重复保护和 Windows 路径拒绝。
+- 后端全量测试需在本次提交前复跑；历史 82/82 通过记录保留。
+
+### 真实隔离复审
+
+- 旧 Session 回查仍无可用 `agent.message`。
+- 仅创建一次新的独立 Editor Attempt：Task `mat_03fc8cc1-1196-49f5-a0ab-0a588f59c38e`，Session `sesn-20261012171207-70hzq`，Attempt `att_f9f06b07-b3ee-4a08-a31a-14af134e78b6`。
+- 绑定：`revision_id=rev_e310cfe1-f800-4854-bbb6-b81573f30311`、`episode_id=ep3`、原稿 SHA `159d798d88fcc5fdfb35590612f7f20c1b3ca4ae203a3745fe6c6668bcf10c8f`、候选 SHA `116c4fdeff6ac0fe9051a8b9cde78f212933b771c2efda02ceddcb191225b1bf`。
+- 有界等待后仍为 `running`，事件只有 session running、model request start、thinking 和 user.message，没有 `agent.message` 或可核验用量；未再次提交。
+- 本次新增真实调用次数：1 个 Editor Session；截至停止检查，已记录的模型请求/Token 为 0 个可完成请求（请求仍未终态）。
+
+### 结论
+
+隔离绑定和防重复提交已落地，但 Independent Editor 仍未取得有效终态；M4 不能进入人工审阅准入，原稿、候选稿和 Canon 均未改变。
