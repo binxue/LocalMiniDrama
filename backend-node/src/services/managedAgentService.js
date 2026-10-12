@@ -176,7 +176,7 @@ async function refreshTask(db, taskId) {
   const events = [...new Map([...(task.events || []), ...(parseJson(out).data || [])].map(e => [e.id, e])).values()];
   const result = extract(events);
   const idle = events.some(e => e.type === 'session.status_idle');
-  const failed = events.some(e => e.type === 'session.error' || e.type === 'session.status_failed' || (e.type === 'span.model_request_end' && e.is_error));
+  const failed = events.some(e => ['session.error', 'session.status_failed', 'session.status_terminated'].includes(e.type) || (e.type === 'span.model_request_end' && e.is_error));
   const status = failed ? 'failed' : idle && result.text.trim() ? 'completed' : task.task_status;
   update(db, taskId, { task_status: status, events_json: JSON.stringify(events), usage_json: JSON.stringify(result.usage), output_text: result.text || null, output_version: result.text ? sha(result.text) : null,
     error_text: status === 'completed' ? null : task.error_text, completed_at: ['completed', 'failed'].includes(status) ? task.completed_at || now() : null });
