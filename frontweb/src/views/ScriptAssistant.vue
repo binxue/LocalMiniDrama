@@ -51,6 +51,11 @@
             <p class="muted">候选稿 · 人工批准未记录 · 未确立 Canon</p>
           </article>
         </section>
+        <section v-if="mode === 'team'" class="orchestration-panel">
+          <h3>第三集定向修订</h3><p class="muted">基于最近一次 Editor 意见调用 Story Writer，原稿保持不变，候选版本独立复审。</p>
+          <el-button type="warning" :loading="revisionSending" @click="startRevision">修订第三集 v2</el-button>
+          <article v-for="revision in revisions" :key="revision.revision_id" class="run-card"><strong>{{ revision.status }}</strong><span class="muted"> {{ revision.revision_id }}</span><p>原稿 SHA256：{{ revision.source_sha256 }}<br>候选 SHA256：{{ revision.candidate_sha256 || '等待生成' }}<br>批准状态：{{ revision.approval_status }}</p><pre v-if="revision.candidate_text" class="source-document">{{ revision.candidate_text }}</pre><p v-if="revision.editor_review" class="reply-text"><strong>Editor：</strong>{{ revision.editor_review }}</p><el-button v-if="revision.status === 'completed' && revision.approval_status === 'not_approved'" type="primary" size="small" @click="approveRevision(revision.revision_id)">批准为待发布版本</el-button></article>
+        </section>
         <div v-if="!messages.length" class="empty-chat">
           <el-icon :size="32"><ChatDotRound /></el-icon>
           <h3>从已有作品开始聊</h3>
@@ -99,12 +104,13 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ArrowLeft, ChatDotRound } from '@element-plus/icons-vue'
-import { getAssistantWorks, getAssistantContext, getAssistantMessages, sendAssistantMessage, refreshAssistantMessage, getAssistantSource, getAssistantRuns, createAssistantRun } from '@/api/scriptAssistant'
+import { getAssistantWorks, getAssistantContext, getAssistantMessages, sendAssistantMessage, refreshAssistantMessage, getAssistantSource, getAssistantRuns, createAssistantRun, getAssistantRevisions, createAssistantRevision, approveAssistantRevision } from '@/api/scriptAssistant'
 
 const router = useRouter(), route = useRoute()
 const works = ref([]), selected = ref(''), context = ref(null), messages = ref([]), draft = ref(''), budget = ref({})
 const loading = ref(false), sending = ref(false), error = ref(''), showSource = ref(false), sourceView = ref(null)
 const mode = ref('chat'), runRequest = ref(''), runs = ref([]), runSending = ref(false)
+const revisions = ref([]), revisionSending = ref(false)
 const prompts = ['我们前三集剧本现在是什么状态？', '第一集和第三集之间，有哪些需要注意的连续性问题？', '你建议先修改前三集，还是开始第四集？说明依据。']
 let timer, requestKey = null, submittedText = null, generation = 0, alive = true
 const isActive = task => ['queued', 'starting', 'submitted', 'running'].includes(task?.task_status)
@@ -119,14 +125,16 @@ async function reloadMessages() {
 async function reload() {
   if (!selected.value) return
   error.value = ''
-  try { await reloadMessages(); context.value = await getAssistantContext(selected.value); runs.value = (await getAssistantRuns(selected.value)).runs } catch (e) { error.value = e.message }
+  try { await reloadMessages(); context.value = await getAssistantContext(selected.value); runs.value = (await getAssistantRuns(selected.value)).runs; revisions.value = (await getAssistantRevisions(selected.value)).revisions } catch (e) { error.value = e.message }
 }
 async function changeWork() {
   generation++; messages.value = []; context.value = null; error.value = ''; loading.value = true
   requestKey = null; submittedText = null
   await router.replace({ query: { work: selected.value } })
-  try { context.value = await getAssistantContext(selected.value); await reloadMessages(); runs.value = (await getAssistantRuns(selected.value)).runs } catch (e) { error.value = e.message } finally { loading.value = false }
+  try { context.value = await getAssistantContext(selected.value); await reloadMessages(); runs.value = (await getAssistantRuns(selected.value)).runs; revisions.value = (await getAssistantRevisions(selected.value)).revisions } catch (e) { error.value = e.message } finally { loading.value = false }
 }
+async function startRevision() { if (revisionSending.value) return; revisionSending.value=true; error.value=''; try { await createAssistantRevision(selected.value,'ep3'); await reload() } catch(e) { error.value=e.message } finally { revisionSending.value=false } }
+async function approveRevision(id) { try { await approveAssistantRevision(id); await reload() } catch(e) { error.value=e.message } }
 async function startRun() {
   if (!runRequest.value.trim() || runSending.value) return
   runSending.value = true; error.value = ''

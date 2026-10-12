@@ -22,7 +22,32 @@ function ensureTable(db) {
     final_task_id TEXT, selected_agents_json TEXT NOT NULL DEFAULT '[]', result_json TEXT,
     error_text TEXT, created_at TEXT NOT NULL, completed_at TEXT
   )`);
+  db.exec(`CREATE TABLE IF NOT EXISTS script_assistant_revisions (
+    revision_id TEXT PRIMARY KEY, work_id TEXT NOT NULL, source_id TEXT NOT NULL, source_sha256 TEXT NOT NULL,
+    status TEXT NOT NULL, writer_task_id TEXT, editor_task_id TEXT, producer_task_id TEXT,
+    candidate_text TEXT, candidate_sha256 TEXT, editor_review TEXT, approval_status TEXT NOT NULL DEFAULT 'not_approved',
+    approved_at TEXT, approved_by TEXT, created_at TEXT NOT NULL, completed_at TEXT, error_text TEXT
+  )`);
 }
+
+function revisions(db, workId) { ensureTable(db); return db.prepare('SELECT * FROM script_assistant_revisions WHERE work_id=? ORDER BY created_at DESC').all(workId); }
+async function executeRevision(db, log, config, id) {
+  const r = db.prepare('SELECT * FROM script_assistant_revisions WHERE revision_id=?').get(id); if (!r || r.status !== 'queued') return;
+  try {
+    const work = loadWork(config, r.work_id); const source = work.sources.find(s => s.id === r.source_id); if (!source?.available) throw new Error('原稿资料不可用');
+    const prior = runs(db, r.work_id).find(x => x.status === 'completed'); const review = prior?.result?.editor_review || '请独立检查连续性和人物关系问题';
+    const bounded = (v,n) => String(v||'').slice(0,n);
+    db.prepare('UPDATE script_assistant_revisions SET status=? WHERE revision_id=?').run('writing', id);
+    const writer = managed.createTask(db, log, { agent_id: 'agent-20261011131619-47ft8', work_id: r.work_id, input: `你是Story Writer。对以下冻结原稿做定向局部修订，保留未涉及内容，输出完整独立候选版本，不写第四集、不改Canon。\n原稿(${source.title}, SHA256=${source.sha256})：\n${bounded(source.text,5200)}\n\nIndependent Editor依据：\n${bounded(review,1800)}\n\n只返回修订后的完整候选正文。`, orchestration: true });
+    db.prepare('UPDATE script_assistant_revisions SET writer_task_id=? WHERE revision_id=?').run(writer.task_id,id); const wt = await waitTask(db, writer.task_id); if (wt.task_status !== 'completed' || !wt.output_text) throw new Error('Story Writer 未返回完整候选');
+    db.prepare('UPDATE script_assistant_revisions SET status=? WHERE revision_id=?').run('reviewing',id);
+    const editor = managed.createTask(db, log, { agent_id: EDITOR, work_id: r.work_id, input: `你是Independent Editor。独立复审以下候选修订，必须输出 PASS、CONDITIONAL PASS 或 FAIL，并给具体证据。不要改写正文，不把候选稿当Canon。\n原稿SHA256=${source.sha256}\n候选修订：\n${bounded(wt.output_text,6200)}`, orchestration: true });
+    db.prepare('UPDATE script_assistant_revisions SET editor_task_id=? WHERE revision_id=?').run(editor.task_id,id); const et = await waitTask(db, editor.task_id); if (et.task_status !== 'completed') throw new Error('Editor 未完成');
+    db.prepare('UPDATE script_assistant_revisions SET status=?, candidate_text=?, candidate_sha256=?, editor_review=?, completed_at=? WHERE revision_id=?').run('completed',wt.output_text,hash(wt.output_text),et.output_text,new Date().toISOString(),id);
+  } catch(e) { db.prepare('UPDATE script_assistant_revisions SET status=?, error_text=?, completed_at=? WHERE revision_id=?').run('failed',e.message,new Date().toISOString(),id); log.error('revision failed',{revision_id:id,error:e.message}); }
+}
+function createRevision(db, log, config, workId, sourceId) { const work=loadWork(config,workId); const s=work.sources.find(x=>x.id===sourceId); if(!s?.available) throw new Error('原稿不可用'); const id=`rev_${crypto.randomUUID()}`; db.prepare('INSERT INTO script_assistant_revisions(revision_id,work_id,source_id,source_sha256,status,created_at) VALUES(?,?,?,?,?,?)').run(id,workId,sourceId,s.sha256,'queued',new Date().toISOString()); setImmediate(()=>executeRevision(db,log,config,id)); return db.prepare('SELECT * FROM script_assistant_revisions WHERE revision_id=?').get(id); }
+function approveRevision(db, id, actor='user') { const r=db.prepare('SELECT * FROM script_assistant_revisions WHERE revision_id=?').get(id); if(!r||r.status!=='completed') throw new Error('只能批准已完成候选'); db.prepare('UPDATE script_assistant_revisions SET approval_status=?,approved_at=?,approved_by=? WHERE revision_id=?').run('approved_pending_canon',new Date().toISOString(),actor,id); return db.prepare('SELECT * FROM script_assistant_revisions WHERE revision_id=?').get(id); }
 
 function runs(db, workId) {
   ensureTable(db);
@@ -246,4 +271,4 @@ function budget(db) {
   return { used, limit: 5, remaining: Math.max(0, 5 - used), in_flight: db.prepare("SELECT count(*) n FROM managed_agent_tasks WHERE task_status IN ('queued','starting','submitted','running')").get().n };
 }
 
-module.exports = { ensureTable, works, loadWork, summary, messages, buildInput, createMessage, budget, runs, createRun, PRODUCER };
+module.exports = { ensureTable, works, loadWork, summary, messages, buildInput, createMessage, budget, runs, createRun, revisions, createRevision, approveRevision, PRODUCER };

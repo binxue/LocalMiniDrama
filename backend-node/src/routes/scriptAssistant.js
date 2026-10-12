@@ -23,6 +23,9 @@ module.exports = function scriptAssistant(db, log, config) {
     }),
     runs: wrap(req => { service.loadWork(config, req.params.work_id); return { runs: service.runs(db, req.params.work_id), budget: service.budget(db) }; }),
     createRun: wrap(req => service.createRun(db, log, config, req.params.work_id, req.body?.request)),
+    revisions: wrap(req => ({ revisions: service.revisions(db, req.params.work_id) })),
+    createRevision: wrap(req => service.createRevision(db, log, config, req.params.work_id, req.body?.source_id)),
+    approveRevision: wrap(req => service.approveRevision(db, req.params.revision_id, req.body?.actor || 'user')),
     create: wrap(req => service.createMessage(db, log, config, req.params.work_id, req.body)),
     refresh: wrap(async req => {
       const m = service.messages(db, req.params.work_id).find(m => String(m.id) === req.params.message_id);

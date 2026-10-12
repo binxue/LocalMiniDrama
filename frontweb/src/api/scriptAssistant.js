@@ -8,3 +8,6 @@ export const refreshAssistantMessage = (id, messageId) => request.post(`${work(i
 export const getAssistantSource = (id, sourceId) => request.get(`${work(id)}/sources/${encodeURIComponent(sourceId)}`)
 export const getAssistantRuns = id => request.get(`${work(id)}/runs`)
 export const createAssistantRun = (id, requestText) => request.post(`${work(id)}/runs`, { request: requestText })
+export const getAssistantRevisions = id => request.get(`${work(id)}/revisions`)
+export const createAssistantRevision = (id, sourceId) => request.post(`${work(id)}/revisions`, { source_id: sourceId })
+export const approveAssistantRevision = id => request.post(`/script-assistant/revisions/${encodeURIComponent(id)}/approve`, { actor: 'user' })
