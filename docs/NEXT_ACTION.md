@@ -1,6 +1,6 @@
 # Current Action
 
-LOCALMINIDRAMA_M4_EDITOR_REVIEW_BLOCKED_RUNTIME_VERSIONED
+LOCALMINIDRAMA_M4_EDITOR_CONDITIONAL_PASS_BROWSER_BLOCKED
 
 ## M1 Git baseline（2026-10-12）
 
@@ -14,7 +14,7 @@ LOCALMINIDRAMA_M4_EDITOR_REVIEW_BLOCKED_RUNTIME_VERSIONED
 
 M1 已实现现有 Managed Agent 单任务服务、隔离持久记录、有界事件读取与明确错误状态。真实 Producer 正文返回与重启恢复已验证；独立Node进程运行于127.0.0.1:5688。证据：H:/localminidrama-runtime-creative-20261011-source/evidence/m1-independent-runtime-20261012。
 
-当前动作：已完成M4.3隔离治理、重启恢复修复和运行版本标识。5688当前进程加载修复代码；指定Editor任务仍无agent.message，未创建新Session。Revision保持reviewing，未取得PASS/CONDITIONAL PASS/FAIL，浏览器业务准入未完成。证据见M4_2_EDITOR_CHAIN_DIAGNOSIS.md。
+当前动作：M4.3隔离治理后复用的Editor Session已取得真实CONDITIONAL PASS，Revision已完成但未批准。API/持久化验收通过；浏览器验收仍阻塞于5679历史进程不是当前5688运行实例，未冒充通过。不得自动批准、写Canon或启动第四集。证据见M4_2_EDITOR_CHAIN_DIAGNOSIS.md。
 
 剧本助手终点为人工批准后的Script Handoff；CONDITIONAL PASS不代表批准。雨林计时、分镜、救鸟实现及样片移交视频模块待办，不阻塞剧本M1。不修改冻结稿、Canon或生产数据库。
 

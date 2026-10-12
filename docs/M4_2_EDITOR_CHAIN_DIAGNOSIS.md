@@ -74,3 +74,29 @@
 - `recoverOnStartup()` 现在对已有 `session_id` 的活动任务标记 `awaiting_recovery`，不写 `completed_at`；没有云端 Session 的任务才标记 `interrupted`。
 - 指定 Editor Task `mat_03fc8cc1-1196-49f5-a0ab-0a588f59c38e` 只读回查仍无 `agent.message`，没有有效审核结论；没有创建新任务。
 - 浏览器中原稿/候选/差异的页面能力未能进入审核验收，因为 Revision 没有可验证 Editor 终态；不宣称刷新恢复业务通过。
+
+## M4 最终阻塞收口：成功/失败差异与分项验收（2026-10-13）
+
+### 成功/失败差异
+
+- M3 成功 Session `sesn-20261012150816-2mvyc`：1 次模型请求，输入 11,459、输出 3,649，无工具调用、1 条 `agent.message`，正常 idle。
+- M4 原失败 Session `sesn-20261012152610-rwdqe`：5 次模型请求，输入 46,553、输出 5,118、缓存读取 40,984，6 次工具调用、5 条 thinking、1 个未完成请求，最终无 `agent.message`。其 Agent 配置包含 unrestricted 环境、多个文件/搜索/网络工具；任务同时要求长篇候选全文复审。
+- M4.3 隔离 Session `sesn-20261012171207-70hzq`：1 次模型请求，输入 8,286、输出 12,332，无工具调用、1 条 `agent.message`，正常 idle。实际 Agent ID、模型 `doubao-seed-evolving-latest-version`、Reasoning `high`、Skills 与 M3 同属已部署 Editor；因此当前证据支持“输入范围/工具自主探索和任务复杂度”是主要差异，不支持模型或 Agent 身份本身故障。
+- M4.1 Session `sesn-20261012155634-9ce2u` 为空并返回数据面 headers 超时，仍只能归类为传输/服务异常，不能与内容质量混同。
+
+### 修复与结果
+
+- 已复用短、内联、禁止工具和一次回复明确裁定的 Editor 输入；保留独立 Session、Attempt、Revision、原稿 SHA 和候选 SHA 绑定。
+- 当前 Revision `rev_e310cfe1-f800-4854-bbb6-b81573f30311` 已通过现有 API 刷新为 `completed`，候选 SHA `116c4fdeff6ac0fe9051a8b9cde78f212933b771c2efda02ceddcb191225b1bf`，原稿 SHA `159d798d88fcc5fdfb35590612f7f20c1b3ca4ae203a3745fe6c6668bcf10c8f`，批准状态仍为 `not_approved`。
+- 真实 Editor 结论：`CONDITIONAL PASS`。五项具体问题为：1B 分岔起点与共用开场冲突；松动黄标与共用镜头锁冲突；毛巾归还/换手时序不清；2A 未主动说明返程限制；安全顾问和四路径时长仍未闭合。
+
+### 浏览器分项验收
+
+- API/持久化分项通过：Revision、原稿/候选哈希、Editor 结论和批准状态均可查询，刷新 API 后保持一致。
+- 浏览器分项未通过/未完成：当前 5679 页面由 `H:\localminidrama-clean` 历史进程提供，非本工程 5688 修复服务；打开 `/script-assistant` 为空，不能证明当前候选差异、审核意见和批准按钮在正确工作台可见。未将该页面冒充为通过。
+- 未点击批准、未写 Canon、未修改三集正文。
+
+### 用量
+
+- 本轮新增真实 Editor 调用：0（复用了已提交的 M4.3 Session，未创建新 Session）。
+- 该 Session 的真实用量：1 request，输入 8,286，输出 12,332，缓存读取 0。
