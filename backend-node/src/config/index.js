@@ -10,7 +10,8 @@ const configPaths = [
 
 function loadConfig() {
   let raw = null;
-  for (const p of configPaths) {
+  const paths = process.env.LOCALMINIDRAMA_CONFIG ? [path.resolve(process.env.LOCALMINIDRAMA_CONFIG)] : configPaths;
+  for (const p of paths) {
     if (fs.existsSync(p)) {
       raw = fs.readFileSync(p, 'utf8');
       break;

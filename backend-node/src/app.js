@@ -21,6 +21,7 @@ function createApp() {
 
   const taskService = require('./services/taskService');
   taskService.failOrphanedAsyncTasksOnStartup(db, log);
+  if (config.managed_agent?.enabled) require('./services/managedAgentService').recoverOnStartup(db, log);
 
   const { resumeProcessingVideoGenerations } = require('./services/videoService');
   resumeProcessingVideoGenerations(db, log);

@@ -24,6 +24,7 @@ const sceneModelMapRoutes = require('./sceneModelMap');
 
 function setupRouter(cfg, db, log) {
   const r = express.Router();
+  const managedAgentRoutes = cfg.managed_agent?.enabled ? require('./managedAgents')(db, log) : null;
   const drama = dramaRoutes(db, cfg, log);
   const task = taskRoutes(db, log);
   const settings = settingsRoutes(db, cfg, log);
@@ -149,6 +150,15 @@ function setupRouter(cfg, db, log) {
       response.internalError(res, err.message || '编剧团队生成失败');
     }
   });
+
+  // M1：已部署火山 Managed Agent 的隔离任务入口，不写入剧本 Store/Canon。
+  if (managedAgentRoutes) {
+    r.get('/managed-agent/agents', managedAgentRoutes.agents);
+    r.post('/managed-agent/tasks', managedAgentRoutes.create);
+    r.get('/managed-agent/tasks', managedAgentRoutes.list);
+    r.get('/managed-agent/tasks/:task_id', managedAgentRoutes.get);
+    r.post('/managed-agent/tasks/:task_id/refresh', managedAgentRoutes.refresh);
+  }
 
   // ---------- character-library ----------
   r.get('/character-library', charLibrary.list);
