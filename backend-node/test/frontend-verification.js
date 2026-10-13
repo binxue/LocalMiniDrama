@@ -1,10 +1,22 @@
 #!/usr/bin/env node
 /**
  * 前端验收测试 - 验证 FilmCreate 能否正确展示质检结果
- * 使用隔离测试数据
+ * ⚠️ 警告：此脚本仅用于验证，不应在生产环境运行
+ * ⚠️ 默认禁止写入，需要明确传入 --allow-write 参数
  */
 
 const http = require('http');
+
+// 检查参数
+const args = process.argv.slice(2);
+const allowWrite = args.includes('--allow-write');
+
+if (!allowWrite) {
+  console.error('\n⚠️  此脚本默认禁止写入数据');
+  console.error('如需测试写入功能，请使用：node test/frontend-verification.js --allow-write');
+  console.error('⚠️  写入会修改 storyboard 3 的数据，请确保已备份\n');
+  process.exit(1);
+}
 
 const baseUrl = 'http://127.0.0.1:5679';
 

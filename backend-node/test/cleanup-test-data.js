@@ -56,20 +56,21 @@ function request(method, path, body) {
     return;
   }
 
-  // 2. 识别测试记录
+  // 2. 识别测试记录（严格匹配，不删除 null execution_id）
   const testIds = ['exec-final-test-001', 'test-frontend-verification'];
   const testAgentPrefixes = ['[TEST]'];
 
   const original = desc.quality_checks.filter(c => {
-    // 排除测试 execution_id
-    if (testIds.includes(c.execution_id) || c.execution_id === null) return false;
+    // 仅排除明确的测试 execution_id（不包括 null）
+    if (c.execution_id && testIds.includes(c.execution_id)) return false;
     // 排除 [TEST] 前缀的 agent_type
     if (c.agent_type && testAgentPrefixes.some(prefix => c.agent_type.startsWith(prefix))) return false;
     return true;
   });
 
   const removed = desc.quality_checks.filter(c => {
-    if (testIds.includes(c.execution_id) || c.execution_id === null) return true;
+    // 仅删除明确标识的测试记录
+    if (c.execution_id && testIds.includes(c.execution_id)) return true;
     if (c.agent_type && testAgentPrefixes.some(prefix => c.agent_type.startsWith(prefix))) return true;
     return false;
   });

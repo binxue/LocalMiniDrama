@@ -1581,6 +1581,11 @@
                   <span v-if="check.video_generation_id" class="sb-quality-link">视频任务 #{{ check.video_generation_id }}</span>
                 </div>
               </div>
+              <div class="sb-quality-actions">
+                <el-button size="small" type="success" @click="onProducerDecision(sb, 'APPROVE')">✓ 通过</el-button>
+                <el-button size="small" type="warning" @click="onProducerDecision(sb, 'REVISE')">⚠ 修正</el-button>
+                <el-button size="small" type="danger" @click="onProducerDecision(sb, 'RESHOOT')">✗ 重拍</el-button>
+              </div>
             </div>
           </div>
           </template>
@@ -2682,6 +2687,7 @@ import { characterLibraryAPI } from '@/api/characterLibrary'
 import { sceneLibraryAPI } from '@/api/sceneLibrary'
 import { propLibraryAPI } from '@/api/propLibrary'
 import { generationSettingsAPI } from '@/api/prompts'
+import { qualityChecksAPI } from '@/api/qualityChecks'
 import { parseScriptIntoEpisodes, episodesListToPlainScript } from '@/utils/scriptEpisodes'
 import { exportStoryboardSheet } from '@/utils/exportStoryboardSheet'
 import StylePickerButton from '@/components/StylePickerButton.vue'
@@ -3859,6 +3865,34 @@ function formatObservations(obs) {
   return Object.entries(obs)
     .map(([key, value]) => `${key}: ${value}`)
     .join('；')
+}
+
+/** 制作人决策 */
+async function onProducerDecision(sb, decision) {
+  try {
+    const imageGenId = sbSelectedImgId.value[sb.id] || null
+    const videoGenId = sbSelectedVideoId.value[sb.id] || null
+
+    if (!imageGenId && !videoGenId) {
+      ElMessage.warning('请先选择要决策的图片或视频版本')
+      return
+    }
+
+    const res = await qualityChecksAPI.recordProducerDecision(sb.id, {
+      decision,
+      image_generation_id: imageGenId,
+      video_generation_id: videoGenId,
+      notes: `制作人决策：${decision === 'APPROVE' ? '通过' : decision === 'REVISE' ? '修正' : '重拍'}`,
+      decided_by: 'producer',
+      decided_at: new Date().toISOString()
+    })
+
+    if (res && res.success) {
+      ElMessage.success(`决策已记录：${decision === 'APPROVE' ? '通过' : decision === 'REVISE' ? '修正' : '重拍'}`)
+    }
+  } catch (err) {
+    ElMessage.error('记录决策失败：' + (err.message || '未知错误'))
+  }
 }
 
 
@@ -8624,6 +8658,13 @@ html.light .quick-nav {
   background: rgba(139, 92, 246, 0.1);
   padding: 2px 6px;
   border-radius: 3px;
+}
+.sb-quality-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 /* 当前任务面板 */
