@@ -1591,9 +1591,10 @@ async function callImageApi(db, log, opts) {
   };
   let raw;
   let httpStatus;
+  let out;
   const requestStartedAt = Date.now();
   try {
-    const out = await postJSONWithTimeout(url, openaiCompatHeaders, body, IMAGE_HTTP_TIMEOUT_MS);
+    out = await postJSONWithTimeout(url, openaiCompatHeaders, body, IMAGE_HTTP_TIMEOUT_MS);
     httpStatus = out.statusCode;
     raw = out.raw;
     log.info('Image API response', {
@@ -1604,6 +1605,7 @@ async function callImageApi(db, log, opts) {
       response_bytes: Buffer.byteLength(raw || '', 'utf8'),
       duration_ms: Date.now() - requestStartedAt,
       stage: 'response_received',
+      transport: out.transport,
     });
   } catch (e) {
     log.error('Image API network error', {
@@ -1615,6 +1617,7 @@ async function callImageApi(db, log, opts) {
       error_code: e.code,
       duration_ms: Date.now() - requestStartedAt,
       stage: 'request_transport',
+      transport: e.transport,
       url: url.slice(0, 80),
     });
     const kind = e.kind || (e.code === 'IMAGE_HTTP_TIMEOUT' ? 'timeout' : 'connection');

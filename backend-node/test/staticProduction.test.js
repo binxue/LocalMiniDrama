@@ -3,6 +3,18 @@ const assert = require('node:assert/strict');
 const Database = require('better-sqlite3');
 const { quarantine, reserve, validateReview, validateAnalysis, approvedStoryboard, status, assertNewCorrectivePrompt } = require('../src/services/staticProductionService');
 const { hash } = require('../src/services/managedAgentReviewEvidence');
+const { validateTransmissionRecovery } = require('../src/services/staticProductionService');
+test('post-fix independent request requires real completed correction, preserves source and prevents duplicate submission', () => {
+  const source = { run_id: 'local-test', status: 'BLOCKED', pending_image_generation_id: 27, generation_error: 'ECONNRESET',
+    candidates: [{ review: { verdict: 'REVISE' }, review_execution_id: 'test-review' }],
+    executions: [{ stage: 'analysis-2', execution_status: 'COMPLETED', result_event_id: 'test-result',
+      result: { analysis: 'test-only', optimized_prompt: 'This is a sufficiently long test-only correction prompt with no real model call.' } }] };
+  const original = JSON.stringify(source);
+  assert.equal(validateTransmissionRecovery([source], source.run_id).analysis.result_event_id, 'test-result');
+  assert.equal(JSON.stringify(source), original);
+  assert.throws(() => validateTransmissionRecovery([source, { transmission_recovery_of: source.run_id }], source.run_id), /禁止再次提交/);
+  assert.throws(() => validateTransmissionRecovery([{ ...source, executions: [] }], source.run_id), /真实修正分析/);
+});
 function database(description) {
   const db = new Database(':memory:');
   db.exec('CREATE TABLE storyboards (id INTEGER, description TEXT, updated_at TEXT);');

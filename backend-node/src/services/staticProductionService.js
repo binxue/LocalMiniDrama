@@ -152,18 +152,21 @@ async function execute(db, cfg, log, run, dependencies = {}) {
     taskService.updateTaskStatus(db, run.task_id, 'processing', progress, message);
   };
   const agentStage = async (stage, request) => {
+    if (stage === 'analysis-1' && run.reused_analysis) {
+      return { execution: run.reused_analysis.execution, result: run.reused_analysis.execution.result };
+    }
     const existing = run.executions.find(item => item.stage === stage);
     if (existing?.execution_status === 'COMPLETED' && existing.result) return { execution: existing, result: existing.result };
     if (existing?.session_id && existing.submit_event_id && ['UNKNOWN', 'RUNNING'].includes(existing.execution_status)) {
       return client.collect(existing);
     }
     if (existing) throw new Error('Existing Agent attempt cannot be resent; inspect its evidence');
-    reserve(db, run, 'managed_agent', 2, stage);
+    reserve(db, run, 'managed_agent', run.transmission_recovery_of ? 1 : 2, stage);
     return client.run(request);
   };
   try {
     let correction = null;
-    for (let round = 1; round <= 2; round++) {
+    for (let round = 1; round <= (run.transmission_recovery_of ? 1 : 2); round++) {
       context(db, cfg); // Revalidate authority before each new round.
       const analyzeStage = 'analysis-' + round;
       update(analyzeStage, round === 1 ? 'Agent 专业分析与首帧提示词优化' : 'Agent 根据真实审片缺陷修正提示词', 10 + (round - 1) * 40);
@@ -196,7 +199,7 @@ async function execute(db, cfg, log, run, dependencies = {}) {
         if (!run.pending_image_generation_id && run.costs.reservations.some(item => item.stage === 'generation-' + round)) {
           throw new Error('本轮已有图片请求，禁止再次提交；需先核实原请求状态');
         }
-        if (run.unresolved_image_generations?.length && !run.pending_image_generation_id) {
+        if (run.unresolved_image_generations?.length && !run.pending_image_generation_id && !run.transmission_recovery_of) {
           assertNewCorrectivePrompt(run, analysis.result.optimized_prompt, round);
         }
         if (!run.pending_image_generation_id) reserve(db, run, 'seedream_image', 1, 'generation-' + round);
@@ -209,7 +212,9 @@ async function execute(db, cfg, log, run, dependencies = {}) {
         });
         run.pending_image_generation_id = Number(created.id);
         persist(db, run);
-        const deadline = Date.now() + 240000;
+        // The image HTTP request has a 10 minute limit. Do not declare it
+        // unknown while that same request is still legitimately waiting.
+        const deadline = Date.now() + 630000;
         while (Date.now() < deadline) {
           candidate = db.prepare('SELECT * FROM image_generations WHERE id = ?').get(created.id);
           if (['completed', 'failed'].includes(candidate.status)) break;
@@ -298,11 +303,14 @@ function start(db, cfg, log, body = {}) {
   if (!body.request_id || typeof body.request_id !== 'string' || body.request_id.length > 100) throw new Error('必须提供一次性请求标识');
   const repeated = previous.find(item => item.request_id === body.request_id);
   if (repeated) return repeated;
+  const recovery = body.transmission_recovery_of ? validateTransmissionRecovery(previous, body.transmission_recovery_of) : null;
   if (previous.some(item => item.status === 'RUNNING' || item.executions?.some(exec => exec.execution_status === 'UNKNOWN'))) throw new Error('已有进行中/云端未知执行，禁止重复收费提交');
-  if (previous.some(item => item.pending_image_generation_id)) throw new Error('已有云端状态未核实的图片任务，禁止重新生成');
+  if (!recovery && previous.some(item => item.pending_image_generation_id)) throw new Error('已有云端状态未核实的图片任务，禁止重新生成');
   const strategy = body.candidate_strategy || 'generate';
   if (!['generate', 'reuse_latest'].includes(strategy)) throw new Error('候选策略无效');
-  if (strategy === 'generate' && previous.some(item => item.unresolved_image_generations?.length)) throw new Error('已有未知图片请求，不能重新开始同一生成；请基于真实审片意见修正或核实云端状态');
+  if (!recovery && strategy === 'generate' && previous.some(item => item.unresolved_image_generations?.length)) throw new Error('已有未知图片请求，不能重新开始同一生成；请基于真实审片意见修正或核实云端状态');
+  if (recovery && (strategy !== 'generate' || !process.env.LOCALMINIDRAMA_ARK_IMAGE_LOCAL_ADDRESS)) throw new Error('独立传输修复请求需要已配置的方舟物理网卡出口');
+  if (recovery && status(db).runs.reduce((sum, item) => sum + (item.costs?.reservations || []).reduce((n, cost) => n + cost.reserved_cny, 0), 0) + 2 > 10) throw new Error('BUDGET_BLOCKED: 新图片和一次真实审核需要预留 ¥2');
   quarantine(db);
   const task = taskService.createTask(db, log, 'static_production', '3');
   const run = { run_id: 'static-' + crypto.randomUUID(), request_id: body.request_id, task_id: task.id,
@@ -312,10 +320,31 @@ function start(db, cfg, log, body = {}) {
       reservations: [], actual_cost_cny: null, billing_status: 'PENDING_SETTLEMENT',
       estimate_basis: '2026-10-13账号目录：evolving输入0.006/千tokens，输出0.03/千tokens；Seedream5.0pro大图0.6/张；预算预留不等于结算费用' },
     created_at: new Date().toISOString() };
+  if (recovery) {
+    run.transmission_recovery_of = recovery.source.run_id;
+    run.reused_analysis = { source_run_id: recovery.source.run_id, source_stage: 'analysis-2', execution: recovery.analysis };
+    run.unresolved_image_generations = [...(recovery.source.unresolved_image_generations || []), {
+      image_generation_id: recovery.source.pending_image_generation_id, cloud_status: 'UNKNOWN', billing_status: 'UNKNOWN',
+    }];
+    run.transmission_change = { local_address: process.env.LOCALMINIDRAMA_ARK_IMAGE_LOCAL_ADDRESS,
+      fresh_socket: true, certificate_validation: true, authorization: '2026-10-14 producer authorized independent post-fix image request; originals are not resumed' };
+    run.costs.recovery_reserve_basis = '新增图片预留¥1；一次视觉审核预留¥1（前三次真实调用目录估算均小于¥0.16，回复限制1200汉字）；非结算费用。旧¥8预留不释放。';
+  }
   persist(db, run);
   running.add(run.run_id);
   setImmediate(() => execute(db, cfg, log, run).catch(error => log.error('Static production persistence failure', { error: error.message })));
   return run;
+}
+function validateTransmissionRecovery(previous, sourceId) {
+  const source = previous.find(item => item.run_id === sourceId);
+  if (!source || source.status !== 'BLOCKED' || !source.pending_image_generation_id || !source.generation_error) throw new Error('没有可保留的传输阻塞源记录');
+  if (previous.some(item => item.transmission_recovery_of === sourceId)) throw new Error('独立传输修复请求已创建；禁止再次提交');
+  if (previous.some(item => item !== source && item.pending_image_generation_id)) throw new Error('存在其他待核实图片请求');
+  const analysis = source.executions?.find(item => item.stage === 'analysis-2' && item.execution_status === 'COMPLETED' && item.result_event_id);
+  const reviewed = source.candidates?.find(item => item.review?.verdict === 'REVISE' && item.review_execution_id);
+  if (!analysis || !reviewed) throw new Error('必须复用已完成的真实修正分析与审片证据');
+  validateAnalysis(analysis.result);
+  return { source, analysis };
 }
 function resume(db, cfg, log, runId, options = {}) {
   context(db, cfg);
@@ -387,4 +416,4 @@ async function queryBilling(client, run, evidenceName) {
   run.costs.billing_checked_at = new Date().toISOString();
   return run.costs;
 }
-module.exports = { start, status, resume, checkBilling, quarantine, validateAnalysis, validateReview, context, execute, reserve, approvedStoryboard, assertNewCorrectivePrompt };
+module.exports = { start, status, resume, checkBilling, quarantine, validateAnalysis, validateReview, context, execute, reserve, approvedStoryboard, assertNewCorrectivePrompt, validateTransmissionRecovery };

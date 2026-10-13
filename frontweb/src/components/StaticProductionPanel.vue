@@ -17,6 +17,7 @@
       <el-button v-if="hasUnknown && !busy" type="warning" :loading="starting" @click="resume">继续查询 Agent 结果</el-button>
       <el-button v-if="run?.pending_image_generation_id && run?.generation_error && !run?.candidates.length && !busy" type="warning" :loading="starting" @click="resumeWithExisting">复用合规历史候选并真实审核</el-button>
       <el-button v-if="run?.status === 'NEEDS_REVISION' && !busy" type="warning" :loading="starting" @click="reviseFromReview">按真实审片意见修正候选</el-button>
+      <el-button v-if="canRecoverTransport" type="warning" :loading="starting" @click="startTransportRecovery">使用修正分析发起独立新图片请求</el-button>
     </div>
     <p class="production-meta">静态总预算 ¥10；视频需另行授权。未知任务 23 / 24 / 25 不重试。</p>
     <el-alert v-if="quarantineCount" type="warning" :closable="false"
@@ -24,10 +25,12 @@
     <el-alert v-if="error" :title="error" type="error" :closable="false" />
     <template v-if="run">
       <p class="production-progress" aria-live="polite">{{ run.message || run.stage }}</p>
+      <p v-if="run.pending_image_generation_id && busy" class="production-meta">正在等待独立图片任务 #{{ run.pending_image_generation_id }}；不会自动重发。</p>
       <el-alert v-if="run.pending_image_generation_id && !busy" type="error" :closable="false"
         :title="`图片请求 #${run.pending_image_generation_id} 未交付，云端状态与费用待核实；不会再次提交本轮请求。`" />
       <el-alert v-for="unknown in run.unresolved_image_generations || []" :key="unknown.image_generation_id" type="warning" :closable="false"
-        :title="`新图片任务 #${unknown.image_generation_id} 未交付，云端状态与费用未知，未重发。以下候选来自历史资产，由本轮 Agent 真实审核。`" />
+        :title="`原图片任务 #${unknown.image_generation_id} 未交付，云端状态与费用未知，原记录保留。`" />
+      <p v-if="run.transmission_recovery_of" class="production-meta">独立新请求；复用已完成的修正分析，不恢复原图片任务。分析响应：{{ run.reused_analysis?.execution.result_event_id }}</p>
       <div class="production-cost">
         <span>累计预算预留：¥{{ reserved.toFixed(2) }} / 10</span>
         <span>已返回用量估算：{{ hasUsage ? '¥' + estimated.toFixed(4) + '（未返回执行不计入）' : '尚未返回用量' }}</span>
@@ -97,6 +100,9 @@ const run = computed(() => state.value.runs.at(-1))
 const busy = computed(() => run.value?.status === 'RUNNING')
 const hasUnknown = computed(() => state.value.runs.some(item => item.executions?.some(exec => exec.execution_status === 'UNKNOWN')))
 const hasPendingImages = computed(() => state.value.runs.some(item => item.pending_image_generation_id))
+const canRecoverTransport = computed(() => !busy.value && !hasUnknown.value && run.value?.status === 'BLOCKED'
+  && run.value?.pending_image_generation_id && run.value?.generation_error && !run.value?.transmission_recovery_of
+  && run.value?.executions.some(item => item.stage === 'analysis-2' && item.execution_status === 'COMPLETED'))
 const quarantineCount = computed(() => (state.value.quarantined_checks || 0) + (state.value.unverified_checks || 0))
 const reserved = computed(() => state.value.runs.reduce((sum, item) => sum + (item.costs?.reservations || []).reduce((n, cost) => n + cost.reserved_cny, 0), 0))
 const estimated = computed(() => state.value.runs.reduce((sum, item) => sum
@@ -170,6 +176,14 @@ async function checkBilling() {
     await request.post('/storyboards/3/static-production/' + run.value.run_id + '/billing-check', {})
     await refresh()
   } catch (e) { error.value = e.message } finally { checkingBilling.value = false }
+}
+async function startTransportRecovery() {
+  if (starting.value || busy.value) return
+  starting.value = true
+  try {
+    await request.post('/storyboards/3/static-production', { request_id: crypto.randomUUID(), candidate_strategy: 'generate', transmission_recovery_of: run.value.run_id })
+    await refresh()
+  } catch (e) { error.value = e.message } finally { starting.value = false }
 }
 onMounted(async () => {
   await refresh()

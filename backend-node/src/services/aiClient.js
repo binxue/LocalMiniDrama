@@ -69,6 +69,12 @@ function postJSONWithTimeout(url, headers, body, timeoutMs = 600000) {
     const parsed = new URL(url);
     const mod = parsed.protocol === 'https:' ? https : http;
     const bodyStr = typeof body === 'string' ? body : JSON.stringify(body);
+    const transport = { request_bytes: Buffer.byteLength(bodyStr), response_bytes: 0, phases: {} };
+    const startedAt = Date.now();
+    const mark = phase => { transport.phases[phase] = Date.now() - startedAt; };
+    // Optional per-request physical egress; never change system routing.
+    const localAddress = parsed.hostname === 'ark.cn-beijing.volces.com'
+      ? process.env.LOCALMINIDRAMA_ARK_IMAGE_LOCAL_ADDRESS : undefined;
     const reqHeaders = {
       'Content-Type': 'application/json',
       'Content-Length': Buffer.byteLength(bodyStr),
@@ -82,33 +88,45 @@ function postJSONWithTimeout(url, headers, body, timeoutMs = 600000) {
       headers: reqHeaders,
       // 避免 Windows/Electron 优先连不可达的 IPv6（Cloudflare）导致 ETIMEDOUT
       family: 4,
+      ...(localAddress ? { localAddress, agent: false, rejectUnauthorized: true } : {}),
     };
 
-    const startedAt = Date.now();
     const req = mod.request(options, (res) => {
+      mark('response_headers');
+      transport.status_code = res.statusCode;
+      transport.request_id = res.headers['x-request-id'] || res.headers['x-tt-logid'] || null;
       const chunks = [];
-      res.on('data', (c) => chunks.push(c));
+      res.on('data', (c) => { transport.response_bytes += c.length; chunks.push(c); });
       res.on('end', () => {
         clearTimeout(timer);
         const raw = Buffer.concat(chunks).toString('utf-8');
-        resolve({ statusCode: res.statusCode || 0, raw, headers: res.headers, durationMs: Date.now() - startedAt });
+        resolve({ statusCode: res.statusCode || 0, raw, headers: res.headers, transport, durationMs: Date.now() - startedAt });
       });
       res.on('error', (e) => {
         clearTimeout(timer);
+        e.transport = transport;
         reject(e);
       });
     });
 
     const timer = setTimeout(() => {
-      req.destroy();
       const e = new Error(`Image generation HTTP timeout after ${timeoutMs}ms`);
-      e.code = 'IMAGE_HTTP_TIMEOUT'; e.kind = 'timeout'; reject(e);
+      e.code = 'IMAGE_HTTP_TIMEOUT'; e.kind = 'timeout'; e.transport = transport;
+      reject(e); req.destroy();
     }, timeoutMs);
     req.on('error', (e) => {
       clearTimeout(timer);
       e.kind = e.kind || 'connection';
+      e.transport = transport;
       reject(e);
     });
+    req.on('socket', socket => {
+      mark('socket'); transport.reused_socket = req.reusedSocket;
+      socket.once('lookup', (error, address) => { mark('dns'); transport.resolved_address = address; transport.dns_error = error?.code || null; });
+      socket.once('connect', () => { mark('tcp'); transport.local_address = socket.localAddress; transport.remote_address = socket.remoteAddress; });
+      socket.once('secureConnect', () => { mark('tls'); transport.tls_protocol = socket.getProtocol(); transport.tls_authorized = socket.authorized; });
+    });
+    req.on('finish', () => mark('upload_flushed')); // Not proof of cloud acceptance.
     req.write(bodyStr);
     req.end();
   });
