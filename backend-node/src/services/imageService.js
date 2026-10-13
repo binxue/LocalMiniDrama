@@ -1684,33 +1684,57 @@ function syncStoryboardCharacters(db, log, storyboardId) {
 }
 
 /**
- * 启动时清理孤儿图片生成任务（processing 超过 2 小时视为本地执行中断）
- * 与 taskService.failOrphanedAsyncTasksOnStartup 对齐
+ * 启动时清理孤儿图片生成任务
+ *
+ * 区分两种情况：
+ * 1. 本地执行中断：created_at 与 updated_at 相同，且超过 2 小时 → 标记 failed
+ * 2. 云端状态未知：updated_at 有更新，说明曾进入轮询 → 保留 processing，不自动判定
+ *
+ * 不自动重试历史任务，保留原始证据
  */
 function failOrphanedImageGenerationsOnStartup(db, log) {
   const rows = db.prepare(
-    `SELECT id, storyboard_id, drama_id, status, created_at FROM image_generations
+    `SELECT id, storyboard_id, drama_id, status, created_at, updated_at, task_id FROM image_generations
      WHERE status = 'processing' AND deleted_at IS NULL
      AND datetime(created_at, '+2 hours') < datetime('now')`
   ).all();
   if (!rows.length) return 0;
-  log.warn('Failing orphaned image generations after startup', { count: rows.length });
+
+  let failedCount = 0;
   const now = new Date().toISOString();
+
   for (const row of rows) {
-    db.prepare('UPDATE image_generations SET status = ?, error_msg = ?, updated_at = ? WHERE id = ?').run(
-      'failed',
-      '进程重启后清理：任务创建超过 2 小时仍为 processing 状态，视为本地执行中断或轮询失败',
-      now,
-      row.id
-    );
-    log.info('Orphaned image generation marked failed', {
-      id: row.id,
-      storyboard_id: row.storyboard_id,
-      drama_id: row.drama_id,
-      created_at: row.created_at,
-    });
+    // 如果 created_at === updated_at，说明创建后从未更新，确认是本地执行中断
+    const neverUpdated = row.created_at === row.updated_at;
+
+    if (neverUpdated) {
+      db.prepare('UPDATE image_generations SET status = ?, error_msg = ?, updated_at = ? WHERE id = ?').run(
+        'failed',
+        '本地执行中断：任务创建后从未更新状态，进程重启后清理',
+        now,
+        row.id
+      );
+      log.warn('Orphaned image generation marked failed (local interrupt)', {
+        id: row.id,
+        storyboard_id: row.storyboard_id,
+        created_at: row.created_at,
+      });
+      failedCount++;
+    } else {
+      // updated_at 有更新，说明曾进入轮询，云端状态未知，保留 processing
+      log.info('Image generation still processing (cloud status unknown, preserved)', {
+        id: row.id,
+        storyboard_id: row.storyboard_id,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+      });
+    }
   }
-  return rows.length;
+
+  if (failedCount > 0) {
+    log.warn('Orphaned image generations cleanup', { total_checked: rows.length, failed_count: failedCount });
+  }
+  return failedCount;
 }
 
 module.exports = {
