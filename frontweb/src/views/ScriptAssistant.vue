@@ -66,7 +66,7 @@
           <section class="user-message"><span>你</span><p>{{ m.content }}</p></section>
           <section class="agent-message">
             <div class="agent-label"><strong>Producer</strong><el-tag :type="m.task?.task_status === 'completed' ? 'success' : 'info'" size="small">{{ statusLabel(m.task?.task_status) }}</el-tag></div>
-            <p v-if="m.task?.output_text" class="reply-text">{{ m.task.output_text }}</p>
+            <div v-if="m.task?.output_text" class="reply-text markdown-body" v-html="renderReply(m.task.output_text, m.context)"></div>
             <p v-else-if="isActive(m.task)" class="muted">任务由本地服务执行中，可以离开页面，稍后恢复结果。</p>
             <p v-else class="error-text">{{ m.task?.error_text || '尚未取得完整正文。执行状态不代表剧本质量通过。' }}</p>
             <p v-if="m.task?.output_text && m.task?.error_text" class="error-text">{{ m.task.error_text }}</p>
@@ -76,7 +76,7 @@
               <p>使用历史轮次：{{ m.context.history_included.join(', ') || '无' }}；省略轮次：{{ m.context.history_omitted.join(', ') || '无' }}</p>
               <p>Task：{{ m.task?.task_id }}<br>Session：{{ m.task?.session_id || '尚未创建' }}<br>模型：{{ m.task?.model_id || '尚未返回' }}<br>输入哈希：{{ m.task?.input_version }}<br>输出哈希：{{ m.task?.output_version || '尚未取得' }}</p>
               <p v-if="m.task?.usage">tokens：输入 {{ m.task.usage.input_tokens || 0 }} / 输出 {{ m.task.usage.output_tokens || 0 }} / 缓存读取 {{ m.task.usage.cache_read_input_tokens || 0 }}；请求 {{ m.task.usage.requests || 0 }}，缺失 {{ m.task.usage.missing_usage_requests || 0 }}。</p>
-              <p v-if="m.task?.cost?.status === 'calculated' || m.task?.cost?.status === 'partial'">费用：{{ m.task.cost.currency }} {{ m.task.cost.amount.toFixed(6) }}（{{ m.task.cost.status === 'partial' ? '部分可计算，存在缺失用量' : '按价格版本计算' }}）</p>
+              <p v-if="m.task?.cost?.status === 'calculated' || m.task?.cost?.status === 'partial'">费用：{{ m.task.cost.currency }} {{ m.task.cost.amount.toFixed(6) }}（{{ m.task.cost.status === 'partial' ? '已覆盖费用；总费用未知' : '按价格版本计算' }}）</p>
               <p v-else-if="m.task?.cost?.status === 'unconfigured'" class="muted">费用：价格未配置（模型 {{ m.task.cost.model_id || '未知' }}），仅展示真实 Token 用量。</p>
               <div v-for="source in m.context.sources" :key="source.id" class="source-proof">
                 <strong>[S:{{ source.id }}] {{ source.title }}</strong>
@@ -98,6 +98,7 @@
     </div>
     <el-dialog v-model="showSource" :title="sourceView?.title || '作品原文件'" width="min(850px, 94vw)">
       <p class="muted">{{ sourceView?.path }}<br>SHA256：{{ sourceView?.sha256 }}</p>
+      <el-alert v-if="citationNotice" :title="citationNotice" type="warning" :closable="false" />
       <pre class="source-document">{{ sourceView?.available ? sourceView.text : sourceView?.error }}</pre>
     </el-dialog>
   </div>
@@ -105,13 +106,15 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { marked } from 'marked'
+import DOMPurify from 'dompurify'
 import { useRouter, useRoute } from 'vue-router'
 import { ArrowLeft, ChatDotRound } from '@element-plus/icons-vue'
 import { getAssistantWorks, getAssistantContext, getAssistantMessages, sendAssistantMessage, refreshAssistantMessage, getAssistantSource, getAssistantRuns, createAssistantRun, getAssistantRevisions, createAssistantRevision, approveAssistantRevision, refreshAssistantRevision, recoverAssistantEditor } from '@/api/scriptAssistant'
 
 const router = useRouter(), route = useRoute()
 const works = ref([]), selected = ref(''), context = ref(null), messages = ref([]), draft = ref(''), budget = ref({})
-const loading = ref(false), sending = ref(false), error = ref(''), showSource = ref(false), sourceView = ref(null)
+const loading = ref(false), sending = ref(false), error = ref(''), showSource = ref(false), sourceView = ref(null), citationNotice = ref('')
 const mode = ref('chat'), runRequest = ref(''), runs = ref([]), runSending = ref(false)
 const revisions = ref([]), revisionSending = ref(false)
 const prompts = ['我们前三集剧本现在是什么状态？', '第一集和第三集之间，有哪些需要注意的连续性问题？', '你建议先修改前三集，还是开始第四集？说明依据。']
@@ -159,7 +162,33 @@ async function refreshTask(m) {
 async function openSource(id) {
   try { sourceView.value = await getAssistantSource(selected.value, id); showSource.value = true } catch (e) { error.value = e.message }
 }
+function renderReply(text, context) {
+  const refs = new Map((context?.sources || []).map(s => [s.id, s]))
+  const normalized = String(text || '').replace(/\[S:([A-Za-z0-9_-]+):L(\d+)(?:-(\d+))?\]/g, (full, id, start, end) => {
+    const source = refs.get(id); if (!source || !source.available) return full
+    const a = Number(start), b = Number(end || start)
+    const valid = source.excerpts?.some(e => a >= e.start_line && b <= e.end_line)
+    if (!valid) return full
+    return `<button class="citation-link" data-source="${id}" data-start="${a}" data-end="${b}">${full}</button>`
+  })
+  const html = marked.parse(normalized, { breaks: true })
+  return DOMPurify.sanitize(html, { ADD_ATTR: ['data-source', 'data-start', 'data-end'] })
+}
+async function openCitation(sourceId, start, end) {
+  citationNotice.value = ''
+  const source = context.value?.sources?.find(s => s.id === sourceId)
+  if (!source || !source.available) { citationNotice.value = '资料不可用，无法验证该引用。'; return }
+  try {
+    const view = await getAssistantSource(selected.value, sourceId)
+    const lines = String(view.text || '').split(/\r?\n/)
+    if (start < 1 || end > lines.length) { citationNotice.value = '引用行号超出原始资料范围，未定位。'; return }
+    sourceView.value = { ...view, text: lines.map((line, i) => `${String(i + 1).padStart(4, ' ')} ${i + 1 >= start && i + 1 <= end ? '▸ ' : '  '}${line}`).join('\n') }
+    showSource.value = true
+  } catch (e) { citationNotice.value = e.message }
+}
+function onCitationClick(event) { const el = event.target.closest?.('.citation-link'); if (el) openCitation(el.dataset.source, Number(el.dataset.start), Number(el.dataset.end)) }
 onMounted(async () => {
+  document.addEventListener('click', onCitationClick)
   loading.value = true
   try {
     const data = await getAssistantWorks(); works.value = data.works; budget.value = data.budget
@@ -169,7 +198,7 @@ onMounted(async () => {
   finally { loading.value = false }
   timer = setInterval(() => { if (selected.value && (messages.value.some(m => isActive(m.task)) || runs.value.some(r => ['queued','planning','experts','reviewing','deciding'].includes(r.status)))) reload().catch(e => { error.value = e.message }) }, 5000)
 })
-onUnmounted(() => { alive = false; clearInterval(timer) })
+onUnmounted(() => { alive = false; clearInterval(timer); document.removeEventListener('click', onCitationClick) })
 </script>
 
 <style scoped>
@@ -193,7 +222,7 @@ h2 { font-size: 16px; margin: 0 0 16px; } .context-panel h2:not(:first-child) { 
 .chat-turn { margin-bottom: 28px; } .user-message { padding: 14px 18px; border-radius: 10px; background: var(--bg-page); margin-left: 35px; }
 .user-message span { font-size: 12px; color: var(--text-secondary); } .user-message p { white-space: pre-wrap; line-height: 1.65; margin: 6px 0; }
 .agent-message { padding: 20px 0; } .agent-label { justify-content: flex-start; }
-.reply-text { white-space: pre-wrap; line-height: 1.85; font-size: 14px; }
+.reply-text { line-height: 1.85; font-size: 14px; } .markdown-body :deep(p) { margin: 8px 0; } .markdown-body :deep(pre) { overflow: auto; padding: 10px; background: var(--bg-page); border-radius: 6px; } .markdown-body :deep(blockquote) { border-left: 3px solid var(--el-color-primary); padding-left: 12px; color: var(--text-secondary); } .citation-link { border: 0; background: transparent; color: var(--el-color-primary); cursor: pointer; padding: 0 2px; text-decoration: underline; }
 .trace { border-top: 1px solid var(--border-color, #ddd); padding-top: 14px; font-size: 12px; overflow-wrap: anywhere; }
 .trace summary { cursor: pointer; color: var(--text-secondary); } .trace p { line-height: 1.6; }
 pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; line-height: 1.7; }

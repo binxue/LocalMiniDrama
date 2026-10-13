@@ -1,6 +1,6 @@
 # Current Action
 
-LOCALMINIDRAMA_M5_1_COST_TRANSPARENCY
+LOCALMINIDRAMA_M5_2_ASSISTANT_COST_AND_CITATIONS
 
 ## M1 Git baseline（2026-10-12）
 
@@ -14,7 +14,7 @@ LOCALMINIDRAMA_M5_1_COST_TRANSPARENCY
 
 M1 已实现现有 Managed Agent 单任务服务、隔离持久记录、有界事件读取与明确错误状态。真实 Producer 正文返回与重启恢复已验证；独立Node进程运行于127.0.0.1:5688。证据：H:/localminidrama-runtime-creative-20261011-source/evidence/m1-independent-runtime-20261012。
 
-当前动作：M5.1费用透明化已实现基础闭环。每个 Managed Agent 任务按全部可核验请求累计 input/output/cache token，并返回价格版本、可计算费用或明确“价格未配置/用量不完整”；聊天页面显示发送前不可可靠估算提示、真实Token明细和费用状态。当前 Producer 模型 doubao-seed-evolving-latest-version 没有仓库内可核验官方单价，因此历史真实任务金额不伪造。默认聊天与编排仍不因固定5次阻断，保留可配置限制、Session隔离与防重。后续可在取得官方价格后配置价格表；不修改Canon、剧本或视频数据。
+当前动作：M5.2已完成费用边界修正、Producer Markdown 安全渲染和经过资料索引校验的引用入口。缺失用量或未核实缓存单价时只显示已覆盖费用并明确总费用未知；价格配置要求非负单价和可核验 HTTP 来源。当前 Producer 模型仍无可信官方价格，显示 Token 与价格未配置。引用可验证来源及行号后打开原文并高亮；无效引用保持纯文本。后端87/87、前端构建通过。浏览器当前标签切到了历史前端实例，未将其冒充为本轮通过证据；需在正确3013开发实例复核后再宣称浏览器验收完成。下一步为运行实例切换与浏览器复验，不调用新Agent。
 
 剧本助手终点为人工批准后的Script Handoff；CONDITIONAL PASS不代表批准。雨林计时、分镜、救鸟实现及样片移交视频模块待办，不阻塞剧本M1。不修改冻结稿、Canon或生产数据库。
 
