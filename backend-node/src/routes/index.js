@@ -298,6 +298,8 @@ function setupRouter(cfg, db, log) {
   r.post('/storyboards/:id/split-by-audio', storyboards.splitByAudio);
   r.post('/storyboards/:id/quality-check', qualityChecks.importQualityCheck);
   r.get('/storyboards/:id/quality-checks', qualityChecks.getQualityChecks);
+  r.post('/storyboards/:id/producer-decision', qualityChecks.recordProducerDecision);
+  r.get('/storyboards/:id/producer-decisions', qualityChecks.getProducerDecisions);
 
   // ---------- audio ----------
   r.post('/audio/extract', audio.extract);

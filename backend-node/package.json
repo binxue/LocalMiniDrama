@@ -16,7 +16,7 @@
     "@mapbox/node-pre-gyp": "^2.0.3",
     "@volcengine/openapi": "^1.36.1",
     "adm-zip": "^0.5.16",
-    "better-sqlite3": "^13.0.3",
+    "better-sqlite3": "^12.11.1",
     "cors": "^2.8.5",
     "express": "^4.21.0",
     "js-yaml": "^4.1.0",
