@@ -21,6 +21,7 @@ const assetRoutes = require('./assets');
 const audioRoutes = require('./audio');
 const promptOverridesRoutes = require('./promptOverrides');
 const sceneModelMapRoutes = require('./sceneModelMap');
+const qualityChecksRoutes = require('./qualityChecks');
 
 function setupRouter(cfg, db, log) {
   const r = express.Router();
@@ -47,6 +48,7 @@ function setupRouter(cfg, db, log) {
   const assets = assetRoutes(db, log);
   const audio = audioRoutes(db, log, cfg);
   const promptOverrides = promptOverridesRoutes.routes(db, log);
+  const qualityChecks = qualityChecksRoutes(db, cfg, log);
 
   // ---------- dramas ----------
   r.get('/dramas', drama.listDramas);
@@ -294,6 +296,8 @@ function setupRouter(cfg, db, log) {
   r.post('/storyboards/:id/regenerate-layout-description', storyboards.regenerateLayoutDescription);
   r.post('/storyboards/:id/rebuild-video-prompt', storyboards.rebuildVideoPrompt);
   r.post('/storyboards/:id/split-by-audio', storyboards.splitByAudio);
+  r.post('/storyboards/:id/quality-check', qualityChecks.importQualityCheck);
+  r.get('/storyboards/:id/quality-checks', qualityChecks.getQualityChecks);
 
   // ---------- audio ----------
   r.post('/audio/extract', audio.extract);

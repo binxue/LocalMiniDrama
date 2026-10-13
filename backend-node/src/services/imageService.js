@@ -1683,6 +1683,36 @@ function syncStoryboardCharacters(db, log, storyboardId) {
   return { added };
 }
 
+/**
+ * 启动时清理孤儿图片生成任务（processing 超过 2 小时视为本地执行中断）
+ * 与 taskService.failOrphanedAsyncTasksOnStartup 对齐
+ */
+function failOrphanedImageGenerationsOnStartup(db, log) {
+  const rows = db.prepare(
+    `SELECT id, storyboard_id, drama_id, status, created_at FROM image_generations
+     WHERE status = 'processing' AND deleted_at IS NULL
+     AND datetime(created_at, '+2 hours') < datetime('now')`
+  ).all();
+  if (!rows.length) return 0;
+  log.warn('Failing orphaned image generations after startup', { count: rows.length });
+  const now = new Date().toISOString();
+  for (const row of rows) {
+    db.prepare('UPDATE image_generations SET status = ?, error_msg = ?, updated_at = ? WHERE id = ?').run(
+      'failed',
+      '进程重启后清理：任务创建超过 2 小时仍为 processing 状态，视为本地执行中断或轮询失败',
+      now,
+      row.id
+    );
+    log.info('Orphaned image generation marked failed', {
+      id: row.id,
+      storyboard_id: row.storyboard_id,
+      drama_id: row.drama_id,
+      created_at: row.created_at,
+    });
+  }
+  return rows.length;
+}
+
 module.exports = {
   list,
   getById,
@@ -1693,4 +1723,5 @@ module.exports = {
   processImageGeneration,
   aspectRatioToSize,
   syncStoryboardCharacters,
+  failOrphanedImageGenerationsOnStartup,
 };
