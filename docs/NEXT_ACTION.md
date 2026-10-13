@@ -1,6 +1,6 @@
 # Current Action
 
-LOCALMINIDRAMA_M5_2_BROWSER_ACCEPTED_M5_3_GAP_CHECK
+LOCALMINIDRAMA_M5_3_REVISION_REVIEW_WORKBENCH
 
 ## M1 Git baseline（2026-10-12）
 
@@ -14,7 +14,7 @@ LOCALMINIDRAMA_M5_2_BROWSER_ACCEPTED_M5_3_GAP_CHECK
 
 M1 已实现现有 Managed Agent 单任务服务、隔离持久记录、有界事件读取与明确错误状态。真实 Producer 正文返回与重启恢复已验证；独立Node进程运行于127.0.0.1:5688。证据：H:/localminidrama-runtime-creative-20261011-source/evidence/m1-independent-runtime-20261012。
 
-当前动作：M5.2真实浏览器验收已完成。3013现由H:/localminidrama-active/frontweb运行并代理5688；历史5679保留。雨林历史Producer回复已显示为安全Markdown，真实引用按钮可打开原文、显示SHA-256并按行高亮；资料索引外或无效行号不会变成可点击引用。费用显示价格未配置、真实Token和聊天不限额；刷新恢复通过。Console仅有既有Statsig警告，无新增应用错误。M5.3仅完成缺口检查，清单见docs/M5_3_MINIMUM_CHECKLIST.md；不启动修订、不调用Agent。
+当前动作：M5.3修订审阅工作台已完成。第三集Revision提供稳定文本Diff块、只看修改/查看全文、原稿候选稿并排阅读、Editor全局意见/待定位标识，以及接受、退回、要求继续修订、暂不决定四类逐块操作。决定写入独立审阅表并保留事件审计，绑定原稿/候选哈希；不改变正文、CONDITIONAL PASS、not_approved或Canon。真实浏览器可读取指定Revision、候选正文、Editor意见和技术详情；5688已重启加载新API。后端88/88、前端构建通过。本轮未调用Agent。
 
 剧本助手终点为人工批准后的Script Handoff；CONDITIONAL PASS不代表批准。雨林计时、分镜、救鸟实现及样片移交视频模块待办，不阻塞剧本M1。不修改冻结稿、Canon或生产数据库。
 

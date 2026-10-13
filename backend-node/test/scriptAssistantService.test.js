@@ -30,3 +30,15 @@ test('script assistant rejects an unverified source hash', () => {
   assert.equal(work.sources[0].available, false);
   assert.match(work.sources[0].error, /哈希/);
 });
+
+test('revision review decisions persist without changing approval state', () => {
+  const db = new Database(':memory:'); service.ensureTable(db);
+  db.prepare(`INSERT INTO script_assistant_revisions(revision_id,work_id,source_id,source_sha256,status,candidate_sha256,approval_status,created_at) VALUES('rev1','w','ep3','source','completed','candidate','not_approved',?)`).run(new Date().toISOString());
+  const saved = service.saveReviewDecision(db, 'rev1', 'change-1', 'revise', '需要补充证据');
+  service.saveReviewDecision(db, 'rev1', 'change-1', 'undecided', '撤销决定');
+  assert.equal(saved[0].action, 'revise'); assert.equal(saved[0].source_sha256, 'source');
+  assert.equal(service.reviewDecisions(db, 'rev1')[0].action, 'undecided');
+  assert.equal(db.prepare('SELECT count(*) n FROM script_assistant_review_decision_events').get().n, 2);
+  assert.equal(service.reviewDecisions(db, 'rev1').length, 1);
+  assert.equal(db.prepare('SELECT approval_status FROM script_assistant_revisions WHERE revision_id=?').get('rev1').approval_status, 'not_approved');
+});

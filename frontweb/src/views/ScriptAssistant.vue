@@ -54,7 +54,7 @@
         <section v-if="mode === 'team'" class="orchestration-panel">
           <h3>第三集定向修订</h3><p class="muted">基于最近一次 Editor 意见调用 Story Writer，原稿保持不变，候选版本独立复审。</p>
           <el-button type="warning" :loading="revisionSending" @click="startRevision">修订第三集 v2</el-button>
-          <article v-for="revision in revisions" :key="revision.revision_id" class="run-card"><strong>{{ revision.status }}</strong><span class="muted"> {{ revision.revision_id }}</span><p>原稿 SHA256：{{ revision.source_sha256 }}<br>候选 SHA256：{{ revision.candidate_sha256 || '等待生成' }}<br>批准状态：{{ revision.approval_status }}</p><pre v-if="revision.candidate_text" class="source-document">{{ revision.candidate_text }}</pre><p v-if="revision.editor_review" class="reply-text"><strong>Editor：</strong>{{ revision.editor_review }}</p><el-button v-if="revision.status === 'failed' && revision.editor_task_id" size="small" @click="recoverRevision(revision.revision_id)">回查原 Editor Session</el-button><el-button v-if="revision.status === 'completed' && revision.approval_status === 'not_approved'" type="primary" size="small" @click="approveRevision(revision.revision_id)">批准为待发布版本</el-button></article>
+          <article v-for="revision in revisions" :key="revision.revision_id" class="run-card"><header class="revision-heading"><strong>{{ revision.source_id }} · {{ revision.status }}</strong><span>Editor：{{ revision.editor_review ? 'CONDITIONAL PASS · 原始审核意见' : '待完成' }} · 人工批准：{{ revision.approval_status }}</span></header><div v-if="revision.candidate_text" class="diff-toolbar"><el-radio-group v-model="diffMode[revision.revision_id]" size="small"><el-radio-button label="changes">只看修改</el-radio-button><el-radio-button label="all">查看全文</el-radio-button></el-radio-group><span>{{ diffBlocks(revision).length }} 个差异块 · {{ decisions[revision.revision_id]?.length || 0 }} 项审阅决定</span></div><div class="revision-workbench"><div v-if="revision.candidate_text" class="diff-blocks"><section v-for="block in visibleDiffBlocks(revision)" :key="block.id" class="diff-block" :class="block.type"><div class="block-label">{{ block.type === 'added' ? '新增' : block.type === 'removed' ? '删除' : block.type === 'unchanged' ? '未修改' : '修改' }} · {{ block.id }}</div><div class="revision-diff"><pre class="source-document"><span v-for="(part,i) in block.oldParts" :key="i" :class="{ 'diff-removed-text': part.removed }">{{ part.value }}</span></pre><pre class="source-document"><span v-for="(part,i) in block.newParts" :key="i" :class="{ 'diff-added-text': part.added }">{{ part.value }}</span></pre></div><div v-if="block.type !== 'unchanged'" class="review-actions"><el-button size="small" @click="decideRevision(revision,block,'accept')">接受修改</el-button><el-button size="small" @click="decideRevision(revision,block,'reject')">退回修改</el-button><el-button size="small" @click="decideRevision(revision,block,'revise')">要求继续修订</el-button><el-button size="small" @click="decideRevision(revision,block,'undecided')">暂不决定</el-button><span>{{ decisionLabel(decisions[revision.revision_id],block.id) }}</span></div></section></div><div v-else class="revision-diff"><pre class="source-document">{{ revisionSource[revision.revision_id]?.text || '原稿加载中…' }}</pre><pre class="source-document">{{ revision.candidate_text || '候选稿尚未生成' }}</pre></div><aside v-if="revision.editor_review" class="editor-review"><h4>Independent Editor · 全局意见 / 待定位</h4><div class="markdown-body" v-html="renderReply(revision.editor_review, null)"></div></aside></div><details class="trace"><summary>技术详情</summary><p>Revision：{{ revision.revision_id }}<br>原稿 SHA256：{{ revision.source_sha256 }}<br>候选 SHA256：{{ revision.candidate_sha256 || '等待生成' }}<br>Writer Task：{{ revision.writer_task_id || '无' }} · Editor Task：{{ revision.editor_task_id || '无' }}</p></details><el-button v-if="revision.status === 'failed' && revision.editor_task_id" size="small" @click="recoverRevision(revision.revision_id)">回查原 Editor Session</el-button><el-button v-if="revision.status === 'completed' && revision.approval_status === 'not_approved'" type="primary" size="small" @click="approveRevision(revision.revision_id)">批准为待发布版本</el-button></article>
         </section>
         <div v-if="!messages.length" class="empty-chat">
           <el-icon :size="32"><ChatDotRound /></el-icon>
@@ -108,15 +108,18 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
+import { diffLines, diffWords } from 'diff'
 import { useRouter, useRoute } from 'vue-router'
 import { ArrowLeft, ChatDotRound } from '@element-plus/icons-vue'
-import { getAssistantWorks, getAssistantContext, getAssistantMessages, sendAssistantMessage, refreshAssistantMessage, getAssistantSource, getAssistantRuns, createAssistantRun, getAssistantRevisions, createAssistantRevision, approveAssistantRevision, refreshAssistantRevision, recoverAssistantEditor } from '@/api/scriptAssistant'
+import { getAssistantWorks, getAssistantContext, getAssistantMessages, sendAssistantMessage, refreshAssistantMessage, getAssistantSource, getAssistantRuns, createAssistantRun, getAssistantRevisions, approveAssistantRevision, refreshAssistantRevision, recoverAssistantEditor, getReviewDecisions, saveReviewDecision } from '@/api/scriptAssistant'
 
 const router = useRouter(), route = useRoute()
 const works = ref([]), selected = ref(''), context = ref(null), messages = ref([]), draft = ref(''), budget = ref({})
 const loading = ref(false), sending = ref(false), error = ref(''), showSource = ref(false), sourceView = ref(null), citationNotice = ref('')
 const mode = ref('chat'), runRequest = ref(''), runs = ref([]), runSending = ref(false)
 const revisions = ref([]), revisionSending = ref(false)
+const revisionSource = ref({}), decisions = ref({})
+const diffMode = ref({})
 const prompts = ['我们前三集剧本现在是什么状态？', '第一集和第三集之间，有哪些需要注意的连续性问题？', '你建议先修改前三集，还是开始第四集？说明依据。']
 let timer, requestKey = null, submittedText = null, generation = 0, alive = true
 const isActive = task => ['queued', 'starting', 'submitted', 'running'].includes(task?.task_status)
@@ -137,10 +140,26 @@ async function changeWork() {
   generation++; messages.value = []; context.value = null; error.value = ''; loading.value = true
   requestKey = null; submittedText = null
   await router.replace({ query: { work: selected.value } })
-  try { context.value = await getAssistantContext(selected.value); await reloadMessages(); runs.value = (await getAssistantRuns(selected.value)).runs; revisions.value = (await getAssistantRevisions(selected.value)).revisions } catch (e) { error.value = e.message } finally { loading.value = false }
+  try { context.value = await getAssistantContext(selected.value); await reloadMessages(); runs.value = (await getAssistantRuns(selected.value)).runs; revisions.value = (await getAssistantRevisions(selected.value)).revisions; for (const r of revisions.value) { decisions.value[r.revision_id] = (await getReviewDecisions(r.revision_id)).decisions; if (r.candidate_text) { const s = context.value.sources.find(x => x.id === r.source_id); if (s) revisionSource.value[r.revision_id] = await getAssistantSource(selected.value, s.id) } } } catch (e) { error.value = e.message } finally { loading.value = false }
 }
 async function startRevision() { if (revisionSending.value) return; revisionSending.value=true; error.value=''; try { await createAssistantRevision(selected.value,'ep3'); await reload() } catch(e) { error.value=e.message } finally { revisionSending.value=false } }
 async function approveRevision(id) { try { await approveAssistantRevision(id); await reload() } catch(e) { error.value=e.message } }
+function diffBlocks(revision) {
+  const oldText = revisionSource.value[revision.revision_id]?.text || ''
+  const parts = diffLines(oldText, revision.candidate_text || '')
+  const blocks = []; let pending = null
+  for (const part of parts) {
+    const type = part.added ? 'added' : part.removed ? 'removed' : 'unchanged'
+    if (!pending || pending.partType !== type) { if (pending) blocks.push(pending); pending = { oldText: '', newText: '', partType: type } }
+    if (part.removed) pending.oldText += part.value
+    else pending.newText += part.value
+  }
+  if (pending) blocks.push(pending)
+  return blocks.map(b => { let type = b.partType; if (type === 'added' && blocks.some(x => x.partType === 'removed') && blocks.some(x => x.partType === 'added')) type = 'modified'; const seed = `${revision.source_sha256}|${revision.candidate_sha256}|${b.oldText}|${b.newText}`; let h = 2166136261; for (const ch of seed) h = Math.imul(h ^ ch.charCodeAt(0), 16777619); const words = diffWords(b.oldText, b.newText); return { ...b, type, id: `change-${(h >>> 0).toString(16)}`, oldParts: words.filter(x => !x.added), newParts: words.filter(x => !x.removed) } })
+}
+function visibleDiffBlocks(revision) { const blocks = diffBlocks(revision); return diffMode.value[revision.revision_id] === 'all' ? blocks : blocks.filter(b => b.type !== 'unchanged') }
+function decisionLabel(items = [], blockId) { return items.find(x => x.block_id === blockId)?.action || '未决定' }
+async function decideRevision(revision, block, action) { try { decisions.value[revision.revision_id] = (await saveReviewDecision(revision.revision_id, { block_id: block.id, action, note: '' })).decisions } catch(e) { error.value=e.message } }
 async function recoverRevision(id) { try { await refreshAssistantRevision(id); await reload() } catch(e) { error.value=e.message } }
 async function recoverEditor(id) { try { await recoverAssistantEditor(id); await reload() } catch(e) { error.value=e.message } }
 async function startRun() {
@@ -222,7 +241,7 @@ h2 { font-size: 16px; margin: 0 0 16px; } .context-panel h2:not(:first-child) { 
 .chat-turn { margin-bottom: 28px; } .user-message { padding: 14px 18px; border-radius: 10px; background: var(--bg-page); margin-left: 35px; }
 .user-message span { font-size: 12px; color: var(--text-secondary); } .user-message p { white-space: pre-wrap; line-height: 1.65; margin: 6px 0; }
 .agent-message { padding: 20px 0; } .agent-label { justify-content: flex-start; }
-.reply-text { line-height: 1.85; font-size: 14px; } .markdown-body :deep(p) { margin: 8px 0; } .markdown-body :deep(pre) { overflow: auto; padding: 10px; background: var(--bg-page); border-radius: 6px; } .markdown-body :deep(blockquote) { border-left: 3px solid var(--el-color-primary); padding-left: 12px; color: var(--text-secondary); } .citation-link { border: 0; background: transparent; color: var(--el-color-primary); cursor: pointer; padding: 0 2px; text-decoration: underline; }
+.reply-text { line-height: 1.85; font-size: 14px; } .revision-heading,.diff-toolbar { display:flex; justify-content:space-between; gap:12px; align-items:center; flex-wrap:wrap; } .revision-workbench { display:grid; grid-template-columns:minmax(0,2fr) minmax(260px,1fr); gap:16px; } .revision-diff { display:grid; grid-template-columns:1fr 1fr; gap:12px; } .diff-block { border-left:3px solid var(--el-border-color); padding:8px; margin:10px 0; } .diff-block.added { border-color:var(--el-color-success); } .diff-block.removed { border-color:var(--el-color-danger); } .diff-block.modified { border-color:var(--el-color-warning); } .diff-added-text { background:#d9f2df; } .diff-removed-text { background:#f8dada; text-decoration:line-through; } .block-label { font-weight:600; } .review-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin:10px 0; } .editor-review { border-left:1px solid var(--el-border-color); padding-left:14px; } .markdown-body :deep(p) { margin: 8px 0; } .markdown-body :deep(pre) { overflow: auto; padding: 10px; background: var(--bg-page); border-radius: 6px; } .markdown-body :deep(blockquote) { border-left: 3px solid var(--el-color-primary); padding-left: 12px; color: var(--text-secondary); } .citation-link { border: 0; background: transparent; color: var(--el-color-primary); cursor: pointer; padding: 0 2px; text-decoration: underline; }
 .trace { border-top: 1px solid var(--border-color, #ddd); padding-top: 14px; font-size: 12px; overflow-wrap: anywhere; }
 .trace summary { cursor: pointer; color: var(--text-secondary); } .trace p { line-height: 1.6; }
 pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; line-height: 1.7; }

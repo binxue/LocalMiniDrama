@@ -28,9 +28,29 @@ function ensureTable(db) {
     candidate_text TEXT, candidate_sha256 TEXT, editor_review TEXT, approval_status TEXT NOT NULL DEFAULT 'not_approved',
     approved_at TEXT, approved_by TEXT, created_at TEXT NOT NULL, completed_at TEXT, error_text TEXT
   )`);
+  db.exec(`CREATE TABLE IF NOT EXISTS script_assistant_review_decisions (
+    decision_id TEXT PRIMARY KEY, revision_id TEXT NOT NULL, block_id TEXT NOT NULL,
+    action TEXT NOT NULL, note TEXT, source_sha256 TEXT NOT NULL, candidate_sha256 TEXT,
+    created_at TEXT NOT NULL, updated_at TEXT NOT NULL, UNIQUE(revision_id, block_id)
+  )`);
+  db.exec(`CREATE TABLE IF NOT EXISTS script_assistant_review_decision_events (
+    event_id TEXT PRIMARY KEY, revision_id TEXT NOT NULL, block_id TEXT NOT NULL,
+    action TEXT NOT NULL, note TEXT, source_sha256 TEXT NOT NULL, candidate_sha256 TEXT,
+    created_at TEXT NOT NULL
+  )`);
 }
 
 function revisions(db, workId) { ensureTable(db); return db.prepare('SELECT * FROM script_assistant_revisions WHERE work_id=? ORDER BY created_at DESC').all(workId); }
+function reviewDecisions(db, revisionId) { ensureTable(db); return db.prepare('SELECT * FROM script_assistant_review_decisions WHERE revision_id=? ORDER BY created_at').all(revisionId); }
+function saveReviewDecision(db, revisionId, blockId, action, note = '') {
+  ensureTable(db); const r = db.prepare('SELECT * FROM script_assistant_revisions WHERE revision_id=?').get(revisionId);
+  if (!r) throw new Error('修订不存在');
+  if (!blockId || !['accept','reject','revise','undecided'].includes(action)) throw new Error('无效审阅动作');
+  const stamp = new Date().toISOString(); const id = `decision_${crypto.randomUUID()}`;
+  db.prepare(`INSERT INTO script_assistant_review_decisions(decision_id,revision_id,block_id,action,note,source_sha256,candidate_sha256,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(revision_id,block_id) DO UPDATE SET action=excluded.action,note=excluded.note,updated_at=excluded.updated_at`).run(id, revisionId, blockId, action, String(note || '').slice(0, 2000), r.source_sha256, r.candidate_sha256 || null, stamp, stamp);
+  db.prepare('INSERT INTO script_assistant_review_decision_events(event_id,revision_id,block_id,action,note,source_sha256,candidate_sha256,created_at) VALUES(?,?,?,?,?,?,?,?)').run(`event_${crypto.randomUUID()}`, revisionId, blockId, action, String(note || '').slice(0, 2000), r.source_sha256, r.candidate_sha256 || null, stamp);
+  return reviewDecisions(db, revisionId);
+}
 async function executeRevision(db, log, config, id) {
   const r = db.prepare('SELECT * FROM script_assistant_revisions WHERE revision_id=?').get(id); if (!r || r.status !== 'queued') return;
   try {
@@ -278,4 +298,4 @@ function budget(db) {
   return { chat: { used: chatUsed, limit: chatLimit, remaining: chatLimit > 0 ? Math.max(0, chatLimit - chatUsed) : null }, orchestration: { used: orchestrationUsed, limit: orchestrationLimit, remaining: orchestrationLimit > 0 ? Math.max(0, orchestrationLimit - orchestrationUsed) : null }, in_flight: db.prepare("SELECT count(*) n FROM managed_agent_tasks WHERE task_status IN ('queued','starting','submitted','running')").get().n };
 }
 
-module.exports = { ensureTable, works, loadWork, summary, messages, buildInput, createMessage, budget, runs, createRun, revisions, createRevision, approveRevision, refreshRevision, createEditorRecovery, PRODUCER };
+module.exports = { ensureTable, works, loadWork, summary, messages, buildInput, createMessage, budget, runs, createRun, revisions, reviewDecisions, saveReviewDecision, createRevision, approveRevision, refreshRevision, createEditorRecovery, PRODUCER };
