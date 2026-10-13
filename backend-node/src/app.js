@@ -12,21 +12,23 @@ function createApp() {
   const config = loadConfig();
   const db = getDb(config.database);
   const { runMigrationsAndEnsure } = require('./db/migrate.js');
-  runMigrationsAndEnsure(db);
+  const safeRestart = process.env.LOCALMINIDRAMA_SAFE_RESTART === '1';
+  if (!safeRestart) runMigrationsAndEnsure(db);
 
   // 厂商锁定模式：在迁移完成后同步 vendor_lock 配置
   const { applyVendorLock } = require('./services/aiConfigService');
-  applyVendorLock(db, logger, config);
+  if (!safeRestart) applyVendorLock(db, logger, config);
   const log = logger;
 
   const taskService = require('./services/taskService');
-  taskService.failOrphanedAsyncTasksOnStartup(db, log);
+  if (!safeRestart) taskService.failOrphanedAsyncTasksOnStartup(db, log);
 
   const imageService = require('./services/imageService');
-  imageService.failOrphanedImageGenerationsOnStartup(db, log);
+  if (!safeRestart) imageService.failOrphanedImageGenerationsOnStartup(db, log);
 
   const { resumeProcessingVideoGenerations } = require('./services/videoService');
-  resumeProcessingVideoGenerations(db, log);
+  if (!safeRestart) resumeProcessingVideoGenerations(db, log);
+  if (safeRestart) log.info('Safe restart: existing schema and unknown tasks preserved; no startup recovery');
 
   const app = express();
   app.use(express.json({ limit: '10mb' }));

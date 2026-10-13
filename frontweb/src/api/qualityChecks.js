@@ -1,4 +1,4 @@
-import request from './request'
+import request from '@/utils/request'
 
 /**
  * 质量检查 API
@@ -9,7 +9,7 @@ export const qualityChecksAPI = {
    */
   importQualityCheck(storyboardId, data) {
     return request({
-      url: `/api/v1/storyboards/${storyboardId}/quality-check`,
+      url: `/storyboards/${storyboardId}/quality-check`,
       method: 'POST',
       data
     })
@@ -20,7 +20,7 @@ export const qualityChecksAPI = {
    */
   getQualityChecks(storyboardId) {
     return request({
-      url: `/api/v1/storyboards/${storyboardId}/quality-checks`,
+      url: `/storyboards/${storyboardId}/quality-checks`,
       method: 'GET'
     })
   },
@@ -30,7 +30,7 @@ export const qualityChecksAPI = {
    */
   recordProducerDecision(storyboardId, data) {
     return request({
-      url: `/api/v1/storyboards/${storyboardId}/producer-decision`,
+      url: `/storyboards/${storyboardId}/producer-decision`,
       method: 'POST',
       data
     })
@@ -41,7 +41,7 @@ export const qualityChecksAPI = {
    */
   getProducerDecisions(storyboardId) {
     return request({
-      url: `/api/v1/storyboards/${storyboardId}/producer-decisions`,
+      url: `/storyboards/${storyboardId}/producer-decisions`,
       method: 'GET'
     })
   }

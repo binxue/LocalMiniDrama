@@ -785,8 +785,10 @@ async function processImageGeneration(db, log, imageGenId) {
       }
     }
 
-    // 尾帧可能已注入首帧站位锁参考，仍需合并当前勾选的角色/场景/道具参考图
-    if (row.storyboard_id) {
+    // An explicit ordered reference contract also freezes its storyboard
+    // associations: do not infer/write characters from negative prompt mentions.
+    // Without explicit references, retain the existing automatic resolution.
+    if (row.storyboard_id && !row.reference_images) {
       const sb = db.prepare('SELECT scene_id, characters, angle_s, shot_type FROM storyboards WHERE id = ? AND deleted_at IS NULL').get(row.storyboard_id);
       if (sb) {
         const refs = [];

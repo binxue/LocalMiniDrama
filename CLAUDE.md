@@ -1,5 +1,9 @@
 # LocalMiniDrama · Claude Code 开发入口
 
+> 2026-10-13 接管决定：Codex 恢复主开发负责人，Claude Code 停止开发。
+> 当前唯一任务、授权预算、真实 Runtime 结果与下一步见
+> [A 镜静态制作当前状态](docs/localminidrama-static-production-status.md)。下文保留历史上下文，不代表当前验收结论。
+
 **项目定位：** AI 智能短剧导演与制作系统
 
 **当前版本：** v1.2.8

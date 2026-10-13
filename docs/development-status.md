@@ -1,5 +1,8 @@
 # LocalMiniDrama 开发状态
 
+> 当前执行以 [A 镜静态制作状态](localminidrama-static-production-status.md) 为准。
+> Codex 已接管；非视频调用与 ¥10 静态预算已获作者授权。当前阻塞为方舟 SSO 失效，不能沿用以下历史完成声明作为真实制作验收。
+
 **最后更新：** 2026-10-13  
 **当前阶段：** 里程碑 1 - A/B 镜头专业制作闭环
 

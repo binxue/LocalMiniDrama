@@ -1588,6 +1588,7 @@
               </div>
             </div>
           </div>
+          <StaticProductionPanel v-if="Number(sb.id) === 3 && Number(dramaId) === 2" @updated="loadDrama" />
           </template>
         </template>
         <!-- 分镜生成中提示条 -->
@@ -2688,6 +2689,7 @@ import { sceneLibraryAPI } from '@/api/sceneLibrary'
 import { propLibraryAPI } from '@/api/propLibrary'
 import { generationSettingsAPI } from '@/api/prompts'
 import { qualityChecksAPI } from '@/api/qualityChecks'
+import StaticProductionPanel from '@/components/StaticProductionPanel.vue'
 import { parseScriptIntoEpisodes, episodesListToPlainScript } from '@/utils/scriptEpisodes'
 import { exportStoryboardSheet } from '@/utils/exportStoryboardSheet'
 import StylePickerButton from '@/components/StylePickerButton.vue'
@@ -3853,7 +3855,7 @@ function getSbQualityChecks(storyboardId) {
 
   try {
     const desc = typeof sb.description === 'string' ? JSON.parse(sb.description) : sb.description
-    return desc.quality_checks || []
+    return (desc.quality_checks || []).filter(check => check.evidence?.submit_event_id && check.evidence?.result_event_id)
   } catch (e) {
     return []
   }
@@ -3887,7 +3889,7 @@ async function onProducerDecision(sb, decision) {
       decided_at: new Date().toISOString()
     })
 
-    if (res && res.success) {
+    if (res) {
       ElMessage.success(`决策已记录：${decision === 'APPROVE' ? '通过' : decision === 'REVISE' ? '修正' : '重拍'}`)
     }
   } catch (err) {
