@@ -1553,6 +1553,35 @@
                 <el-button size="small" link type="primary" @click="onOpenSbPromptDialog(sb)">手工编辑</el-button>
               </div>
             </div>
+
+            <!-- Quality Check Results -->
+            <div v-if="getSbQualityChecks(sb.id).length" class="sb-panel sb-quality-checks">
+              <div class="sb-quality-header">
+                <el-icon><Document /></el-icon>
+                <span>Agent 质量检查</span>
+              </div>
+              <div v-for="(check, idx) in getSbQualityChecks(sb.id)" :key="idx" class="sb-quality-item">
+                <div class="sb-quality-row">
+                  <span class="sb-quality-agent">{{ check.agent_type }}</span>
+                  <el-tag :type="check.verdict === 'APPROVE' ? 'success' : check.verdict === 'REVISE' ? 'warning' : 'danger'" size="small">
+                    {{ check.verdict === 'APPROVE' ? '通过' : check.verdict === 'REVISE' ? '修正' : check.verdict === 'BLOCKED' ? '重拍' : check.verdict }}
+                  </el-tag>
+                  <span v-if="check.score != null" class="sb-quality-score">{{ check.score }}分</span>
+                </div>
+                <div v-if="check.observations && Object.keys(check.observations).length" class="sb-quality-obs">
+                  <span class="sb-quality-label">观察：</span>
+                  <span>{{ formatObservations(check.observations) }}</span>
+                </div>
+                <div v-if="check.recommendations && check.recommendations.length" class="sb-quality-rec">
+                  <span class="sb-quality-label">建议：</span>
+                  <span>{{ check.recommendations.join('；') }}</span>
+                </div>
+                <div v-if="check.image_generation_id || check.video_generation_id" class="sb-quality-links">
+                  <span v-if="check.image_generation_id" class="sb-quality-link">图片任务 #{{ check.image_generation_id }}</span>
+                  <span v-if="check.video_generation_id" class="sb-quality-link">视频任务 #{{ check.video_generation_id }}</span>
+                </div>
+              </div>
+            </div>
           </div>
           </template>
         </template>
@@ -3810,6 +3839,28 @@ function getSbResumableFailedVideo(storyboardId) {
   if (!Array.isArray(list) || list.length === 0) return null
   return list.find((i) => i.status === 'failed' && i.can_resume_poll) || null
 }
+
+/** 获取镜头质量检查结果 */
+function getSbQualityChecks(storyboardId) {
+  const sb = storyboards.value.find(s => s.id === storyboardId)
+  if (!sb || !sb.description) return []
+
+  try {
+    const desc = typeof sb.description === 'string' ? JSON.parse(sb.description) : sb.description
+    return desc.quality_checks || []
+  } catch (e) {
+    return []
+  }
+}
+
+/** 格式化观察意见对象为可读字符串 */
+function formatObservations(obs) {
+  if (!obs || typeof obs !== 'object') return ''
+  return Object.entries(obs)
+    .map(([key, value]) => `${key}: ${value}`)
+    .join('；')
+}
+
 
 async function loadStoryboardMedia() {
   const boards = store.storyboards || []
@@ -8507,6 +8558,74 @@ html.light .quick-nav {
   .main { padding: 16px 12px 48px; }
   .asset-list-two { grid-template-columns: 1fr; }
 }
+
+/* Quality Check Panel Styles */
+.sb-quality-checks {
+  margin-top: 12px;
+  padding: 12px;
+  background: rgba(139, 92, 246, 0.05);
+  border-radius: 6px;
+  border: 1px solid rgba(139, 92, 246, 0.15);
+}
+.sb-quality-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: rgba(139, 92, 246, 0.9);
+  margin-bottom: 10px;
+}
+.sb-quality-item {
+  padding: 10px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+  margin-bottom: 8px;
+}
+.sb-quality-item:last-child {
+  margin-bottom: 0;
+}
+.sb-quality-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.sb-quality-agent {
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.85);
+}
+.sb-quality-score {
+  font-size: 12px;
+  color: rgba(139, 92, 246, 0.9);
+  font-weight: 600;
+}
+.sb-quality-obs,
+.sb-quality-rec {
+  font-size: 12px;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.7);
+  margin-bottom: 4px;
+}
+.sb-quality-label {
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.85);
+  margin-right: 4px;
+}
+.sb-quality-links {
+  display: flex;
+  gap: 10px;
+  margin-top: 6px;
+  font-size: 11px;
+}
+.sb-quality-link {
+  color: rgba(139, 92, 246, 0.7);
+  background: rgba(139, 92, 246, 0.1);
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
 /* 当前任务面板 */
 .atp-panel {
   margin-top: 6px;
