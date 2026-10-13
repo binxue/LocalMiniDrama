@@ -32,25 +32,45 @@
 - 批准方案 SHA-256：7155cf62... ✅ 验证通过
 - Git HEAD：aef5774 (与远程同步)
 
-**Git 提交：** 待提交
+**Git 提交：** 6311bd0
 
 ---
 
-### 🔄 工作包 2：现有影视 Agent 能力整合
+### ✅ 工作包 2：现有影视 Agent 能力整合
 
-**状态：** 待执行
+**状态：** 已完成（调查）
 
-**计划任务：**
-- [ ] 调查现有 Agent 部署方式
-- [ ] 核实 Agent 调用接口
-- [ ] 检查导演批准方案的数据流
-- [ ] 验证 Agent 输出与生成任务的关联
-- [ ] 识别并修复数据传递缺口
+**完成任务：**
+- ✅ 调查现有 Agent 部署方式
+- ✅ 核实 Agent 调用接口
+- ✅ 检查导演批准方案的数据流
+- ✅ 验证 Agent 输出与生成任务的关联
 
-**关键问题：**
-- Agent 如何被调用？
-- Agent 输出如何写回数据库？
-- 导演批准的方案如何进入生成流程？
+**核心发现：**
+
+**Agent 集成机制：**
+- Agent 团队部署在火山方舟 Managed Agent（外部服务）
+- 包含：film-chief-director, film-script-analyst, film-cinematographer, film-performance-continuity, film-visual-inspector
+- 通过 Python 脚本调用（`H:/localminidrama-research/general-film-team/`）
+- Agent 输出通过 HTTP API 导入 LocalMiniDrama (`POST /api/v1/dramas`, `PUT /api/v1/dramas/{id}/episodes`)
+
+**数据流向：**
+```
+剧本文本 → Python 脚本调用 Agent → Agent JSON 输出 → Python HTTP API 导入 → 数据库
+             (ep1_v3_*.py)              (导演批准方案)      (drama/episode/storyboard)
+```
+
+**批准方案存储：**
+- 导演批准方案存储为外部 JSON 文件（非数据库）
+- 位置：`H:/localminidrama-research/general-film-team/shot1-ab-preproduction.json`
+- 包含：shots 详细定义、references 路径、acceptance 标准
+- **批准记录**存储在 storyboard.description 字段（JSON 格式），包含 execution_id、verdict、approved_at
+
+**关键差距识别：**
+1. ✅ Agent 输出 → 数据库：已通过 Python 脚本 + HTTP API 完成
+2. ⚠️ 批准方案 → 图片生成：需要人工从 JSON 提取参数
+3. ⚠️ 图片任务 23、24：卡在 "processing" 状态（应为失败）
+4. ⚠️ 历史失败（任务 11、12）：参考图路径包含绝对路径导致 Provider 失败
 
 ---
 
