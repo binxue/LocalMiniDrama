@@ -1,5 +1,9 @@
 # LocalMiniDrama 阶段状态
 
+> 2026-10-13 接手更新：当前事实、真实 Agent 接入与唯一下一步见
+> [真实 Agent 接手记录](localminidrama-real-agent-handoff-2026-10-13.md)。
+> 以下旧阶段记录保留为历史证据；A 图片 22、视频 7 已存在，本轮真实 Agent 审核尚未执行。
+
 - 版本：v1.2.8
 - 运行时：Node 22.23.3；better-sqlite3 ABI 127
 - 服务：后端 5679，前端 3013；后端启动不使用 --watch

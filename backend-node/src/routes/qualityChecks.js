@@ -49,6 +49,16 @@ function routes(db, cfg, log) {
 
         // 添加质量检查记录
         if (!desc.quality_checks) desc.quality_checks = [];
+        const existing = body.execution_id && desc.quality_checks.find(check => check.execution_id === body.execution_id);
+        if (existing) {
+          if (existing.image_generation_id !== (body.image_generation_id || null)
+              || existing.video_generation_id !== (body.video_generation_id || null)
+              || existing.verdict !== (body.verdict || 'UNKNOWN')
+              || existing.evidence?.result_event_id !== body.evidence?.result_event_id) {
+            return response.badRequest(res, '执行记录已存在且关联结果不同');
+          }
+          return response.success(res, { message: '质量检查已导入', check_count: desc.quality_checks.length });
+        }
         desc.quality_checks.push({
           agent_type: body.agent_type || 'unknown',
           execution_id: body.execution_id || null,
@@ -59,6 +69,7 @@ function routes(db, cfg, log) {
           observations: body.observations || {},
           recommendations: Array.isArray(body.recommendations) ? body.recommendations : [],
           checked_at: body.checked_at || new Date().toISOString(),
+          ...(body.evidence ? { evidence: body.evidence } : {}),
         });
 
         const now = new Date().toISOString();
