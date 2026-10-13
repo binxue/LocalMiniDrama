@@ -28,6 +28,7 @@ function postJSONNonStream(url, headers, body, timeoutMs = 120000) {
       family: 4,
     };
 
+    const startedAt = Date.now();
     const req = mod.request(options, (res) => {
       const chunks = [];
       res.on('data', (c) => chunks.push(c));
@@ -83,13 +84,14 @@ function postJSONWithTimeout(url, headers, body, timeoutMs = 600000) {
       family: 4,
     };
 
+    const startedAt = Date.now();
     const req = mod.request(options, (res) => {
       const chunks = [];
       res.on('data', (c) => chunks.push(c));
       res.on('end', () => {
         clearTimeout(timer);
         const raw = Buffer.concat(chunks).toString('utf-8');
-        resolve({ statusCode: res.statusCode || 0, raw });
+        resolve({ statusCode: res.statusCode || 0, raw, headers: res.headers, durationMs: Date.now() - startedAt });
       });
       res.on('error', (e) => {
         clearTimeout(timer);
@@ -99,10 +101,12 @@ function postJSONWithTimeout(url, headers, body, timeoutMs = 600000) {
 
     const timer = setTimeout(() => {
       req.destroy();
-      reject(new Error(`Image generation HTTP timeout after ${timeoutMs}ms`));
+      const e = new Error(`Image generation HTTP timeout after ${timeoutMs}ms`);
+      e.code = 'IMAGE_HTTP_TIMEOUT'; e.kind = 'timeout'; reject(e);
     }, timeoutMs);
     req.on('error', (e) => {
       clearTimeout(timer);
+      e.kind = e.kind || 'connection';
       reject(e);
     });
     req.write(bodyStr);
@@ -703,6 +707,7 @@ function isRefusalResponse(text) {
 }
 
 module.exports = {
+  postJSONWithTimeout,
   getDefaultConfig,
   getConfigForModel,
   getConfigFromModelMap,
@@ -713,5 +718,4 @@ module.exports = {
   extractDescriptionFromImage,
   EXTRACT_PROMPTS,
   isRefusalResponse,
-  postJSONWithTimeout,
 };

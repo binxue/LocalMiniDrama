@@ -932,7 +932,9 @@ async function processImageGeneration(db, log, imageGenId) {
 
         // ── Step 2.1: 文本补扫 — 检测 prompt/action/dialogue 中提及但未关联的角色 ────────────────
         // 若用户已在分镜上显式勾选角色名单（含空数组），则不再根据台词把已去掉的角色塞回参考图。
-        if (row.drama_id && refs.length < refLimits.total) {
+        // Deliberately disabled: textual character mentions are not approval to
+        // attach/upload a character reference. Use storyboard.characters only.
+        if (row.drama_id && refs.length < refLimits.total && explicitDramaCharIds === null && false) {
           if (explicitDramaCharIds !== null && explicitDramaCharIds.length === 0) {
             // 显式清空：跳过文本补扫
           } else try {
@@ -1004,7 +1006,10 @@ async function processImageGeneration(db, log, imageGenId) {
         if (explicitDramaCharIds !== null) {
           skipStep23PromptCharFilter = true;
         }
-        if (refs.length > 0) {
+        // A caller-supplied reference list is an explicit, ordered contract.
+        // Do not append storyboard scene/character/prop references: doing so
+        // changes the approved mapping and can exceed the provider contract.
+        if (refs.length > 0 && !row.reference_images) {
           if (!reference_image_urls || reference_image_urls.length === 0) {
             reference_image_urls = refs;
             reference_source = 'storyboard 自动解析';
@@ -1013,7 +1018,11 @@ async function processImageGeneration(db, log, imageGenId) {
             }
           } else {
             const mergedRefs = [...reference_image_urls];
-            const mergedLabels = (reference_context_note || '').split('\n').filter(Boolean);
+            // Preserve positional alignment. Missing caller labels must not be
+            // shifted onto a different reference after automatic merging.
+            const suppliedLabels = (reference_context_note || '').split('\n').filter(Boolean);
+            const mergedLabels = mergedRefs.map((_, idx) => suppliedLabels[idx] ||
+              `Image ${idx + 1}: explicitly supplied reference (purpose supplied by caller)`);
             for (let ri = 0; ri < refs.length; ri++) {
               if (mergedRefs.length >= refLimits.total) break;
               if (!imageClient.refListHasCanonical(mergedRefs, refs[ri])) {

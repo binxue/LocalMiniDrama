@@ -29,6 +29,7 @@ function createDb() {
       appearance TEXT,
       image_url TEXT,
       local_path TEXT,
+      seedance2_asset TEXT,
       deleted_at TEXT
     );
 

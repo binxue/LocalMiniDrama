@@ -159,6 +159,7 @@ const SEEDREAM_MIN_PIXELS = 3686400;
 
 function fixSeedreamSize(size) {
   if (!size || typeof size !== 'string') return '1920x1920'; // 默认使用最低要求 1920x1920
+  if (/^2k$/i.test(size.trim())) return '2K';
   // 支持 1024x1024 或 1024*1024 格式，统一解析
   const s = size.trim().toLowerCase().replace(/\*/g, 'x');
   const match = s.match(/^(\d+)\s*x\s*(\d+)$/);
@@ -833,7 +834,7 @@ function resolveImageRef(value, filesBaseUrl, storageLocalPath) {
   // isLocalhost: 只要 URL 本身或配置的 base_url 含 localhost/127，都视为本地
   const isLocalhostUrl = /localhost|127\.0\.0\.1/i.test(s);
   const isLocalhostBase = baseUrl && /localhost|127\.0\.0\.1/i.test(baseUrl);
-  const isLocalhost = isLocalhostUrl || isLocalhostBase;
+  const isLocalhost = isLocalhostUrl;
 
   function toPublicUrl(v) {
     if (!v || !String(v).trim()) return null;
@@ -856,15 +857,17 @@ function resolveImageRef(value, filesBaseUrl, storageLocalPath) {
     relPath = s.replace(/^\//, '');
   }
   if (!relPath) return toPublicUrl(s);
-  const filePath = path.join(storageLocalPath, relPath);
+  const decodedPath = decodeURIComponent(relPath);
+  const filePath = path.isAbsolute(decodedPath) || path.win32.isAbsolute(decodedPath)
+    ? decodedPath : path.join(storageLocalPath, decodedPath);
   try {
-    if (!fs.existsSync(filePath)) return toPublicUrl(s);
+    if (!fs.existsSync(filePath)) throw new Error('Reference image file does not exist');
     const buf = fs.readFileSync(filePath);
     const ext = path.extname(filePath).toLowerCase();
     const mime = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.bmp': 'image/bmp' }[ext] || 'image/png';
     return 'data:' + mime + ';base64,' + buf.toString('base64');
   } catch (e) {
-    return toPublicUrl(s);
+    throw new Error('Local reference image cannot be read; request blocked before generation');
   }
 }
 
@@ -1566,7 +1569,10 @@ async function callImageApi(db, log, opts) {
         ...(resolvedRefs.length > 0 ? { image: resolvedRefs } : {}),
       },
     } : {}),
+    // Seedream 官方图片接口使用顶层 response_format 控制返回 URL。
+    ...(isSeedream && !isAgnes ? { response_format: 'url' } : {}),
   };
+  const requestBodyBytes = Buffer.byteLength(JSON.stringify(body), 'utf8');
   log.info('Image API request', {
     url: url.slice(0, 60),
     model,
@@ -1576,6 +1582,8 @@ async function callImageApi(db, log, opts) {
     ratio: isAgnes && agnesSizeSpec ? agnesSizeSpec.ratio : undefined,
     original_size: size !== effectiveSize ? size : undefined,
     is_agnes: isAgnes,
+    response_format: isSeedream && !isAgnes ? 'url' : undefined,
+    request_body_bytes: requestBodyBytes,
   });
   const openaiCompatHeaders = {
     'Content-Type': 'application/json',
@@ -1583,27 +1591,60 @@ async function callImageApi(db, log, opts) {
   };
   let raw;
   let httpStatus;
+  const requestStartedAt = Date.now();
   try {
     const out = await postJSONWithTimeout(url, openaiCompatHeaders, body, IMAGE_HTTP_TIMEOUT_MS);
     httpStatus = out.statusCode;
     raw = out.raw;
+    log.info('Image API response', {
+      image_gen_id,
+      model,
+      size: effectiveSize,
+      response_status: httpStatus,
+      response_bytes: Buffer.byteLength(raw || '', 'utf8'),
+      duration_ms: Date.now() - requestStartedAt,
+      stage: 'response_received',
+    });
   } catch (e) {
-    log.error('Image API network error', { image_gen_id, error: e.message, url: url.slice(0, 80) });
-    return { error: e.message && e.message.includes('timeout')
-      ? e.message
-      : ('图片生成网络请求失败: ' + e.message) };
+    log.error('Image API network error', {
+      image_gen_id,
+      model,
+      size: effectiveSize,
+      request_body_bytes: requestBodyBytes,
+      error: e.message,
+      error_code: e.code,
+      duration_ms: Date.now() - requestStartedAt,
+      stage: 'request_transport',
+      url: url.slice(0, 80),
+    });
+    const kind = e.kind || (e.code === 'IMAGE_HTTP_TIMEOUT' ? 'timeout' : 'connection');
+    log.error('Image API transport failure', { image_gen_id, model, error_type: kind, error_code: e.code || null, duration_ms: Date.now() - requestStartedAt, error: e.message });
+    return { error: (kind === 'timeout' ? '图片生成请求超时: ' : '图片生成网络请求失败: ') + e.message, error_type: kind, error_code: e.code || null, duration_ms: Date.now() - requestStartedAt };
   }
   if (httpStatus < 200 || httpStatus >= 300) {
-    log.error('Image API failed', { status: httpStatus, body: raw.slice(0, 300) });
+    log.error('Image API failed', {
+      image_gen_id,
+      model,
+      size: effectiveSize,
+      response_status: httpStatus,
+      response_bytes: Buffer.byteLength(raw || '', 'utf8'),
+      duration_ms: Date.now() - requestStartedAt,
+      stage: 'provider_response',
+    });
     let errMsg = '图片生成请求失败: ' + httpStatus;
+    let providerCode = null;
+    let providerRequestId = out?.headers?.['x-request-id'] || out?.headers?.['x-requestid'] || null;
     try {
       const errJson = JSON.parse(raw);
       const msg = errJson.error?.message || errJson.message || errJson.error;
+      providerCode = errJson.error?.code || errJson.code || null;
+      providerRequestId = providerRequestId || errJson.request_id || errJson.requestId || null;
       if (msg) errMsg += ' - ' + (typeof msg === 'string' ? msg : JSON.stringify(msg).slice(0, 200));
     } catch (_) {
       if (raw && raw.length) errMsg += ' - ' + raw.slice(0, 200);
     }
-    return { error: errMsg };
+    log.error('Image API provider response', { image_gen_id, model, http_status: httpStatus, provider_code: providerCode, provider_request_id: providerRequestId, duration_ms: out?.durationMs || null, error: errMsg });
+    return { error: errMsg, http_status: httpStatus, provider_code: providerCode, provider_request_id: providerRequestId, duration_ms: out?.durationMs || null };
   }
   let data;
   try {
@@ -1700,7 +1741,13 @@ function createAndGenerateImage(db, log, opts) {
       throw e;
     }
   }
+  const attemptId = `img-${imageGenId}-${Date.now()}`;
+  log.info('Image generation attempt started', { image_gen_id: imageGenId, attempt_id: attemptId, model, provider });
 
+  if (Array.isArray(opts.reference_image_urls) && opts.reference_image_urls.length) {
+    db.prepare('UPDATE image_generations SET reference_images = ? WHERE id = ?')
+      .run(JSON.stringify(opts.reference_image_urls), imageGenId);
+  }
   setImmediate(async () => {
     try {
       db.prepare('UPDATE image_generations SET status = ? WHERE id = ?').run('processing', imageGenId);
@@ -1713,6 +1760,9 @@ function createAndGenerateImage(db, log, opts) {
         character_id: character_id,
         image_type,
         image_gen_id: imageGenId,
+        reference_image_urls: opts.reference_image_urls,
+        storage_local_path: opts.storage_local_path,
+        files_base_url: opts.files_base_url,
         user_negative_prompt: user_negative_prompt || undefined,
       });
       const now2 = new Date().toISOString();
@@ -1720,6 +1770,7 @@ function createAndGenerateImage(db, log, opts) {
         db.prepare(
           'UPDATE image_generations SET status = ?, error_msg = ?, updated_at = ? WHERE id = ?'
         ).run('failed', result.error, now2, imageGenId);
+        log.error('Image generation result persisted', { image_gen_id: imageGenId, attempt_id: attemptId, status: 'FAILED', error_type: result.error_type || 'provider', http_status: result.http_status || null, provider_code: result.provider_code || null, provider_request_id: result.provider_request_id || null });
         taskService.updateTaskError(db, taskId, result.error);
         if (charIdNum != null) {
           try {
@@ -1769,6 +1820,18 @@ function createAndGenerateImage(db, log, opts) {
       taskService.updateTaskResult(db, taskId, { image_generation_id: imageGenId, image_url: result.image_url, local_path: localPath, status: 'completed' });
       if (charIdNum != null) {
         try {
+          const { appendTemplateAsset } = require('../utils/characterTemplateAssets');
+          const prior = db.prepare('SELECT character_template_assets FROM characters WHERE id = ?').get(charIdNum);
+          const templateAssets = appendTemplateAsset(prior?.character_template_assets, {
+            id: Number(imageGenId), prompt, local_path: localPath, image_url: result.image_url,
+            references: opts.reference_image_urls, created_at: now2,
+          });
+          if (templateAssets) {
+            db.prepare('UPDATE characters SET character_template_assets = ?, updated_at = ? WHERE id = ?')
+              .run(JSON.stringify(templateAssets), now2, charIdNum);
+            log.info('Character template candidate saved; main image unchanged', { character_id: charIdNum, image_gen_id: imageGenId });
+            return;
+          }
           // 旧图追加到 extra_images，与上传逻辑保持一致
           const oldChar = db
             .prepare('SELECT local_path, image_url, extra_images, seedance2_asset FROM characters WHERE id = ?')
@@ -1947,6 +2010,7 @@ module.exports = {
   canAddStoryboardObjectRef,
   refListHasCanonical,
   fixAgnesImageSize,
+  fixSeedreamSize,
   mapAgnesImageSizeSpec,
   isAgnesImageConfig,
   /** 图床 URL 缓存（image_proxy_cache），供 SD2 认证等复用 */
