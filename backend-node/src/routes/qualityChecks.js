@@ -107,3 +107,4 @@ function routes(db, cfg, log) {
 }
 
 module.exports = routes;
+
