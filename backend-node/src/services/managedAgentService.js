@@ -2,6 +2,7 @@ const { execFile } = require('child_process');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const cost = require('./agentCostService');
 
 const ALLOWED_AGENTS = new Set([
   'agent-20261011131513-17rey',
@@ -57,7 +58,8 @@ function ensureTable(db) {
 function row(db, id) {
   const r = db.prepare('SELECT * FROM managed_agent_tasks WHERE task_id = ?').get(id);
   if (!r) return null;
-  return { ...r, events: parseJson(r.events_json) || [], usage: parseJson(r.usage_json) || {} };
+  const usage = parseJson(r.usage_json) || {};
+  return { ...r, events: parseJson(r.events_json) || [], usage, cost: cost.calculate(r.model_id, usage) };
 }
 
 function update(db, id, fields) {
@@ -190,7 +192,7 @@ async function refreshTask(db, taskId) {
     error_text: status === 'completed' ? null : task.error_text, completed_at: ['completed', 'failed'].includes(status) ? task.completed_at || now() : null });
   return row(db, taskId);
 }
-function listTasks(db, limit = 50) { ensureTable(db); return db.prepare('SELECT * FROM managed_agent_tasks ORDER BY created_at DESC LIMIT ?').all(Math.min(Math.max(Number(limit) || 50, 1), 200)).map(r => ({ ...r, events: undefined, usage: parseJson(r.usage_json) || {} })); }
+function listTasks(db, limit = 50) { ensureTable(db); return db.prepare('SELECT * FROM managed_agent_tasks ORDER BY created_at DESC LIMIT ?').all(Math.min(Math.max(Number(limit) || 50, 1), 200)).map(r => { const usage = parseJson(r.usage_json) || {}; return { ...r, events: undefined, usage, cost: cost.calculate(r.model_id, usage) }; }); }
 
 function recoverOnStartup(db, log) {
   ensureTable(db);

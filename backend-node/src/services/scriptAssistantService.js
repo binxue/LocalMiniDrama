@@ -176,7 +176,7 @@ function messages(db, workId) {
       content: m.content, created_at: m.created_at, context: JSON.parse(m.context_json),
       task: task && { task_id: task.task_id, task_status: task.task_status, session_id: task.session_id,
         model_id: task.model_id, output_text: task.output_text, output_version: task.output_version,
-        input_version: task.input_version, usage: task.usage, error_text: task.error_text } };
+        input_version: task.input_version, usage: task.usage, cost: task.cost, error_text: task.error_text } };
   });
 }
 

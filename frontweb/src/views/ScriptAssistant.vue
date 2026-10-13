@@ -75,7 +75,9 @@
               <p class="muted">{{ m.context.omission_notice }}</p>
               <p>使用历史轮次：{{ m.context.history_included.join(', ') || '无' }}；省略轮次：{{ m.context.history_omitted.join(', ') || '无' }}</p>
               <p>Task：{{ m.task?.task_id }}<br>Session：{{ m.task?.session_id || '尚未创建' }}<br>模型：{{ m.task?.model_id || '尚未返回' }}<br>输入哈希：{{ m.task?.input_version }}<br>输出哈希：{{ m.task?.output_version || '尚未取得' }}</p>
-              <p v-if="m.task?.usage">tokens：输入 {{ m.task.usage.input_tokens || 0 }} / 输出 {{ m.task.usage.output_tokens || 0 }}；缺失用量请求 {{ m.task.usage.missing_usage_requests || 0 }}。无账单，不估算费用。</p>
+              <p v-if="m.task?.usage">tokens：输入 {{ m.task.usage.input_tokens || 0 }} / 输出 {{ m.task.usage.output_tokens || 0 }} / 缓存读取 {{ m.task.usage.cache_read_input_tokens || 0 }}；请求 {{ m.task.usage.requests || 0 }}，缺失 {{ m.task.usage.missing_usage_requests || 0 }}。</p>
+              <p v-if="m.task?.cost?.status === 'calculated' || m.task?.cost?.status === 'partial'">费用：{{ m.task.cost.currency }} {{ m.task.cost.amount.toFixed(6) }}（{{ m.task.cost.status === 'partial' ? '部分可计算，存在缺失用量' : '按价格版本计算' }}）</p>
+              <p v-else-if="m.task?.cost?.status === 'unconfigured'" class="muted">费用：价格未配置（模型 {{ m.task.cost.model_id || '未知' }}），仅展示真实 Token 用量。</p>
               <div v-for="source in m.context.sources" :key="source.id" class="source-proof">
                 <strong>[S:{{ source.id }}] {{ source.title }}</strong>
                 <p class="muted">提供 {{ source.included_chars }} / {{ source.total_chars }} 字符；省略 {{ source.omitted_chars }} 字符。SHA256 {{ source.sha256 }}</p>
@@ -89,6 +91,7 @@
           <el-input v-model="draft" type="textarea" :rows="3" :maxlength="1200" show-word-limit placeholder="向 Producer 提问，例如：前三集现在是什么状态？" aria-label="给 Producer 的消息" />
           <div class="composer-footer"><span>聊天额度：{{ budget.chat?.limit ? `${budget.chat.remaining} / ${budget.chat.limit}` : '不限' }} · 编排额度：{{ budget.orchestration?.limit ? `${budget.orchestration.remaining} / ${budget.orchestration.limit}` : '不限' }} · 不自动重试</span>
             <el-button native-type="submit" type="primary" :loading="sending" :disabled="!canSend">发送给 Producer</el-button></div>
+          <p class="muted">发送前费用预估：价格未配置；将显示真实 Token 用量，无法可靠估算金额。</p>
           <p v-if="budget.chat?.limit && budget.chat.remaining === 0" class="muted">聊天额度已达到配置上限，请等待24小时滚动窗口恢复。</p>
         </form>
       </main>
