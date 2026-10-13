@@ -43,7 +43,7 @@ class ManagedAgentWorkbenchClient {
     }, null, 2), { flag: 'wx', mode: 0o600 });
     if (result.failure || result.code !== 0) {
       let remoteMessage = '';
-      try { remoteMessage = redact(JSON.parse(result.stderr).error?.message || '').slice(0, 900); } catch (_) {}
+      try { remoteMessage = redact(JSON.parse(result.stderr.slice(result.stderr.indexOf('{'))).error?.message || '').slice(0, 900); } catch (_) {}
       const error = new Error('Managed Agent CLI failed: ' + (result.failure || 'EXIT_' + result.code)
         + (remoteMessage ? '; ' + remoteMessage : '') + '; evidence: ' + evidenceName);
       error.code = /SSO STS|refresh_token.*invalid|STS.*续期失败/i.test(remoteMessage) ? 'AUTH_EXPIRED' : (result.failure || 'CLI_FAILED');
@@ -98,8 +98,31 @@ class ManagedAgentWorkbenchClient {
       execution.file_ids = attachments.map(item => item.source.file_id);
       execution.execution_status = 'RUNNING';
       persist();
+      return await this.collect(execution, prefix);
+    } catch (error) {
+      execution.error = { code: error.code || 'AGENT_EXECUTION_FAILED', message: error.message, evidence: error.evidence || null };
+      if (execution.remote_completed) execution.execution_status = 'INVALID_RESPONSE';
+      else if (execution.execution_status === 'RUNNING') execution.execution_status = 'UNKNOWN';
+      else if (execution.execution_status === 'PENDING') {
+        execution.execution_status = 'FAILED';
+        execution.billing_status = 'NOT_SUBMITTED';
+      }
+      persist();
+      throw error;
+    }
+  }
+  async collect(execution, prefix = execution.execution_id + '-resume-' + Date.now()) {
+    if (!execution.session_id || !execution.submit_event_id) throw new Error('Existing remote session and submission cursor required');
+    if (execution.error) {
+      execution.previous_errors = [...(execution.previous_errors || []), execution.error];
+      delete execution.error;
+    }
+    execution.execution_status = 'RUNNING';
+    const persist = () => this.onExecution({ ...execution });
+    persist();
+    try {
       const events = new Map();
-      let cursor = submitted.id;
+      let cursor = execution.submit_event_id;
       const deadline = Date.now() + 240000;
       let pageIndex = 0, idle = false;
       while (Date.now() < deadline) {
@@ -108,6 +131,10 @@ class ManagedAgentWorkbenchClient {
         if (!Array.isArray(page.data)) throw new Error('Event response schema is invalid');
         for (const event of page.data) {
           if (!event.id) continue;
+          // Current CLI/server may include the cursor event and earlier status
+          // events from the same timestamp. The exact submitted message is not
+          // a concurrent turn; another user message still fails closed.
+          if (event.id === execution.submit_event_id) continue;
           events.set(event.id, event);
           cursor = event.id;
           if (event.type === 'user.message') throw new Error('Concurrent turn: ambiguous Agent response');
@@ -145,10 +172,6 @@ class ManagedAgentWorkbenchClient {
       execution.error = { code: error.code || 'AGENT_EXECUTION_FAILED', message: error.message, evidence: error.evidence || null };
       if (execution.remote_completed) execution.execution_status = 'INVALID_RESPONSE';
       else if (execution.execution_status === 'RUNNING') execution.execution_status = 'UNKNOWN';
-      else if (execution.execution_status === 'PENDING') {
-        execution.execution_status = 'FAILED';
-        execution.billing_status = 'NOT_SUBMITTED';
-      }
       persist();
       throw error;
     }

@@ -11,8 +11,12 @@
         <el-option label="生成新候选" value="generate" />
         <el-option label="自动复用最近合规候选并真实审核" value="reuse_latest" />
       </el-select>
-      <el-button type="primary" :loading="starting || busy" :disabled="hasUnknown" @click="start">启动智能制作</el-button>
+      <el-button type="primary" :loading="starting || busy" :disabled="hasUnknown || hasPendingImages" @click="start">启动智能制作</el-button>
       <el-button @click="refresh">刷新状态</el-button>
+      <el-button v-if="run && !busy" :loading="checkingBilling" @click="checkBilling">核对实际账单</el-button>
+      <el-button v-if="hasUnknown && !busy" type="warning" :loading="starting" @click="resume">继续查询 Agent 结果</el-button>
+      <el-button v-if="run?.pending_image_generation_id && run?.generation_error && !run?.candidates.length && !busy" type="warning" :loading="starting" @click="resumeWithExisting">复用合规历史候选并真实审核</el-button>
+      <el-button v-if="run?.status === 'NEEDS_REVISION' && !busy" type="warning" :loading="starting" @click="reviseFromReview">按真实审片意见修正候选</el-button>
     </div>
     <p class="production-meta">静态总预算 ¥10；视频需另行授权。未知任务 23 / 24 / 25 不重试。</p>
     <el-alert v-if="quarantineCount" type="warning" :closable="false"
@@ -20,11 +24,17 @@
     <el-alert v-if="error" :title="error" type="error" :closable="false" />
     <template v-if="run">
       <p class="production-progress" aria-live="polite">{{ run.message || run.stage }}</p>
+      <el-alert v-if="run.pending_image_generation_id && !busy" type="error" :closable="false"
+        :title="`图片请求 #${run.pending_image_generation_id} 未交付，云端状态与费用待核实；不会再次提交本轮请求。`" />
+      <el-alert v-for="unknown in run.unresolved_image_generations || []" :key="unknown.image_generation_id" type="warning" :closable="false"
+        :title="`新图片任务 #${unknown.image_generation_id} 未交付，云端状态与费用未知，未重发。以下候选来自历史资产，由本轮 Agent 真实审核。`" />
       <div class="production-cost">
         <span>累计预算预留：¥{{ reserved.toFixed(2) }} / 10</span>
         <span>已返回用量估算：{{ hasUsage ? '¥' + estimated.toFixed(4) + '（未返回执行不计入）' : '尚未返回用量' }}</span>
         <span>实际结算：{{ run.costs?.actual_cost_cny == null ? '待账单确认' : '¥' + run.costs.actual_cost_cny }}</span>
       </div>
+      <el-alert v-if="run.costs?.billing_status === 'UNAVAILABLE'" type="warning" :closable="false"
+        title="实际结算查询不可用：用量估算不是账单，未知图片费用仍保留。" :description="run.costs.billing_error" />
       <details v-if="run.optimized_prompt">
         <summary>Agent 分析与优化提示词</summary>
         <p>{{ run.analysis }}</p>
@@ -35,7 +45,9 @@
           <el-image :src="assetImageUrl(candidate)" :preview-src-list="[assetImageUrl(candidate)]" fit="contain" />
           <strong>{{ candidate.version }} · 第 {{ candidate.round }} 轮</strong>
           <span>{{ candidate.acquisition === 'REUSED_EXISTING' ? '复用既有图片，未重新生成' : '工作台真实生成' }}</span>
-          <el-tag v-if="candidate.image_generation_id === run.best_candidate_image_id" type="success">最佳候选 · 等待制作人决定</el-tag>
+          <el-tag v-if="candidate.image_generation_id === run.best_candidate_image_id" :type="candidate.review?.verdict === 'APPROVE' ? 'success' : 'warning'">
+            {{ candidate.review?.verdict === 'APPROVE' ? '最佳候选 · 等待制作人决定' : '当前候选仍需修正' }}
+          </el-tag>
           <template v-if="candidate.review">
             <p>{{ verdictLabels[candidate.review.verdict] }} · {{ candidate.review.score }} 分（Agent 建议）</p>
             <p>{{ observations(candidate.review.observations) }}</p>
@@ -78,11 +90,13 @@ const emit = defineEmits(['updated'])
 const state = ref({ runs: [] })
 const strategy = ref('generate')
 const starting = ref(false)
+const checkingBilling = ref(false)
 const error = ref('')
 const decisions = ref([])
 const run = computed(() => state.value.runs.at(-1))
 const busy = computed(() => run.value?.status === 'RUNNING')
 const hasUnknown = computed(() => state.value.runs.some(item => item.executions?.some(exec => exec.execution_status === 'UNKNOWN')))
+const hasPendingImages = computed(() => state.value.runs.some(item => item.pending_image_generation_id))
 const quarantineCount = computed(() => (state.value.quarantined_checks || 0) + (state.value.unverified_checks || 0))
 const reserved = computed(() => state.value.runs.reduce((sum, item) => sum + (item.costs?.reservations || []).reduce((n, cost) => n + cost.reserved_cny, 0), 0))
 const estimated = computed(() => state.value.runs.reduce((sum, item) => sum
@@ -100,6 +114,7 @@ async function refresh() {
   try {
     state.value = await request.get('/storyboards/3/static-production')
     const current = run.value
+    if (current?.status === 'RUNNING') lastTerminalRun = ''
     if (current && current.status !== 'RUNNING' && lastTerminalRun !== current.run_id) {
       lastTerminalRun = current.run_id
       emit('updated')
@@ -123,6 +138,38 @@ async function decide(candidate, decision) {
     ElMessage.success('制作人决策已记录，视频仍需另行授权')
     emit('updated')
   } catch (e) { error.value = e.message }
+}
+async function resume() {
+  if (starting.value || busy.value) return
+  starting.value = true
+  try {
+    await request.post('/storyboards/3/static-production/' + run.value.run_id + '/resume', {})
+    await refresh()
+  } catch (e) { error.value = e.message } finally { starting.value = false }
+}
+async function resumeWithExisting() {
+  if (starting.value || busy.value) return
+  starting.value = true
+  try {
+    await request.post('/storyboards/3/static-production/' + run.value.run_id + '/resume', { reuse_existing: true })
+    await refresh()
+  } catch (e) { error.value = e.message } finally { starting.value = false }
+}
+async function reviseFromReview() {
+  if (starting.value || busy.value) return
+  starting.value = true
+  try {
+    await request.post('/storyboards/3/static-production/' + run.value.run_id + '/resume', { revise_from_review: true })
+    await refresh()
+  } catch (e) { error.value = e.message } finally { starting.value = false }
+}
+async function checkBilling() {
+  if (checkingBilling.value || busy.value) return
+  checkingBilling.value = true
+  try {
+    await request.post('/storyboards/3/static-production/' + run.value.run_id + '/billing-check', {})
+    await refresh()
+  } catch (e) { error.value = e.message } finally { checkingBilling.value = false }
 }
 onMounted(async () => {
   await refresh()

@@ -1,7 +1,7 @@
 # LocalMiniDrama 阶段状态
 
 > 当前任务：见 [A 镜静态制作状态](localminidrama-static-production-status.md)。
-> 工作台已实际发起制作；Agent 控制面被失效 SSO STS 阻塞，登录恢复超时；真实制作闭环未完成。静态预算授权已有效，不再等待预算确认。
+> SSO 已恢复；工作台已完成真实分析、审片和修正分析。历史候选审核 REVISE/78；新图 26/27 返回 ECONNRESET，状态/费用未知，闭环未通过验收。预算授权继续有效，不启动视频。
 
 > 2026-10-13 接手更新：当前事实、真实 Agent 接入与唯一下一步见
 > [真实 Agent 接手记录](localminidrama-real-agent-handoff-2026-10-13.md)。

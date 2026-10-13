@@ -1,7 +1,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const Database = require('better-sqlite3');
-const { quarantine, reserve, validateReview, validateAnalysis, approvedStoryboard, status } = require('../src/services/staticProductionService');
+const { quarantine, reserve, validateReview, validateAnalysis, approvedStoryboard, status, assertNewCorrectivePrompt } = require('../src/services/staticProductionService');
 const { hash } = require('../src/services/managedAgentReviewEvidence');
 function database(description) {
   const db = new Database(':memory:');
@@ -72,4 +72,12 @@ test('confirmed preflight failure releases only its reservation; UNKNOWN keeps b
     assert.equal(projected[1].costs.reservations[0].reserved_cny, 2);
     assert.deepEqual(JSON.parse(db.prepare('SELECT description FROM storyboards').get().description).static_production_runs, runs);
   } finally { db.close(); }
+});
+test('unknown generation cannot be resent with the same prompt or without a reviewed correction round', () => {
+  const run = { corrective_generation_authorized: true,
+    executions: [{ stage: 'analysis-1', result: { optimized_prompt: 'original test prompt' } }] };
+  assert.throws(() => assertNewCorrectivePrompt(run, 'original test prompt', 2), /未知图片请求禁止重发/);
+  assert.throws(() => assertNewCorrectivePrompt(run, 'new reviewed test prompt', 1), /未知图片请求禁止重发/);
+  assert.throws(() => assertNewCorrectivePrompt({ ...run, corrective_generation_authorized: false }, 'new reviewed test prompt', 2), /未知图片请求禁止重发/);
+  assert.doesNotThrow(() => assertNewCorrectivePrompt(run, 'new reviewed test prompt', 2));
 });

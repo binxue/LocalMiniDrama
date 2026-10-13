@@ -301,6 +301,8 @@ function setupRouter(cfg, db, log) {
   r.post('/storyboards/:id/quality-check', qualityChecks.importQualityCheck);
   r.post('/storyboards/:id/static-production', staticProduction.start);
   r.get('/storyboards/:id/static-production', staticProduction.status);
+  r.post('/storyboards/:id/static-production/:runId/resume', staticProduction.resume);
+  r.post('/storyboards/:id/static-production/:runId/billing-check', staticProduction.billing);
   r.get('/storyboards/:id/quality-checks', qualityChecks.getQualityChecks);
   r.post('/storyboards/:id/producer-decision', qualityChecks.recordProducerDecision);
   r.get('/storyboards/:id/producer-decisions', qualityChecks.getProducerDecisions);

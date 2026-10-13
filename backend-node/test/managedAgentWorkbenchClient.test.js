@@ -22,7 +22,9 @@ test('billable send is preceded by durable UNKNOWN and binds actual attached-ima
       return { data: [{ type: 'user.message', id: 'send-test-only', content: [{ type: 'text', text: prompt },
         { type: 'image', source: { file_id: 'file-test-only' } }] }] };
     }
-    return { data: [{ id: 'usage-test-only', type: 'span.model_request_end', model_usage: { input_tokens: 100, output_tokens: 50 } },
+    return { data: [{ id: 'status-before-test', type: 'session.status_running' },
+      { id: 'send-test-only', type: 'user.message' },
+      { id: 'usage-test-only', type: 'span.model_request_end', model_usage: { input_tokens: 100, output_tokens: 50 } },
       { id: 'reply-test-only', type: 'agent.message', content: [{ type: 'text', text: JSON.stringify(result) }] },
       { id: 'idle-test-only', type: 'session.status_idle' }] };
   };
@@ -45,4 +47,21 @@ test('narrative/invalid Agent JSON cannot become mock success; credential string
   assert.throws(() => parseAgentJson('Agent unavailable; use historical 88 score'));
   assert.equal(redact('api_key=TEST_SECRET Bearer TEST_TOKEN').includes('TEST_SECRET'), false);
   assert.equal(redact('api_key=TEST_SECRET Bearer TEST_TOKEN').includes('TEST_TOKEN'), false);
+});
+test('resume collects the existing turn with inclusive cursor without any billable write', async () => {
+  const record = { execution_id: 'exec-test-only', input_hash: 'hash-test', session_id: 'session-test-only',
+    submit_event_id: 'send-test-only', execution_status: 'UNKNOWN', error: { message: 'previous test interruption' } };
+  const client = new ManagedAgentWorkbenchClient({ root: os.tmpdir() });
+  client.command = async args => {
+    assert.equal(args[3], 'list');
+    return { data: [{ id: 'send-test-only', type: 'user.message' },
+      { id: 'reply-test-only', type: 'agent.message', content: [{ type: 'text', text: JSON.stringify({
+        execution_id: record.execution_id, input_hash: record.input_hash, verdict: 'REVISE', score: 60,
+      }) }] }, { id: 'idle-test-only', type: 'session.status_idle' }] };
+  };
+  const result = await client.collect(record);
+  assert.equal(result.execution.execution_status, 'COMPLETED');
+  assert.equal(result.execution.result_event_id, 'reply-test-only');
+  assert.equal(result.execution.previous_errors.length, 1);
+  assert.equal(result.execution.submit_event_id, 'send-test-only');
 });

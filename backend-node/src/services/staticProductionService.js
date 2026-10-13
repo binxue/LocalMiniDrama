@@ -125,6 +125,12 @@ function releaseUnsubmittedReservations(run) {
     }
   }
 }
+function assertNewCorrectivePrompt(run, prompt, round) {
+  const originalPrompt = run.executions.find(item => item.stage === 'analysis-1')?.result?.optimized_prompt;
+  if (!run.corrective_generation_authorized || round !== 2 || hash(prompt) === hash(originalPrompt || '')) {
+    throw new Error('未知图片请求禁止重发；只允许依据真实审片意见提交不同的修正提示词');
+  }
+}
 async function execute(db, cfg, log, run, dependencies = {}) {
   const initial = context(db, cfg);
   const evidenceRoot = process.env.LOCALMINIDRAMA_STATIC_EVIDENCE_ROOT || 'H:/localminidrama-runtime-static/evidence';
@@ -145,14 +151,23 @@ async function execute(db, cfg, log, run, dependencies = {}) {
     persist(db, run);
     taskService.updateTaskStatus(db, run.task_id, 'processing', progress, message);
   };
+  const agentStage = async (stage, request) => {
+    const existing = run.executions.find(item => item.stage === stage);
+    if (existing?.execution_status === 'COMPLETED' && existing.result) return { execution: existing, result: existing.result };
+    if (existing?.session_id && existing.submit_event_id && ['UNKNOWN', 'RUNNING'].includes(existing.execution_status)) {
+      return client.collect(existing);
+    }
+    if (existing) throw new Error('Existing Agent attempt cannot be resent; inspect its evidence');
+    reserve(db, run, 'managed_agent', 2, stage);
+    return client.run(request);
+  };
   try {
     let correction = null;
     for (let round = 1; round <= 2; round++) {
       context(db, cfg); // Revalidate authority before each new round.
       const analyzeStage = 'analysis-' + round;
       update(analyzeStage, round === 1 ? 'Agent 专业分析与首帧提示词优化' : 'Agent 根据真实审片缺陷修正提示词', 10 + (round - 1) * 40);
-      reserve(db, run, 'managed_agent', 2, analyzeStage);
-      const analysis = await client.run({ ...AGENTS.analyze, environmentId: ENVIRONMENT_ID, stage: analyzeStage,
+      const analysis = await agentStage(analyzeStage, { ...AGENTS.analyze, environmentId: ENVIRONMENT_ID, stage: analyzeStage,
         images: [...initial.files, ...(round > 1 ? [safeMedia(initial.root, run.candidates.at(-1).local_path)] : [])],
         input: { instructions: '你是专业摄影指导。仅分析已批准 A 镜首帧，不修改导演方案。禁止调用任何工具或生成媒体。'
           + '三张图片按顺序为场景、手机、茶杯。首帧是动作起点：右手在手机边缘尚未推送，手机位于画面右侧，中央偏左留空，远侧右角漏雨处有半满无柄琥珀玻璃茶杯。'
@@ -168,15 +183,26 @@ async function execute(db, cfg, log, run, dependencies = {}) {
       run.analysis = analysis.result.analysis;
       persist(db, run);
       let candidate;
-      if (round === 1 && run.candidate_strategy === 'reuse_latest') {
+      const previousCandidate = run.candidates.find(item => item.round === round);
+      if (previousCandidate) {
+        candidate = db.prepare('SELECT * FROM image_generations WHERE id = ?').get(previousCandidate.image_generation_id);
+        if (candidate?.status !== 'completed') throw new Error('Recorded candidate is no longer completed');
+      } else if (round === 1 && run.candidate_strategy === 'reuse_latest') {
         candidate = db.prepare("SELECT * FROM image_generations WHERE storyboard_id = 3 AND status = 'completed' AND deleted_at IS NULL AND model = ? AND size = '1440x2560' AND reference_images = ? ORDER BY id DESC LIMIT 1")
           .get(MODEL, JSON.stringify(initial.shot.references.map(item => item.path)));
         if (!candidate?.local_path) throw new Error('没有符合固定规格和参考合同的可复用候选');
       } else {
         update('generation-' + round, '使用既有生成服务创建新首帧候选', 30 + (round - 1) * 40);
-        reserve(db, run, 'seedream_image', 1, 'generation-' + round);
+        if (!run.pending_image_generation_id && run.costs.reservations.some(item => item.stage === 'generation-' + round)) {
+          throw new Error('本轮已有图片请求，禁止再次提交；需先核实原请求状态');
+        }
+        if (run.unresolved_image_generations?.length && !run.pending_image_generation_id) {
+          assertNewCorrectivePrompt(run, analysis.result.optimized_prompt, round);
+        }
+        if (!run.pending_image_generation_id) reserve(db, run, 'seedream_image', 1, 'generation-' + round);
         context(db, cfg);
-        const created = (dependencies.createImage || imageService.create)(db, log, {
+        const created = run.pending_image_generation_id ? { id: run.pending_image_generation_id }
+          : (dependencies.createImage || imageService.create)(db, log, {
           storyboard_id: 3, drama_id: 2, provider: 'volcengine', model: MODEL, size: '1440x2560',
           aspect_ratio: '9:16', frame_type: 'first', prompt: analysis.result.optimized_prompt,
           negative_prompt: analysis.result.negative_prompt || '', reference_images: initial.shot.references.map(item => item.path),
@@ -195,17 +221,16 @@ async function execute(db, cfg, log, run, dependencies = {}) {
         }
       }
       const file = safeMedia(initial.root, candidate.local_path);
-      const entry = { round, image_generation_id: candidate.id, version: 'image-' + candidate.id,
+      const entry = previousCandidate || { round, image_generation_id: candidate.id, version: 'image-' + candidate.id,
         local_path: candidate.local_path, media_sha256: hash(fs.readFileSync(file)),
         acquisition: round === 1 && run.candidate_strategy === 'reuse_latest' ? 'REUSED_EXISTING' : 'GENERATED_BY_WORKBENCH',
         generation_status: 'completed', generated_prompt: candidate.prompt,
         analysis_execution_id: analysis.execution.execution_id };
-      run.candidates.push(entry);
+      if (!previousCandidate) run.candidates.push(entry);
       run.pending_image_generation_id = null;
       persist(db, run);
       update('review-' + round, '真实视觉检查 Agent 审核当前媒体版本', 50 + (round - 1) * 40);
-      reserve(db, run, 'managed_agent', 2, 'review-' + round);
-      const reviewed = await client.run({ ...AGENTS.review, environmentId: ENVIRONMENT_ID, stage: 'review-' + round,
+      const reviewed = await agentStage('review-' + round, { ...AGENTS.review, environmentId: ENVIRONMENT_ID, stage: 'review-' + round,
         images: [file, ...initial.files], input: {
           instructions: '你是专业影视视觉检查员。审核第一张实际候选首帧；后面三张按顺序为批准的场景、手机、茶杯参考。'
             + '禁止工具调用、媒体生成或伪造可见事实。不得把视频动作或声音未发生当作静态图失败。'
@@ -234,6 +259,10 @@ async function execute(db, cfg, log, run, dependencies = {}) {
       if (!result.ok || !imported.success) throw new Error('真实质检回流失败，保留结果，不重发 Agent');
       persist(db, run);
       if (reviewed.result.verdict === 'APPROVE') break;
+      if (run.unresolved_image_generations?.length && !run.corrective_generation_authorized) {
+        run.correction_blocker = '已有云端状态未知的图片请求，保留缺陷意见，不自动重拍';
+        break;
+      }
       correction = { verdict: reviewed.result.verdict, observations: reviewed.result.observations, recommendations: reviewed.result.recommendations };
     }
     const best = [...run.candidates].filter(item => item.review).sort((a, b) =>
@@ -242,6 +271,7 @@ async function execute(db, cfg, log, run, dependencies = {}) {
     run.status = best?.review.verdict === 'APPROVE' ? 'READY_FOR_PRODUCER' : 'NEEDS_REVISION';
     run.stage = 'producer_decision';
     run.message = run.status === 'READY_FOR_PRODUCER' ? '真实审核通过，最佳候选等待制作人决定' : '候选已真实审核，仍有缺陷，等待制作人修正或重拍决策';
+    if (!run.costs.billing_checked_at) await queryBilling(client, run, run.run_id + '-billing');
     persist(db, run);
     taskService.updateTaskResult(db, run.task_id, { run_id: run.run_id, status: run.status, best_candidate_image_id: run.best_candidate_image_id });
   } catch (error) {
@@ -269,8 +299,10 @@ function start(db, cfg, log, body = {}) {
   const repeated = previous.find(item => item.request_id === body.request_id);
   if (repeated) return repeated;
   if (previous.some(item => item.status === 'RUNNING' || item.executions?.some(exec => exec.execution_status === 'UNKNOWN'))) throw new Error('已有进行中/云端未知执行，禁止重复收费提交');
+  if (previous.some(item => item.pending_image_generation_id)) throw new Error('已有云端状态未核实的图片任务，禁止重新生成');
   const strategy = body.candidate_strategy || 'generate';
   if (!['generate', 'reuse_latest'].includes(strategy)) throw new Error('候选策略无效');
+  if (strategy === 'generate' && previous.some(item => item.unresolved_image_generations?.length)) throw new Error('已有未知图片请求，不能重新开始同一生成；请基于真实审片意见修正或核实云端状态');
   quarantine(db);
   const task = taskService.createTask(db, log, 'static_production', '3');
   const run = { run_id: 'static-' + crypto.randomUUID(), request_id: body.request_id, task_id: task.id,
@@ -285,4 +317,74 @@ function start(db, cfg, log, body = {}) {
   setImmediate(() => execute(db, cfg, log, run).catch(error => log.error('Static production persistence failure', { error: error.message })));
   return run;
 }
-module.exports = { start, status, quarantine, validateAnalysis, validateReview, context, execute, reserve, approvedStoryboard };
+function resume(db, cfg, log, runId, options = {}) {
+  context(db, cfg);
+  const run = (readDescription(db).static_production_runs || []).find(item => item.run_id === runId);
+  if (!run) throw new Error('制作任务不存在');
+  if (running.has(runId)) return run;
+  const reuseAfterUnknownImage = options.reuse_existing === true && run.pending_image_generation_id && run.generation_error && run.candidates.length === 0;
+  const reviseFromRealReview = options.revise_from_review === true && run.status === 'NEEDS_REVISION';
+  if (reuseAfterUnknownImage) {
+    const image = db.prepare('SELECT id, storyboard_id, status, error_msg FROM image_generations WHERE id = ?').get(run.pending_image_generation_id);
+    if (!image || image.storyboard_id !== 3 || !['failed', 'processing', 'pending'].includes(image.status)) throw new Error('未知图片任务证据不匹配，请先核对状态');
+    run.unresolved_image_generations = [...(run.unresolved_image_generations || []), {
+      image_generation_id: image.id, local_status: image.status, cloud_status: 'UNKNOWN', actual_cost_cny: null,
+      error: image.error_msg || run.generation_error, noted_at: new Date().toISOString(),
+    }];
+    run.pending_image_generation_id = null;
+    run.original_candidate_strategy = run.candidate_strategy;
+    run.candidate_strategy = 'reuse_latest';
+    run.generation_step_status = 'UNKNOWN_NO_DELIVERY';
+  } else if (reviseFromRealReview) {
+    const reviewed = run.candidates.find(item => item.review?.verdict === 'REVISE'
+      && run.executions.some(execution => execution.execution_id === item.review_execution_id
+        && execution.execution_status === 'COMPLETED' && execution.result_event_id));
+    if (!reviewed || run.candidates.length > 1) throw new Error('没有可执行修正的真实审片版本');
+    run.corrective_generation_authorized = true;
+    run.corrective_generation_reason = { source_image_generation_id: reviewed.image_generation_id,
+      source_review_execution_id: reviewed.review_execution_id, new_prompt_required: true,
+      unknown_image_requests_preserved: true };
+    delete run.correction_blocker;
+  } else if (!run.executions.some(item => ['UNKNOWN', 'RUNNING'].includes(item.execution_status) && item.session_id && item.submit_event_id)) throw new Error('没有可继续查询的 Agent 提交；禁止重发');
+  run.previous_errors = [...(run.previous_errors || []), ...(run.error ? [run.error] : [])];
+  delete run.error;
+  run.status = 'RUNNING';
+  run.message = reuseAfterUnknownImage ? '不重发未知图片请求；工作台自动复用合规候选并真实审核' : '继续查询原 Agent 会话，不重发消息';
+  if (reviseFromRealReview) run.message = '依据真实审片意见修正；不重发未知请求，要求新提示词且保留其预算';
+  persist(db, run);
+  db.prepare("UPDATE async_tasks SET error = NULL WHERE id = ? AND type = 'static_production'").run(run.task_id);
+  running.add(runId);
+  setImmediate(() => execute(db, cfg, log, run).catch(error => log.error('Static production resume persistence failure', { error: error.message })));
+  return run;
+}
+async function checkBilling(db, cfg, log, runId) {
+  context(db, cfg);
+  const run = (readDescription(db).static_production_runs || []).find(item => item.run_id === runId);
+  if (!run) throw new Error('制作任务不存在');
+  if (running.has(runId)) throw new Error('制作执行中，请稍后核对账单');
+  const root = path.join(process.env.LOCALMINIDRAMA_STATIC_EVIDENCE_ROOT || 'H:/localminidrama-runtime-static/evidence', runId);
+  const client = new ManagedAgentWorkbenchClient({ root });
+  await queryBilling(client, run, runId + '-billing-check-' + Date.now());
+  persist(db, run);
+  return run.costs;
+}
+async function queryBilling(client, run, evidenceName) {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' })
+    .formatToParts(new Date(run.created_at)).map(item => [item.type, item.value]));
+  const day = parts.year + '-' + parts.month + '-' + parts.day;
+  try {
+    const endpoint = run.executions[0]?.model?.Id;
+    if (!endpoint) throw new Error('没有已核实的 Agent 计费接入点');
+    const billing = await client.command(['billing', 'list', '--start', day.slice(0, 7), '--interval', 'detail',
+      '--day', day, '--endpoint', endpoint], evidenceName);
+    run.costs.billing_status = 'REQUIRES_ATTRIBUTION';
+    run.costs.billing_summary = { returned: billing.returned, is_truncated: billing.is_truncated, partial_failures: billing.partial_failures };
+    delete run.costs.billing_error;
+  } catch (error) {
+    run.costs.billing_status = 'UNAVAILABLE';
+    run.costs.billing_error = error.message;
+  }
+  run.costs.billing_checked_at = new Date().toISOString();
+  return run.costs;
+}
+module.exports = { start, status, resume, checkBilling, quarantine, validateAnalysis, validateReview, context, execute, reserve, approvedStoryboard, assertNewCorrectivePrompt };
