@@ -5,14 +5,14 @@ This is the single continuing plan for the product goal. Status is evidence-base
 | ID | User-visible goal | Status | Next evidence |
 |---|---|---|---|
 | G1 | Create an original work and first episode | partial | Persisted work/source registration, real 3014 flow, review and export |
-| G2 | Adapt a lawful test novel | not started | Upload/import provenance, adaptation plan, real reviewable episode |
+| G2 | Adapt a lawful test novel | partial | `adapted-intake` has source provenance and a real reviewed episode 1; adaptation batch episode 2 is paused on an incomplete Writer Session |
 | G3 | Continue next episode and ranges | partial | Second real episode, pinned continuity, range batch evidence; deterministic routing now ready |
 | G4 | Preserve continuity across episodes | implemented/tested | Real multi-episode content and producer quality review |
 | G5 | Automatically review Writer output | partial | Real second-episode Editor result; bounded repair evidence |
 | G6 | Natural-language revision | partial | Existing revision chain is real; connect next/range/revise UX without technical forms |
 | G7 | Long-running reliable tasks | partial | SQLite recovery, pause/resume, explicit terminal retry, browser restart proof |
 | G8 | Ordinary-user 3014 experience | partial | Work creation, episode progress, reading, review and export in Chromium; progress controls now exposed |
-| G9 | Real isolated five-episode acceptance | not started | Five real candidates, continuity report, review records and export |
+| G9 | Real isolated five-episode acceptance | partial | Real adapted episode 1 passed Writer→Editor; real range batch 2—5 was created and paused safely at episode 2 incomplete Writer, episodes 3—5 remain queued |
 
 ## Ordered work
 

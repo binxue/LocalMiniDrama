@@ -47,6 +47,22 @@ test('batch schema preserves awaiting recovery as a paused, resumable state', ()
   assert.equal(batch.items[1].status, 'queued');
 });
 
+test('episode review accepts the Chinese 评定 heading used by a completed Editor', async () => {
+  const db = new Database(':memory:'); service.ensureTable(db);
+  const text = 'adapted candidate';
+  const sha = require('crypto').createHash('sha256').update(text).digest('hex');
+  const now = new Date().toISOString();
+  db.prepare(`INSERT INTO script_assistant_episode_candidates(candidate_id,work_id,episode_no,title,status,candidate_text,candidate_sha256,editor_task_id,created_at) VALUES(?,?,?,?,?,?,?,?,?)`)
+    .run('adapted-candidate', 'adapted-intake', 1, '第1集', 'reviewing', text, sha, 'editor-adapted', now);
+  db.prepare(`INSERT INTO managed_agent_tasks(task_id,work_id,agent_id,task_status,input_version,input_text,output_text,candidate_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)`)
+    .run('writer-adapted', 'adapted-intake', 'agent-20261011131619-47ft8', 'completed', 'input', 'input', text, 'adapted-candidate', now, now);
+  db.prepare(`INSERT INTO managed_agent_tasks(task_id,work_id,agent_id,task_status,input_version,input_text,output_text,candidate_id,candidate_sha256,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)`)
+    .run('editor-adapted', 'adapted-intake', 'agent-20261011131710-ncebb', 'completed', 'input', 'input', '**评定：CONDITIONAL PASS**\n\n证据', 'adapted-candidate:editor', sha, now, now);
+  const recovered = await service.recoverEpisodeCandidate(db, {}, {}, 'adapted-candidate');
+  assert.equal(recovered.status, 'completed');
+  assert.match(recovered.editor_review, /CONDITIONAL PASS/);
+});
+
 test('script assistant rejects an unverified source hash', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'localminidrama-assistant-'));
   const script = path.join(dir, 'ep1.md'); fs.writeFileSync(script, 'source');

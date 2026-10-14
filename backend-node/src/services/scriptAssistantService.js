@@ -113,7 +113,7 @@ function createRevision(db, log, config, workId, sourceId, request = '') { ensur
 
 function reviewVerdict(text) {
   const heading = String(text || '').split('\n').slice(0, 4).join('\n')
-  const match = heading.match(/(?:结论|裁定|判定|Verdict)[^\n:：]*[:：]\s*(?:\*\*)?(CONDITIONAL PASS|PASS|FAIL)\b/i)
+  const match = heading.match(/(?:结论|裁定|判定|评定|Verdict)[^\n:：]*[:：]\s*(?:\*\*)?(CONDITIONAL PASS|PASS|FAIL)\b/i)
   return match ? match[1].toUpperCase() : 'UNKNOWN'
 }
 function approveRevision(db, id, actor='user', expected={}) {

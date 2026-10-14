@@ -1,5 +1,13 @@
 # Current Action
 
+## 2026-10-14 改编首集真实验收与五集批次推进
+
+合法测试改编作品 `adapted-intake` 已完成一次真实 Writer→Editor：候选 `cand_2bf3b7f1-0f34-4daf-8765-537ec8d89404`，Writer `mat_41339582-b6ed-4bc3-bc82-a9a208943326` / Session `sesn-20261014095104-0mmg4`，Editor `mat_e7ceda50-f254-410f-a92e-00bab3f52eec` / Session `sesn-20261014095348-368dw`，正文 SHA `1c8b56fa5196a2861a349d023fa278fc393becd7442014e2a55a48b0c1317234`，真实结论 `CONDITIONAL PASS`，批准仍为 `not_approved`。首个候选曾因 Editor 使用“评定”标题被错误标记失败；已修复解析并通过原 Editor Task 恢复，没有重发调用。
+
+已启动真实第 2—5 集批次 `batch_95d4741c-7912-4a5e-82ac-f1cb115e2104`。第 2 集 Writer `mat_dd4b6347-c934-48de-9057-f17a4be067a1` / Session `sesn-20261014100336-85kz2` 为 `incomplete`，只有一个未完成模型请求、无正文；批次现为 `paused`，第 2 集 `awaiting_recovery`，第 3—5 集保持 `queued`，未重复提交。真实五集验收尚未通过。
+
+本轮新增真实用量：改编第 1 集 Writer 输入 5,533 / 输出 4,981 / 缓存读取 4,920；Editor 输入 8,183 / 输出 6,620 / 缓存读取 3,896；第 2 集 Writer 0/0/0，1 个未完成请求。价格未配置，不计算金额。
+
 ## 2026-10-14 批次恢复状态修复与运行实例收口
 
 本轮修复 `executeBatch`：分集候选进入 `awaiting_recovery` 时，批次与 batch item 均保持可恢复的 `paused/awaiting_recovery`，不会被外层异常处理误写为永久 `failed`；已完成集数仍按条件更新保持不重复计数。新增回归测试覆盖已完成集保留和未完成集排队状态。
