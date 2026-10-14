@@ -218,7 +218,7 @@ function diffBlocks(revision) {
   return revisionDiff(source.text, revision.candidate_text || '', revision.source_sha256, revision.candidate_sha256)
 }
 function visibleDiffBlocks(revision) { const blocks = diffBlocks(revision); return diffMode.value[revision.revision_id] === 'all' ? blocks : blocks.filter(b => b.type !== 'unchanged') }
-function editorLabel(text) { const m = String(text || '').split('\n').slice(0,4).join('\n').match(/(?:结论|裁定|判定|Verdict)[^\n:：]*[:：]\s*(?:\*\*)?(CONDITIONAL PASS|PASS|FAIL)\b/i); return m ? ({ PASS: '审核通过', 'CONDITIONAL PASS': '审核有条件通过，仍需修改或确认', FAIL: '审核发现问题' }[m[1].toUpperCase()]) : '审核结论待核实' }
+function editorLabel(text) { const m = String(text || '').split('\n').slice(0,4).join('\n').match(/(?:结论|裁定|判定|评定|Verdict)[^\n:：]*[:：]\s*(?:\*\*)?(CONDITIONAL PASS|PASS|FAIL)\b/i); return m ? ({ PASS: '审核通过', 'CONDITIONAL PASS': '审核有条件通过，仍需修改或确认', FAIL: '审核发现问题' }[m[1].toUpperCase()]) : '审核结论待核实' }
 function exportText(title, text) {
   const body = `# ${title}\n\n> 草稿导出，尚未最终确认；AI 审核不替代人工批准。\n\n${text}`
   const url = URL.createObjectURL(new Blob([body], { type: 'text/markdown;charset=utf-8' }))
