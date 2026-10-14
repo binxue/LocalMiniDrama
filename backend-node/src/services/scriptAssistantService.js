@@ -65,7 +65,7 @@ function ensureTable(db) {
     error_text TEXT
   )`);
   const batchColumns = new Set(db.prepare('PRAGMA table_info(script_assistant_batches)').all().map(c => c.name));
-  for (const [column, type] of [['planning_status', 'TEXT'], ['planning_task_id', 'TEXT'], ['planning_output', 'TEXT'], ['planning_hash', 'TEXT'], ['planning_completed_at', 'TEXT']]) {
+  for (const [column, type] of [['planning_status', 'TEXT'], ['planning_task_id', 'TEXT'], ['planning_output', 'TEXT'], ['planning_hash', 'TEXT'], ['planning_completed_at', 'TEXT'], ['planning_expert_task_ids_json', "TEXT NOT NULL DEFAULT '[]'"], ['planning_expert_outputs_json', "TEXT NOT NULL DEFAULT '[]'"]]) {
     if (!batchColumns.has(column)) db.exec(`ALTER TABLE script_assistant_batches ADD COLUMN ${column} ${type}`);
   }
   db.exec(`CREATE TABLE IF NOT EXISTS script_assistant_batch_items (
@@ -156,13 +156,18 @@ function continuityContext(db, candidate) {
   }
   return latestEpisodeContext(db, candidate.work_id, candidate.episode_no - 1);
 }
+function episodePlanning(planning, episodeNo) {
+  const text=String(planning||'');
+  const marker=new RegExp(`(?:^|\\n)\\s*(?:第\\s*${episodeNo}\\s*集|Episode\\s*${episodeNo})\\s*[:：]?[\\s\\S]*?(?=(?:\\n\\s*(?:第\\s*\\d+\\s*集|Episode\\s*\\d+)\\s*[:：]?)|$)`,'i').exec(text);
+  return (marker ? marker[0] : text).trim().slice(0,3600);
+}
 async function executeEpisodeCandidate(db, log, config, candidateId) {
   const c = db.prepare('SELECT * FROM script_assistant_episode_candidates WHERE candidate_id=?').get(candidateId); if (!c || c.status !== 'queued') return;
   try {
     const work = loadWork(config, c.work_id, db); const sources = work.sources.filter(s => s.available && ['core', 'continuity', 'script', 'character', 'plan', 'outline', 'beat'].includes(s.kind)); const prior = sources.slice(-6).map(s => `${s.title} (${s.kind}):\n${s.text}`).join('\n');
     const previous = continuityContext(db, c);
     const batch = db.prepare('SELECT planning_output,planning_hash FROM script_assistant_batches b JOIN script_assistant_batch_items i ON i.batch_id=b.batch_id WHERE i.candidate_id=?').get(candidateId);
-    const planning = batch?.planning_output || sources.filter(s => s.available && ['plan', 'outline', 'beat', 'continuity'].includes(s.kind)).map(s => `${s.title}:\n${s.text}`).join('\n').slice(0, 2600) || '尚无集中策划，请依据已核验作品资料形成本集可执行节拍。';
+    const planning = episodePlanning(batch?.planning_output || sources.filter(s => s.available && ['plan', 'outline', 'beat', 'continuity'].includes(s.kind)).map(s => `${s.title}:\n${s.text}`).join('\n').slice(0, 2600), c.episode_no) || '尚无集中策划，请依据已核验作品资料形成本集可执行节拍。';
     const input = `你是Story Writer。只做一次受控文本写作，不加载Skill，不调用工具、文件系统、网络或其他Agent。创作《${work.title}》第${c.episode_no}集独立候选剧本。不要改写既有集，不写Canon。必须输出完整可读正文，落实本集目标、节拍、场次、人物动机、冲突、反转和集尾钩子，保持人物、道具、事件和悬念连续。\n用户目标：${c.request || '按照当前故事继续创作'}\n全剧策划快照${batch?.planning_hash ? `（SHA256=${batch.planning_hash}）` : ''}：\n${planning.slice(0, 2600)}\n已核验前文资料：\n${prior.slice(-3200)}\n本批次上一集候选（临时事实，非Canon）：\n${previous.slice(-3600)}\n请只返回第${c.episode_no}集正文，不要解释过程。`;
     db.prepare('UPDATE script_assistant_episode_candidates SET context_hash=? WHERE candidate_id=? AND status=?').run(hash(input), candidateId, 'queued');
     const writer = managed.createTask(db, log, { agent_id: 'agent-20261011131619-47ft8', work_id: c.work_id, input, orchestration: true, episode_id: `ep${c.episode_no}`, candidate_id: c.candidate_id, context_hash: hash(input) });
@@ -203,7 +208,7 @@ function createBatch(db, log, config, workId, request, start, end) {
     db.prepare("UPDATE script_assistant_batches SET planning_status='completed',planning_output=?,planning_hash=?,planning_completed_at=?,updated_at=? WHERE batch_id=?").run(output,hash(output),now,now,id);
   } else {
     const planSources=work.sources.filter(s=>s.available&&['core','character','continuity'].includes(s.kind)).map(s=>`${s.title} (${s.kind}):\n${s.text}`).join('\n').slice(0,5200);
-    const planInput=`你是Producer，负责一次性为《${work.title}》第${start}-${end}集批量创作建立可执行策划快照。只输出给Story Writer使用的故事设定、人物目标与关系、分集目标、每集节拍与场次、冲突、反转、集尾钩子、连续性约束、格式与时长要求。不要写正文，不调用工具、文件系统、网络或其他Agent，不加载Skill，不修改Canon。用户要求：${String(request||'按现有规划创作').slice(0,1200)}\n已核验资料：\n${planSources||'暂无集中规划，请基于作品资料形成保守、可执行的范围规划。'}`;
+    const planInput=`你是Producer，负责一次性为《${work.title}》第${start}-${end}集批量创作建立可执行策划快照。只输出给Story Writer使用的故事设定、人物目标与关系、分集目标、每集节拍与场次、冲突、反转、集尾钩子、连续性约束、格式与时长要求。请在计划末尾明确选择需要补充的专家标签（relationship、interactive、story，可多选），供本地编排器调用；没有必要时写“无需专家”。不要写正文，不调用工具、文件系统、网络或其他Agent，不加载Skill，不修改Canon。用户要求：${String(request||'按现有规划创作').slice(0,1200)}\n已核验资料：\n${planSources||'暂无集中规划，请基于作品资料形成保守、可执行的范围规划。'}`;
     try { const planTask=managed.createTask(db,log,{agent_id:PRODUCER,work_id:workId,input:planInput,orchestration:true,episode_id:`batch-plan:${id}`,context_hash:hash(planInput)}); db.prepare("UPDATE script_assistant_batches SET planning_task_id=?,planning_status='running',updated_at=? WHERE batch_id=?").run(planTask.task_id,new Date().toISOString(),id); } catch(e) { db.prepare("UPDATE script_assistant_batches SET planning_status='failed',status='failed',error_text=?,updated_at=? WHERE batch_id=?").run(e.message,new Date().toISOString(),id); }
   }
   setImmediate(()=>executeBatch(db,log,config,id)); return batches(db,workId).find(x => x.batch_id===id);
@@ -212,12 +217,28 @@ async function executeBatch(db,log,config,batchId){
   if(ACTIVE_BATCH_EXECUTIONS.has(batchId)) return;
   const b=db.prepare('SELECT * FROM script_assistant_batches WHERE batch_id=?').get(batchId); if(!b||!['queued','running'].includes(b.status))return;
   if(b.status==='running' && b.current_episode != null) return;
-  if (b.planning_status === 'pending' || b.planning_status === 'running') {
+  if (b.planning_status === 'pending' || b.planning_status === 'running' || b.planning_status === 'experts') {
     if (!b.planning_task_id) { db.prepare("UPDATE script_assistant_batches SET planning_status='failed',status='failed',error_text='Producer策划任务缺失' WHERE batch_id=?").run(batchId); return; }
     const plan = await waitTask(db,b.planning_task_id).catch(e=>({task_status:'incomplete',error_text:e.message}));
     const recoverable=['incomplete','awaiting_recovery','running','submitted','starting'].includes(plan.task_status);
     if (plan.task_status!=='completed' || !plan.output_text) { db.prepare("UPDATE script_assistant_batches SET planning_status=?,status=?,error_text=?,updated_at=? WHERE batch_id=?").run(recoverable?'awaiting_recovery':'failed',recoverable?'paused':'failed',`Producer策划${recoverable?'等待恢复':'失败'}：${plan.error_text||plan.task_status}`,new Date().toISOString(),batchId); return; }
-    db.prepare("UPDATE script_assistant_batches SET planning_status='completed',planning_output=?,planning_hash=?,planning_completed_at=?,error_text=NULL,updated_at=? WHERE batch_id=?").run(plan.output_text,hash(plan.output_text),new Date().toISOString(),new Date().toISOString(),batchId);
+    let expertIds=[]; try { expertIds=JSON.parse(b.planning_expert_task_ids_json||'[]'); } catch { expertIds=[]; }
+    if (!expertIds.length) {
+      const selected=planAgents(plan.output_text||'');
+      if (!selected.length) selected.push('agent-20261011131626-3w9ao','agent-20261011131619-47ft8');
+      const labels={ 'agent-20261011131619-47ft8':'Story Writer','agent-20261011131626-3w9ao':'Relationship Writer','agent-20261011131703-mbc7o':'Interactive Designer' };
+      for (const agent of selected.slice(0,2)) {
+        const expertInput=`${plan.output_text}\n\n你是${labels[agent]||'专业剧本专家'}。只针对第${b.episode_start}-${b.episode_end}集提出可执行的补充资料：人物/关系状态、互动设计或故事结构与节拍。不要写完整剧本，不调用工具或文件，不修改Canon。输出具体事实、风险和每集建议，供Story Writer使用。`;
+        const task=managed.createTask(db,log,{agent_id:agent,work_id:b.work_id,input:expertInput,orchestration:true,episode_id:`batch-expert:${batchId}:${agent}`,context_hash:hash(expertInput)});
+        expertIds.push(task.task_id);
+        db.prepare("UPDATE script_assistant_batches SET planning_expert_task_ids_json=?,planning_status='experts',updated_at=? WHERE batch_id=?").run(JSON.stringify(expertIds),new Date().toISOString(),batchId);
+        const done=await waitTask(db,task.task_id).catch(e=>({task_status:'incomplete',error_text:e.message}));
+        if(done.task_status!=='completed'||!done.output_text){const recoverable=['incomplete','awaiting_recovery','running','submitted','starting'].includes(done.task_status);db.prepare("UPDATE script_assistant_batches SET planning_status=?,status='paused',error_text=?,updated_at=? WHERE batch_id=?").run(recoverable?'awaiting_recovery':'failed',`专家策划${recoverable?'等待恢复':'失败'}：${done.error_text||done.task_status}`,new Date().toISOString(),batchId);return;}
+      }
+    }
+    const expertOutputs=expertIds.map(id=>managed.getTask(db,id)).filter(Boolean).map(t=>`专家(${t.agent_id})：\n${t.output_text||''}`);
+    const combined=`Producer策划：\n${plan.output_text}\n\n${expertOutputs.join('\n\n')}`.slice(0,7600);
+    db.prepare("UPDATE script_assistant_batches SET planning_status='completed',planning_output=?,planning_hash=?,planning_expert_outputs_json=?,planning_completed_at=?,error_text=NULL,updated_at=? WHERE batch_id=?").run(combined,hash(combined),JSON.stringify(expertOutputs),new Date().toISOString(),new Date().toISOString(),batchId);
   }
   const claimed=db.prepare("UPDATE script_assistant_batches SET status='running',updated_at=? WHERE batch_id=? AND status='queued'").run(new Date().toISOString(),batchId);
   if(!claimed.changes && b.status!=='running') return;
@@ -570,4 +591,4 @@ function budget(db) {
   return { chat: { used: chatUsed, limit: chatLimit, remaining: chatLimit > 0 ? Math.max(0, chatLimit - chatUsed) : null }, orchestration: { used: orchestrationUsed, limit: orchestrationLimit, remaining: orchestrationLimit > 0 ? Math.max(0, orchestrationLimit - orchestrationUsed) : null }, in_flight: db.prepare("SELECT count(*) n FROM managed_agent_tasks WHERE task_status IN ('queued','starting','submitted','running')").get().n };
 }
 
-module.exports = { ensureTable, works, loadWork, registerWork, summary, messages, buildInput, classifyCreativeRequest, createMessage, budget, runs, createRun, revisions, episodeCandidates, batches, createEpisodeCandidate, retryEpisodeCandidate, createBatch, pauseBatch, resumeBatch, approveEpisodeCandidate, reviewDecisions, saveReviewDecision, createRevision, approveRevision, refreshRevision, createEditorRecovery, recoverEpisodeCandidate, PRODUCER, _validateBatchRange: validateBatchRange, _latestEpisodeContext: latestEpisodeContext, _continuityContext: continuityContext };
+module.exports = { ensureTable, works, loadWork, registerWork, summary, messages, buildInput, classifyCreativeRequest, createMessage, budget, runs, createRun, revisions, episodeCandidates, batches, createEpisodeCandidate, retryEpisodeCandidate, createBatch, pauseBatch, resumeBatch, approveEpisodeCandidate, reviewDecisions, saveReviewDecision, createRevision, approveRevision, refreshRevision, createEditorRecovery, recoverEpisodeCandidate, PRODUCER, _validateBatchRange: validateBatchRange, _episodePlanning: episodePlanning, _latestEpisodeContext: latestEpisodeContext, _continuityContext: continuityContext };

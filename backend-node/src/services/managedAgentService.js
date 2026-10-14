@@ -133,7 +133,7 @@ async function execute(db, log, taskId) {
   if (!task || task.task_status !== 'queued') return;
   try {
     update(db, taskId, { task_status: 'starting' });
-    const controlledEpisodeAgent = (task.episode_id != null && ['agent-20261011131619-47ft8', 'agent-20261011131710-ncebb'].includes(task.agent_id)) || (task.episode_id?.startsWith('batch-plan:') && task.agent_id === 'agent-20261011131513-17rey');
+    const controlledEpisodeAgent = (task.episode_id != null && ['agent-20261011131619-47ft8', 'agent-20261011131710-ncebb'].includes(task.agent_id)) || task.episode_id?.startsWith('batch-plan:') || task.episode_id?.startsWith('batch-expert:');
     const session = await createSession(task.agent_id, `LocalMiniDrama ${task.work_id} ${taskId}`, { controlledEpisodeAgent });
     const sessionId = session.id;
     update(db, taskId, { session_id: sessionId, model_id: session.model || null, session_create_json: JSON.stringify(session.raw), task_status: 'submitted' });
@@ -167,7 +167,9 @@ function createTask(db, log, { agent_id: agentId, work_id: workId, input, orches
   if (candidateId) { const prior = db.prepare('SELECT task_id,work_id,agent_id,input_version FROM managed_agent_tasks WHERE candidate_id=?').get(candidateId); if (prior) { if (prior.work_id !== workId || prior.agent_id !== agentId || prior.input_version !== sha(input)) throw new Error('候选任务幂等键与现有输入不一致'); return row(db, prior.task_id); } }
   if (db.prepare('SELECT 1 FROM managed_agent_tasks WHERE attempt_id = ?').get(attemptId)) throw new Error('attempt_id 已存在，禁止重复提交');
   const insert = db.transaction(() => {
-    if (db.prepare("SELECT count(*) n FROM managed_agent_tasks WHERE task_status IN ('queued','starting','submitted','running')").get().n) throw new Error('已有进行中的 Agent 任务');
+    const activeCount = db.prepare("SELECT count(*) n FROM managed_agent_tasks WHERE task_status IN ('queued','starting','submitted','running')").get().n;
+    if (activeCount && !orchestration) throw new Error('已有进行中的 Agent 任务');
+    if (orchestration && activeCount >= 3) throw new Error('专业编排并发已达安全上限');
     const chatLimit = Number(process.env.LOCALMINIDRAMA_CHAT_DAILY_LIMIT || 0);
     if (!orchestration && chatLimit > 0 && db.prepare("SELECT count(*) n FROM managed_agent_tasks WHERE task_mode = 'chat' AND created_at >= ?").get(new Date(Date.now() - 86400000).toISOString()).n >= chatLimit) throw new Error(`聊天额度已达到配置上限（${chatLimit}/24小时），请等待滚动窗口恢复`);
     const taskId = `mat_${crypto.randomUUID()}`;

@@ -36,6 +36,12 @@ test('batch range validates more than the legacy five episode limit without sche
   assert.throws(() => service._validateBatchRange(1, 51), /1–50集/);
 });
 
+test('episode planning selects only the requested episode section', () => {
+  const plan = '第1集：钥匙出现，结尾发现脚印。\n第2集：主角追踪脚印，雨夜冲突升级。\n第3集：揭开身份并留下新钩子。';
+  assert.equal(service._episodePlanning(plan, 2), '第2集：主角追踪脚印，雨夜冲突升级。');
+  assert.equal(service._episodePlanning(plan, 9), plan);
+});
+
 test('batch schema preserves awaiting recovery as a paused, resumable state', () => {
   const db = new Database(':memory:'); service.ensureTable(db);
   const now = new Date().toISOString();
