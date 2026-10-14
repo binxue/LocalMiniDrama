@@ -62,6 +62,15 @@ function context(db, cfg, storyboardId = 3) {
       shot.references.push({ label: prop.name, path: prop.local_path });
     }
   }
+  const proposalCharacters = proposal.asset_references?.characters || [];
+  for (const character of proposalCharacters) {
+    const name = String(character?.name || character?.description || '').match(/黎夏|我（游客）|男主/)?.[0];
+    if (!name || name === '男主') continue;
+    const row = db.prepare('SELECT name, local_path FROM characters WHERE drama_id = ? AND name = ? AND local_path IS NOT NULL ORDER BY id LIMIT 1').get(sb.drama_id, name);
+    if (row?.local_path && !shot.references.some(item => item.path === row.local_path)) {
+      shot.references.push({ label: row.name, path: row.local_path });
+    }
+  }
   const root = fs.realpathSync(path.resolve(cfg.storage?.local_path || 'data/storage'));
   const refs = [...(shot.references || [])];
   let characterRefs = [];
