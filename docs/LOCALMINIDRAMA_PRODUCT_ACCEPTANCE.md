@@ -61,6 +61,10 @@
 
 ### 新集创作链路诊断（2026-10-14）
 
+追加受控复测：新集 Writer Session 使用一次性 System 覆盖，平台回读显示单轮写作约束已生效；两次受控请求均没有 `agent.tool_use`，但都停在 `span.model_request_start`，没有模型 usage 或 `agent.message`。其中最后 Task `mat_4ea34eb8-aa5e-447f-b4a6-8f5bbceac44b` / Session `sesn-20261014042029-xnnx4` 经 5688 重启后进入 `awaiting_recovery`，不会自动重发。空工具覆盖曾导致同样无正文，已改为保留 Agent 工具集、覆盖 System/Skills 的兼容模式；该模式仍未获得正文，剩余问题属于当前 Agent/模型数据面终态阻塞。
+
+恢复与连续性实测补充：新增候选回查接口后，第一集候选 `cand_f97b6eb3-b6bb-4564-9c2e-9fce640ee3a3` 通过原 Writer/Editor Session 恢复完成。Writer 正文长度 6,011 字，SHA256 `8aa06a0d55d9656e79d9ede65a8ef934f3d02cb5cd7b8a8b3e03e018f0adff75`；Editor Task `mat_47613b47-97dd-4970-b419-a019351903c0` 返回真实 `CONDITIONAL PASS` 和 5 项具体证据，候选批准状态保持 `not_approved`。第二集 Task `mat_177d7139-fca6-4b3c-a83c-75682a586060` 使用第一集候选和隔离作品资料作为上下文，但最终仍为 `incomplete`，无正文、无 Editor，故连续两集验收未通过。服务重启后没有重复第一集 Writer 或 Editor。
+
 本轮继续实现独立候选稿与连续创作批次，并对隔离作品 `acceptance-lighthouse` 做了有界真实验证。首轮两个候选在 Writer 提交前因 `latestEpisodeContext` SQL 占位符缺少参数失败；已修复并新增回归测试。随后新的真实 Writer Task 已创建，但云端最终为 `incomplete`，事件停在 `span.model_request_start`，没有 `agent.message`，系统因此没有保存候选正文、没有创建 Editor Task，也没有将候选标记 completed。该失败证据保留，不能视为真实新集创作通过。
 
 修复内容包括：新集 Prompt 注入已核验的 core/continuity/script/character 资料；上一集上下文只读取 completed 候选；相同批次请求复用活动批次；批次执行增加状态门闩和进程内锁，降低刷新/并发重复收费。后端全量测试为 92/92 通过，前端现有构建未改动。

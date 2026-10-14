@@ -34,6 +34,7 @@ module.exports = function scriptAssistant(db, log, config) {
     createEpisode: wrap(req => service.createEpisodeCandidate(db, log, config, req.params.work_id, req.body?.episode_no, req.body?.request)),
     createBatch: wrap(req => service.createBatch(db, log, config, req.params.work_id, req.body?.request, req.body?.episode_start, req.body?.episode_end)),
     approveEpisode: wrap(req => service.approveEpisodeCandidate(db, req.params.candidate_id, req.body?.actor || 'user', req.body)),
+    recoverEpisode: wrap(async req => { const candidate = await service.recoverEpisodeCandidate(db, log, config, req.params.candidate_id); if (candidate.status !== 'completed') db.prepare("UPDATE script_assistant_episode_candidates SET status='awaiting_recovery',error_text='已有云端任务仍未形成可验证终态；请继续回查，禁止重发' WHERE candidate_id=?").run(req.params.candidate_id); return db.prepare('SELECT * FROM script_assistant_episode_candidates WHERE candidate_id=?').get(req.params.candidate_id); }),
     resumeBatch: wrap(req => service.resumeBatch(db, log, config, req.params.batch_id)),
     pauseBatch: wrap(req => service.pauseBatch(db, req.params.batch_id)),
     reviewDecisions: wrap(req => ({ decisions: service.reviewDecisions(db, req.params.revision_id) })),

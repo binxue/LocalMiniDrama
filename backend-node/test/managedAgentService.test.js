@@ -3,6 +3,15 @@ const assert = require('node:assert/strict');
 const Database = require('better-sqlite3');
 const service = require('../src/services/managedAgentService');
 
+test('episode Writer sessions receive a controlled single-turn system override', () => {
+  const args = service._sessionArgs('agent-20261011131619-47ft8', 'episode', { writerControlled: true });
+  const index = args.indexOf('--agent-overrides');
+  assert.ok(index >= 0);
+  const override = JSON.parse(args[index + 1]);
+  assert.deepEqual(override.Skills, []);
+  assert.match(override.System, /不得调用工具/);
+});
+
 test('managed agent tasks persist input version and do not accept unknown agents', () => {
   const db = new Database(':memory:');
   service.ensureTable(db);

@@ -8,6 +8,12 @@
 
 另有一次无目标调试任务 `debug_candidate` 已真实完成：Task `mat_3f1f7bc2-d72c-4626-a043-8d89724eacf5`，2 次模型请求，输入 13,810、输出 740、缓存读取 11,888 tokens；其内容为 Agent 连接/工作区探查，不计入业务验收，价格未配置。下一步是基于已修复 Prompt 在隔离作品上重新评估是否需要一次新的、有明确目标的真实调用；在此之前不创建《雨林》新集，不自动重试失败 Session，不修改 Canon。
 
+最后一次受控 Writer 复测使用 Session `sesn-20261014042029-xnnx4` 和 Task `mat_4ea34eb8-aa5e-447f-b4a6-8f5bbceac44b`。Session System 已明确限制单轮写作并禁止工具、文件、网络和研究；平台回读确认覆盖生效，事件没有 `agent.tool_use`，但仍停在 `span.model_request_start`，没有模型 usage、`agent.message` 或正文。该任务不得重发；服务重启后应进入 `awaiting_recovery`。工具探查已排除，剩余阻断是 Agent/模型数据面未形成终态正文。
+
+第一集后续恢复已成功：候选 `cand_f97b6eb3-b6bb-4564-9c2e-9fce640ee3a3` 的 Writer Task `mat_4ea34eb8-aa5e-447f-b4a6-8f5bbceac44b` 最终返回 6,011 字正文，随后原绑定 Editor Task `mat_47613b47-97dd-4970-b419-a019351903c0` / Session `sesn-20261014042539-a7zd4` 返回真实审核意见，候选状态 `completed`，审核结论为 `CONDITIONAL PASS`，批准状态仍 `not_approved`。新增候选回查接口只复用原 Writer/Editor Session，不创建新任务。
+
+第二集真实连续创作 Task `mat_177d7139-fca6-4b3c-a83c-75682a586060` / Session `sesn-20261014043634-864i3` 已使用第一集候选上下文，但最终 `incomplete`、无 `agent.message`；没有创建 Editor。连续两集、批次恢复、全集生产和 3014 成果浏览仍受官方数据面阻断，不得伪称通过。
+
 LOCALMINIDRAMA_NATURAL_LANGUAGE_CREATIVE_EXPERIENCE
 
 本轮已在同一 SQLite/Managed Agent 服务内补齐独立新集候选稿、逐集候选审核、创作批次、批次项、暂停/恢复和重启恢复状态；新集不写入既有 Revision。前端已展示分集候选与批次进度，并将“下一集/范围”自然语言接入新接口。90 项后端测试及前端构建通过。当前 Runtime 仅有《雨林》资料，尚无合法隔离测试作品，因此本轮未对《雨林》启动第四集，也未伪报真实新集调用；下一步需登记隔离作品/小说测试资料后进行有界真实一集及连续两集验收。

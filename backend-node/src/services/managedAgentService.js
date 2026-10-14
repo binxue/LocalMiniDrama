@@ -71,8 +71,14 @@ function update(db, id, fields) {
     .run(...values, now(), id);
 }
 
-async function createSession(agentId, title) {
-  const out = await runArk(['agent', 'session', 'create', '--agent-id', agentId, '--environment-id', process.env.ARK_AGENT_ENVIRONMENT_ID || 'env-20261011083635-eeeu2', '--title', title, '--format', 'json'], 60000);
+async function createSession(agentId, title, options = {}) {
+  const args = ['agent', 'session', 'create', '--agent-id', agentId, '--environment-id', process.env.ARK_AGENT_ENVIRONMENT_ID || 'env-20261011083635-eeeu2', '--title', title];
+  if (options.writerControlled) args.push('--agent-overrides', JSON.stringify({
+    System: '你只执行当前用户给出的单轮剧本写作任务。不得调用工具、读取或写入文件、搜索网络、加载资料或研究项目；所有必要上下文已经在用户消息中提供。直接返回完整正文，不要解释执行过程。',
+    Skills: [],
+  }));
+  args.push('--format', 'json');
+  const out = await runArk(args, 60000);
   const json = parseJson(out);
   const result = json?.Result || json?.result;
   if (!result?.Id) throw new Error('Managed Agent Session 创建未返回 session id');
@@ -127,7 +133,7 @@ async function execute(db, log, taskId) {
   if (!task || task.task_status !== 'queued') return;
   try {
     update(db, taskId, { task_status: 'starting' });
-    const session = await createSession(task.agent_id, `LocalMiniDrama ${task.work_id} ${taskId}`);
+    const session = await createSession(task.agent_id, `LocalMiniDrama ${task.work_id} ${taskId}`, { writerControlled: task.episode_id != null && task.agent_id === 'agent-20261011131619-47ft8' });
     const sessionId = session.id;
     update(db, taskId, { session_id: sessionId, model_id: session.model || null, session_create_json: JSON.stringify(session.raw), task_status: 'submitted' });
     const sent = await sendMessage(sessionId, task.input_text);
@@ -208,4 +214,4 @@ function recoverOnStartup(db, log) {
   return result.changes;
 }
 
-module.exports = { ensureTable, createTask, getTask, listTasks, refreshTask, recoverOnStartup, ALLOWED_AGENTS, extract };
+module.exports = { ensureTable, createTask, getTask, listTasks, refreshTask, recoverOnStartup, ALLOWED_AGENTS, extract, _sessionArgs: (agentId, title, options = {}) => { const args = ['agent', 'session', 'create', '--agent-id', agentId, '--environment-id', process.env.ARK_AGENT_ENVIRONMENT_ID || 'env-20261011083635-eeeu2', '--title', title]; if (options.writerControlled) args.push('--agent-overrides', JSON.stringify({ System: '你只执行当前用户给出的单轮剧本写作任务。不得调用工具、读取或写入文件、搜索网络、加载资料或研究项目；所有必要上下文已经在用户消息中提供。直接返回完整正文，不要解释执行过程。', Skills: [] })); return args; } };

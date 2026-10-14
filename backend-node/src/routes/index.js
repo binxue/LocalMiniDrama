@@ -176,6 +176,7 @@ function setupRouter(cfg, db, log) {
     r.post('/script-assistant/works/:work_id/episodes', assistant.createEpisode);
     r.post('/script-assistant/works/:work_id/batches', assistant.createBatch);
     r.post('/script-assistant/candidates/:candidate_id/approve', assistant.approveEpisode);
+    r.post('/script-assistant/candidates/:candidate_id/recover', assistant.recoverEpisode);
     r.post('/script-assistant/batches/:batch_id/pause', assistant.pauseBatch);
     r.post('/script-assistant/batches/:batch_id/resume', assistant.resumeBatch);
     r.post('/script-assistant/works/:work_id/revisions', assistant.createRevision);
