@@ -14,6 +14,8 @@ New real recovery evidence: episode 3 Writer `mat_34147ae7-d250-42df-b87d-034ef5
 
 Read-only recovery of episode 4 was repeated and confirmed unchanged (`user.message`,正文=0); no new Task was created. Local snapshot `backend-node/episodes-1-3-quality-evidence.json` is available for producer continuity review. Next action is to preserve episode 4 recovery state, complete non-model browser/read/export evidence for episodes 1–3, and resume only after a verifiable episode-4 result or explicit terminal retry eligibility.
 
+The latest recovery call confirms the dependent Editor state (`Editor 尚无可验证审核终态，批次保持暂停`) without resubmitting Writer. Keep episode 4 as `awaiting_recovery`; do not mark it failed or approved.
+
 Next action: keep episode-3 unknown state paused, finish deterministic browser/export evidence on the two completed adaptation episodes, and only continue the batch after explicit terminal evidence or a new bounded product decision. Preserve Rainforest Canon, 3013, 5679, Runtime data and all historical tasks.
 
 ## 2026-10-14 改编首集真实验收与五集批次推进
