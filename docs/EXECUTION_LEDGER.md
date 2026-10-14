@@ -25,4 +25,11 @@
 
 ## Current action
 
-Persistent original/adaptation intake is implemented and API-verified on isolated works `acceptance-intake` and `adapted-intake`; frontend build and Script Assistant route load pass. Perform the remaining 3014 browser interaction evidence on an isolated registered work. Do not touch Rainforest Canon, frozen text, 3013, or historical records.
+Persistent original/adaptation intake is implemented and API-verified on isolated works `acceptance-intake` and `adapted-intake`; frontend build and Script Assistant route load pass. First isolated work episode 1 completed with real Writer and controlled Editor: candidate `cand_583f67be-273d-47df-afe8-5e0e0e8cd7f6`, candidate SHA `7e424d71a21beee5bc61983f8d97aad5111895364b55f594fa34149035671acd`, Editor `CONDITIONAL PASS`, approval `not_approved`. The first Editor attempt was preserved as incomplete after four tool-seeking requests; the bounded controlled retry completed with one request and five evidence items. The second episode candidate `cand_6a8f276e-630b-4072-9577-349a3c5f4c58` is pinned to episode 1 candidate/SHA but its sole Writer session `sesn-20261014085621-rcat2` remains `incomplete` with one unfinished model request and no正文; read-only recovery confirmed the same state and no retry was submitted. Current code commit `c8d918c` controls both episode Writer and Editor sessions and bounds Editor recovery to one retry; 17 focused backend tests pass. Next action is deterministic batch/restart/UI evidence and lawful adaptation acceptance without touching Rainforest Canon, frozen text, 3013, or historical records.
+
+## 2026-10-14 — isolated creative evidence
+
+- Episode 1 Writer task `mat_3c054c5b-8554-4560-b1ae-b0a7d952c829`: completed, 5,506 input / 7,596 output / 3,896 cache-read tokens, one request; output 3,061 characters.
+- Episode 1 first Editor task `mat_dad1d721-8171-44b8-8a98-9dc832496712`: incomplete, four requests, 39,398 input / 9,699 output / 27,048 cache-read tokens, one unfinished request; events show tool exploration and no final message. Preserved as failed evidence.
+- Episode 1 controlled Editor retry `mat_4f9d24ba-6632-4157-9dc0-cd9bbaed365a`: completed `CONDITIONAL PASS`, one request, 7,597 input / 6,162 output / 3,896 cache-read tokens. Price remains unconfigured; no amount is claimed.
+- Episode 2 Writer task `mat_ece67f91-c3ff-4289-9273-ba000ee310ba`: incomplete, one unfinished request, no output or terminal event. Recovery endpoint returned `Writer云端任务未完成`; no new task was created.
