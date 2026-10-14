@@ -29,7 +29,10 @@ class ManagedAgentWorkbenchClient {
     if (!fs.existsSync(this.cliEntry)) throw new Error('Installed arkcli entry is unavailable');
     const result = await new Promise(resolve => {
       const child = spawn(process.execPath, [this.cliEntry, ...args, '--profile', this.profile, '--format', 'json'],
-        { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+        { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], env: {
+          ...process.env, ARKCLI_NO_UPDATE_NOTIFIER: '1', ARKCLI_CALLER_TYPE: 'ai_agent',
+          ARKCLI_CALLER_NAME: 'localminidrama', ARKCLI_SKILL_NAME: 'arkcli-agent',
+        } });
       let stdout = '', stderr = '', failure = null;
       const timer = setTimeout(() => { failure = 'CLI_TIMEOUT'; child.kill(); }, 120000);
       child.stdout.on('data', data => { stdout += data; if (stdout.length > 16 * 1024 * 1024) { failure = 'CLI_OUTPUT_LIMIT'; child.kill(); } });
@@ -85,7 +88,7 @@ class ManagedAgentWorkbenchClient {
       const promptFile = path.join(this.root, prefix + '-prompt.txt');
       fs.writeFileSync(promptFile, prompt, { flag: 'wx', mode: 0o600 });
       const sendArgs = ['agent', 'session', 'events', 'send', execution.session_id,
-        '--type', 'user.message', '--text', prompt];
+        '--type', 'user.message', '--content', '@' + promptFile];
       for (const file of images) sendArgs.push('--image', '@' + file);
       execution.submitted_at = new Date().toISOString();
       persist(); // Unknown is durable before send, including file uploads.

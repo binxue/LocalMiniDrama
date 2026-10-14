@@ -10,17 +10,18 @@ export default defineConfig({
     }
   },
   server: {
-    host: '0.0.0.0',
-    port: 3013,
+    host: process.env.LOCALMINIDRAMA_FRONTEND_HOST || '0.0.0.0',
+    port: Number(process.env.LOCALMINIDRAMA_FRONTEND_PORT) || 3013,
+    strictPort: true,
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:5679',
+        target: process.env.LOCALMINIDRAMA_BACKEND_URL || 'http://127.0.0.1:5679',
         changeOrigin: true,
         proxyTimeout: 600000,
         timeout: 600000
       },
       '/static': {
-        target: 'http://127.0.0.1:5679',
+        target: process.env.LOCALMINIDRAMA_BACKEND_URL || 'http://127.0.0.1:5679',
         changeOrigin: true
       }
     }

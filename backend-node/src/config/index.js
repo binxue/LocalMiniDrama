@@ -3,12 +3,16 @@ const path = require('path');
 const yaml = require('js-yaml');
 
 const configPaths = [
+  ...(process.env.LOCALMINIDRAMA_CONFIG_PATH ? [process.env.LOCALMINIDRAMA_CONFIG_PATH] : []),
   path.join(process.cwd(), 'configs', 'config.yaml'),
   path.join(process.cwd(), 'config.yaml'),
   path.join(__dirname, '..', '..', 'configs', 'config.yaml'),
 ];
 
 function loadConfig() {
+  if (process.env.LOCALMINIDRAMA_CONFIG_PATH && !fs.existsSync(process.env.LOCALMINIDRAMA_CONFIG_PATH)) {
+    throw new Error('Explicit LocalMiniDrama configuration does not exist');
+  }
   let raw = null;
   for (const p of configPaths) {
     if (fs.existsSync(p)) {

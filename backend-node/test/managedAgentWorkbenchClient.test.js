@@ -16,7 +16,9 @@ test('billable send is preceded by durable UNKNOWN and binds actual attached-ima
     if (args[2] === 'create') return { Result: { Id: 'session-test-only' } };
     if (args[3] === 'send') {
       assert.equal(records.at(-1).execution_status, 'UNKNOWN');
-      prompt = args[args.indexOf('--text') + 1];
+      const inputFile = args[args.indexOf('--content') + 1];
+      assert.ok(inputFile.startsWith('@'));
+      prompt = fs.readFileSync(inputFile.slice(1), 'utf8');
       const binding = JSON.parse(prompt.split('Echo these exact binding fields: ')[1].split('\n')[0]);
       result = { ...binding, verdict: 'REVISE', score: 61, observations: { test: 'isolated fixture' }, recommendations: [] };
       return { data: [{ type: 'user.message', id: 'send-test-only', content: [{ type: 'text', text: prompt },
