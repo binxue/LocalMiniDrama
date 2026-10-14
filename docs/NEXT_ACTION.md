@@ -10,6 +10,8 @@
 
 前端验收审查发现并修复 `ScriptAssistant.vue` 的本地化审核标签解析：现在浏览器会将真实的“评定：CONDITIONAL PASS”显示为“审核有条件通过，仍需修改或确认”，不再误报为待核实。3014 仍可访问，刷新后候选、审核摘要和 `not_approved` 状态由 API 恢复。
 
+对改编批次执行了一次“继续”恢复验收；系统只读回查第 2 集原 Writer，批次仍为 `paused`、第 2 集 `awaiting_recovery`，第 3—5 集未启动，没有新收费任务。
+
 ## 2026-10-14 批次恢复状态修复与运行实例收口
 
 本轮修复 `executeBatch`：分集候选进入 `awaiting_recovery` 时，批次与 batch item 均保持可恢复的 `paused/awaiting_recovery`，不会被外层异常处理误写为永久 `failed`；已完成集数仍按条件更新保持不重复计数。新增回归测试覆盖已完成集保留和未完成集排队状态。

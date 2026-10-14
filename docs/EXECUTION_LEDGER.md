@@ -32,6 +32,7 @@
 - Started real batch `batch_95d4741c-7912-4a5e-82ac-f1cb115e2104` for episodes 2—5. Episode 2 Writer `mat_dd4b6347-c934-48de-9057-f17a4be067a1` / Session `sesn-20261014100336-85kz2` stopped at `span.model_request_start` with no正文 and one unfinished request. The batch is correctly `paused`; item 2 is `awaiting_recovery`, items 3—5 remain `queued`; no retry was submitted.
 - New measured usage: adaptation episode 1 Writer 5,533 input / 4,981 output / 4,920 cache-read; Editor 8,183 / 6,620 / 3,896; episode 2 Writer 0 / 0 / 0 with one unfinished request. Price remains unconfigured.
 - Frontend review found the same localization edge in `ScriptAssistant.vue`: `评定：CONDITIONAL PASS` was previously shown as an unverified verdict. Added `评定` to the UI parser, rebuilt successfully, and reopened the 3014 adaptation workspace. API evidence shows the candidate is completed with the real review and `not_approved` after refresh.
+- Resume control was exercised once on the paused 2—5 batch. It performed read-only recovery of the existing episode 2 Writer and kept the batch `paused` with episode 2 `awaiting_recovery`; episodes 3—5 stayed queued and no new paid task was created.
 
 ## 2026-10-14 — batch recovery state hardening
 
