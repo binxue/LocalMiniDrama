@@ -165,6 +165,7 @@ function setupRouter(cfg, db, log) {
   if (assistant) {
     r.get('/script-assistant/works', assistant.works);
     r.get('/script-assistant/works/:work_id/context', assistant.context);
+    r.get('/script-assistant/works/:work_id/intent', assistant.intent);
     r.get('/script-assistant/works/:work_id/sources/:source_id', assistant.source);
     r.get('/script-assistant/works/:work_id/messages', assistant.messages);
     r.get('/script-assistant/works/:work_id/runs', assistant.runs);

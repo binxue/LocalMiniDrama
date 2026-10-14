@@ -39,7 +39,14 @@
           <h2>与 AI 创作助手对话</h2>
           <el-button size="small" @click="reload" :disabled="loading">刷新记录</el-button>
         </div>
-        <p class="conversation-note">讨论与建议不会改写剧本。分镜、视频生成及制作验收由视频模块负责。</p>
+      <p class="conversation-note">直接描述创作目标。明确的单集修改会自动生成独立候选并安排审核；分镜、视频生成及制作验收由视频模块负责。</p>
+      <section v-if="revisions.length" class="creation-progress">
+        <h3>最近创作成果</h3>
+        <article v-for="revision in revisions.slice(0, 3)" :key="revision.revision_id" class="progress-row">
+          <div><strong>{{ episodeTitle(revision.source_id) }} · {{ revision.status === 'completed' ? '候选稿已完成' : statusLabel(revision.status) }}</strong><p class="muted">审核：{{ editorLabel(revision.editor_review) }} · {{ revision.approval_status === 'not_approved' ? '尚未确认' : '已确认，待发布' }}</p></div>
+          <div><el-button v-if="revision.candidate_text" size="small" @click="openRevision(revision.revision_id)">查看剧本与审核</el-button><el-button v-else-if="revision.status==='awaiting_recovery'" size="small" @click="recoverRevision(revision.revision_id)">恢复进度</el-button></div>
+        </article>
+      </section>
         <p v-if="lastIntentNotice" class="intent-notice">{{ lastIntentNotice }}</p>
         <details v-if="mode === 'team'" open class="advanced-tools">
         <summary>高级创作与审阅工具</summary>
@@ -120,7 +127,7 @@ import { ElMessageBox } from 'element-plus'
 import { revisionDiff } from '@/utils/revisionDiff'
 import { useRouter, useRoute } from 'vue-router'
 import { ArrowLeft, ChatDotRound } from '@element-plus/icons-vue'
-import { getAssistantWorks, getAssistantContext, getAssistantMessages, sendAssistantMessage, refreshAssistantMessage, getAssistantSource, getAssistantRuns, createAssistantRun, getAssistantRevisions, createAssistantRevision, approveAssistantRevision, refreshAssistantRevision, recoverAssistantEditor, getReviewDecisions, saveReviewDecision } from '@/api/scriptAssistant'
+import { getAssistantWorks, getAssistantContext, getAssistantIntent, getAssistantMessages, sendAssistantMessage, refreshAssistantMessage, getAssistantSource, getAssistantRuns, createAssistantRun, getAssistantRevisions, createAssistantRevision, approveAssistantRevision, refreshAssistantRevision, recoverAssistantEditor, getReviewDecisions, saveReviewDecision } from '@/api/scriptAssistant'
 
 const router = useRouter(), route = useRoute()
 const works = ref([]), selected = ref(''), context = ref(null), messages = ref([]), draft = ref(''), budget = ref({})
@@ -141,6 +148,7 @@ const prompts = ['我们前三集剧本现在是什么状态？', '第一集和�
 let timer, requestKey = null, submittedText = null, generation = 0, alive = true
 const isActive = task => ['queued', 'starting', 'submitted', 'running'].includes(task?.task_status)
 const canSend = computed(() => selected.value && draft.value.trim() && !sending.value && !messages.value.some(m => isActive(m.task)) && (!budget.value.chat?.limit || budget.value.chat.remaining > 0) && !context.value?.gaps?.length)
+const episodeTitle = id => context.value?.scripts?.find(s => s.id === id)?.title || id
 const statusLabel = state => ({ queued: '排队', starting: '创建 Session', submitted: '已提交', running: '执行中', completed: '回复已返回', failed: '执行失败', incomplete: '正文不完整', interrupted: '服务重启中断' }[state] || state)
 async function reloadMessages() {
   const id = selected.value, token = generation
@@ -165,7 +173,7 @@ async function changeWork() {
   await router.replace({ query: { work: selected.value } })
   try { context.value = await getAssistantContext(selected.value); await reloadMessages(); runs.value = (await getAssistantRuns(selected.value)).runs; revisions.value = (await getAssistantRevisions(selected.value)).revisions; for (const r of revisions.value) { decisions.value[r.revision_id] = (await getReviewDecisions(r.revision_id)).decisions; for (const d of decisions.value[r.revision_id]) reviewNotes.value[d.block_id] = d.note || ''; if (r.candidate_text) { const s = context.value.sources.find(x => x.id === r.source_id); if (s) revisionSource.value[r.revision_id] = await getAssistantSource(selected.value, s.id) } } } catch (e) { error.value = e.message } finally { loading.value = false }
 }
-async function startRevision() { if (revisionSending.value) return; revisionSending.value=true; error.value=''; try { await ElMessageBox.confirm('将依次调用主编、AI编剧与独立审核，至少3项任务，内部模型请求数量可能更多。价格未配置，总费用无法可靠估算。是否授权本次有界执行？', '真实AI修订调用授权', { confirmButtonText:'授权本次执行', cancelButtonText:'暂不调用' }); await createAssistantRevision(selected.value,revisionTarget.value,revisionGoal.value); await reload() } catch(e) { if(e!=='cancel' && e!=='close') error.value=e.message } finally { revisionSending.value=false } }
+async function startRevision() { if (revisionSending.value) return; revisionSending.value=true; error.value=''; try { await createAssistantRevision(selected.value,revisionTarget.value,revisionGoal.value); revisionGoal.value=''; await reload() } catch(e) { error.value=e.message } finally { revisionSending.value=false } }
 async function approveRevision(id) { const r = revisions.value.find(x => x.revision_id === id); const version = {source_sha256:r.source_sha256,candidate_sha256:r.candidate_sha256}; try { await ElMessageBox.confirm('确认指定的完整修改版本？逐项接受不是整集批准。本操作仅记录待发布确认，不写入正式版本或视频制作。', '最终版本确认', { confirmButtonText: '明确确认此版本', cancelButtonText: '继续审阅' }); await approveAssistantRevision(id, version); await reload() } catch(e) { if (e !== 'cancel' && e !== 'close') error.value=e.message } }
 function diffBlocks(revision) {
   const source = revisionSource.value[revision.revision_id]
@@ -186,14 +194,27 @@ async function recoverEditor(id) { try { await recoverAssistantEditor(id); await
 async function startRun() {
   if (!runRequest.value.trim() || runSending.value) return
   runSending.value = true; error.value = ''
-  try { await ElMessageBox.confirm('团队任务会产生多个真实模型请求，实际角色由主编决定，价格未配置、总费用未知。是否授权本次有界执行？', '真实 AI 团队调用授权', {confirmButtonText:'授权本次执行',cancelButtonText:'暂不调用'}); await createAssistantRun(selected.value, runRequest.value.trim()); runRequest.value = ''; await reload() } catch (e) { error.value = e.message } finally { runSending.value = false }
+  try { await createAssistantRun(selected.value, runRequest.value.trim()); runRequest.value = ''; await reload() } catch (e) { error.value = e.message } finally { runSending.value = false }
 }
+async function openRevision(id) { mode.value = 'team'; await reload(); requestAnimationFrame(() => document.querySelector(`[data-revision="${CSS.escape(id)}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })) }
 async function send() {
   if (!canSend.value) return
-  if (submittedText !== draft.value.trim()) { requestKey = crypto.randomUUID(); submittedText = draft.value.trim() }
+  const text = draft.value.trim()
   sending.value = true; error.value = ''
-  try { await sendAssistantMessage(selected.value, submittedText, requestKey); draft.value = ''; requestKey = null; submittedText = null; await reloadMessages() }
-  catch (e) { error.value = e.message; await reloadMessages().catch(() => {}) }
+  try {
+    const route = await getAssistantIntent(selected.value, text)
+    if (route.intent?.intent === 'revise_episode' && route.intent.episode) {
+      const n = route.intent.episode
+      const numeral = ({1:'一',2:'二',3:'三',4:'四',5:'五',6:'六',7:'七',8:'八',9:'九',10:'十'})[n]
+      const source = context.value?.scripts?.find(s => new RegExp(`(?:第\\s*(?:${n}|${numeral})\\s*集|\\bep0*${n}\\b)`, 'i').test(`${s.title} ${s.id}`))
+      if (!source) throw new Error(`当前作品资料中没有可核验的第${n}集原稿，未启动修改。`)
+      await createAssistantRevision(selected.value, source.id, text)
+      draft.value = ''; mode.value = 'chat'; await reload(); return
+    }
+    if (route.intent?.status === 'clarification_required') { error.value = route.intent.reason; return }
+  if (submittedText !== draft.value.trim()) { requestKey = crypto.randomUUID(); submittedText = draft.value.trim() }
+    await sendAssistantMessage(selected.value, submittedText, requestKey); draft.value = ''; requestKey = null; submittedText = null; await reloadMessages()
+  } catch (e) { error.value = e.message; await reloadMessages().catch(() => {}) }
   finally { sending.value = false }
 }
 async function refreshTask(m) {
@@ -269,6 +290,12 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; line-height
 .source-proof { padding: 10px 0; } .source-proof pre { background: var(--bg-page); border-radius: 6px; padding: 12px; }
 .source-document { max-height: 65vh; overflow-y: auto; }
 .composer { border-top: 1px solid var(--border-color, #ddd); padding-top: 18px; } .composer-footer { margin-top: 12px; font-size: 12px; color: var(--text-secondary); }
+.creation-progress { border-bottom: 1px solid var(--border-color, #ddd); padding: 0 0 12px; margin-bottom: 16px; }
+.creation-progress h3 { font-size: 15px; margin: 0 0 8px; }
+.progress-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid var(--border-color, #ddd); }
+.progress-row p { margin: 4px 0 0; }
+.advanced-tools { border-top: 1px solid var(--border-color, #ddd); padding: 10px 0; margin: 16px 0; }
+.advanced-tools > summary { cursor: pointer; font-weight: 600; }
 .error-text { color: var(--el-color-danger); }
 @media (max-width: 850px) { .assistant-layout { grid-template-columns: 1fr; } .assistant-page { padding: 14px; } .assistant-header { flex-wrap: wrap; } .assistant-header > .el-tag { margin-left: 0; } }
 @media (max-width: 1100px) { .revision-workbench { grid-template-columns: 1fr; } .editor-review { border-left:0; border-top:1px solid var(--el-border-color); padding:12px 0; } } @media (max-width:700px) { .assistant-layout,.revision-diff { grid-template-columns:1fr; } .source-document { overflow-wrap:anywhere; } }

@@ -14,6 +14,7 @@ module.exports = function scriptAssistant(db, log, config) {
   return {
     works: wrap(() => ({ works: service.works(config).map(w => ({ id: w.id, title: w.title })), budget: service.budget(db) })),
     context: wrap(req => service.summary(service.loadWork(config, req.params.work_id))),
+    intent: wrap(req => { const work=service.loadWork(config,req.params.work_id); return { intent: service.classifyCreativeRequest(req.query?.text || '', work.sources.filter(s=>s.kind==='script')) }; }),
     source: wrap(req => {
       const source = service.loadWork(config, req.params.work_id).sources.find(s => s.id === req.params.source_id);
       if (!source) throw new Error('资料未关联');

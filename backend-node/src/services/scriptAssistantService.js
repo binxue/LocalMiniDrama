@@ -80,6 +80,7 @@ async function executeRevision(db, log, config, id) {
   } catch(e) { db.prepare('UPDATE script_assistant_revisions SET status=?, error_text=?, completed_at=? WHERE revision_id=?').run('failed',e.message,new Date().toISOString(),id); log.error('revision failed',{revision_id:id,error:e.message}); }
 }
 function createRevision(db, log, config, workId, sourceId, request = '') { ensureTable(db); if (typeof request !== 'string' || request.length > 1200) throw new Error('修改目标最多1200字符'); if (revisions(db,workId).some(r => ['queued','planning','writing','reviewing'].includes(r.status))) throw new Error('已有进行中的修改任务，请等待或回查'); const work=loadWork(config,workId); const s=work.sources.find(x=>x.id===sourceId); if(!s?.available || s.kind !== 'script') throw new Error('原稿不可用或不是剧本正文'); if(s.text.length > 4800) throw new Error('完整原稿超出本次修订范围，未调用模型'); const id=`rev_${crypto.randomUUID()}`; db.prepare('INSERT INTO script_assistant_revisions(revision_id,work_id,source_id,source_sha256,status,created_at,revision_request) VALUES(?,?,?,?,?,?,?)').run(id,workId,sourceId,s.sha256,'queued',new Date().toISOString(),request); setImmediate(()=>executeRevision(db,log,config,id)); return db.prepare('SELECT * FROM script_assistant_revisions WHERE revision_id=?').get(id); }
+
 function reviewVerdict(text) {
   const heading = String(text || '').split('\n').slice(0, 4).join('\n')
   const match = heading.match(/(?:结论|裁定|判定|Verdict)[^\n:：]*[:：]\s*(?:\*\*)?(CONDITIONAL PASS|PASS|FAIL)\b/i)
