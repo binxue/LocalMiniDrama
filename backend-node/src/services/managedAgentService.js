@@ -146,7 +146,7 @@ async function execute(db, log, taskId) {
     });
     const events = polled.events;
     const result = extract(events);
-    const idle = events.some(e => e.type === 'session.status_idle');
+    const idle = [...events].reverse().find(e => e.type === 'session.status_idle')?.stop_reason?.type === 'end_turn';
     const failed = events.some(e => ['session.status_failed', 'session.status_terminated', 'session.error'].includes(e.type) || (e.type === 'span.model_request_end' && e.is_error));
     const status = failed ? 'failed' : (idle && result.text.trim() ? 'completed' : 'incomplete');
     const recoveryError = polled.pollError ? `事件回查暂时失败，Session 仍可恢复：${polled.pollError}` : `云端终态 ${result.terminal || 'unknown'}，正文消息=${result.messages}`;
@@ -162,7 +162,7 @@ function createTask(db, log, { agent_id: agentId, work_id: workId, input, orches
   ensureTable(db);
   if (!ALLOWED_AGENTS.has(agentId)) throw new Error('agent_id 不在已部署的 LocalMiniDrama Agent 白名单中');
   if (!workId || typeof input !== 'string' || !input.trim()) throw new Error('work_id 和 input 必填');
-  if (typeof workId !== 'string' || workId.length > 100 || input.length > 8000) throw new Error('work_id 最长100字符，input 最长8000字符');
+  if (typeof workId !== 'string' || workId.length > 100 || input.length > 32000) throw new Error('work_id 最长100字符，input 最长32000字符');
   if (/[A-Za-z]:\\/.test(input)) throw new Error('禁止把 Windows 本地路径传入云端任务');
   if (candidateId) { const prior = db.prepare('SELECT task_id,work_id,agent_id,input_version FROM managed_agent_tasks WHERE candidate_id=?').get(candidateId); if (prior) { if (prior.work_id !== workId || prior.agent_id !== agentId || prior.input_version !== sha(input)) throw new Error('候选任务幂等键与现有输入不一致'); return row(db, prior.task_id); } }
   if (db.prepare('SELECT 1 FROM managed_agent_tasks WHERE attempt_id = ?').get(attemptId)) throw new Error('attempt_id 已存在，禁止重复提交');
@@ -196,7 +196,7 @@ async function refreshTask(db, taskId) {
   }
   const events = [...new Map([...(task.events || []), ...(parseJson(out).data || [])].map(e => [e.id, e])).values()];
   const result = extract(events);
-  const idle = events.some(e => e.type === 'session.status_idle');
+  const idle = [...events].reverse().find(e => e.type === 'session.status_idle')?.stop_reason?.type === 'end_turn';
   const failed = events.some(e => ['session.error', 'session.status_failed', 'session.status_terminated'].includes(e.type) || (e.type === 'span.model_request_end' && e.is_error));
   const status = failed ? 'failed' : idle && result.text.trim() ? 'completed' : task.task_status;
   update(db, taskId, { task_status: status, events_json: JSON.stringify(events), usage_json: JSON.stringify(result.usage), output_text: result.text || null, output_version: result.text ? sha(result.text) : null,

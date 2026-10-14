@@ -1,6 +1,30 @@
 # LocalMiniDrama 产品化实施与验收
 
-## 当前状态（2026-10-14）
+## 2026-10-15 已交付：专业策划到正文和独立评定
+
+现有灯塔邮局作品通过3014自然语言发起，复用已完成Producer、Relationship Writer、Interactive Designer结果，Writer完整收到10,490字符策划（实际输入11,297字符）。独立候选 `cand_bb291a3d-d770-4fb7-b35d-dba1ff545e21`：4,024字符、七场；SHA256 `a0f1ba54b0282085fd4f7690bc675bc4fe13b4cfa65d931dd2e6c4aa7fcb9ec5`。Editor `CONDITIONAL PASS`，approval=`not_approved`。批次 `batch_a08902cb-bc9f-4d3b-908c-9cf5987846e7` completed=1/1。
+
+新增Writer用时215.156秒，输入13,290/输出7,092/缓存2,872；Editor用时244.616秒，输入15,842/输出7,479/缓存3,896；各1请求。总新增输入29,132+输出14,571=43,703 Token，缓存6,768为输入分类不重复累加；端到端461.536秒（7分41.5秒）。复用的历史策划三请求输入22,075、输出23,687、缓存11,688，不算本轮新增调用。价格未配置，金额未知。
+
+浏览器验收：3014实际发送、展开专业方案、等待逐集保存、刷新、打开真实Editor与Markdown正文、点击导出并下载到 `I:/Downloads/第1集 · 候选稿-草稿.md`；导出包含完全一致正文，哈希核验一致。证据位于Runtime `evidence/20261015-delivery/3014-review.png`，正文/策划/审核均独立保存。浏览器启动时有两条连接中断历史日志；本轮读取/导出操作未观察新增业务错误，不能宣称从启动起Console零错误。
+
+质量：策划七场、三户、钥匙当众保管、九点两闪得到落实。Editor指出看灯约定、回执来源、徒手接触、船期时间四问题；人工阅读另发现邮袋已经取信后场5仍写铅封完好，需后续定向修订。预计六分钟目标尚未实测，CONDITIONAL PASS不是拍摄质量通过。遵用户要求交付审核即停止，没有自动修订、批准或Canon。
+
+当前唯一下一动作：用户对这份候选提出具体修改时复用已保存策划与Editor意见定向返修；此单集交付已完成。原生Multi Agent接入和可靠并行多集生产仍未验收，不宣称整平台完工。官方协调器与独立Session本地调度已在报告明确区分；不继续扩建本地Agent架构。
+
+
+## 2026-10-15 实际交付回查与接入纠正
+
+- 重新启动正确 Runtime 后，原 Producer、Relationship Writer、Interactive Designer 三个 Session 均已恢复为 completed。之前把尚未回查的 Session 报为持续云端阻断，证据不足。
+- 原批次已生成 3,872 字正文并得到 CONDITIONAL PASS，但 Writer 实际输入只有旧简纲，未包含专家成果；这份正文保留，不计为专业策划落实验收。
+- 修复恢复入口跳过策划的问题；复用原 Producer 与专家完整结果，绑定规划哈希，不重复收费策划。取消规划静默截断，输入本地上限调整到32,000字符；超限仍拒绝，不伪装为完整输入。
+- 按官方 Session 文档，正常完成必须是 session.status_idle 且 stop_reason.type=end_turn；等待操作不能冒充完成。未知 Editor 不再仅因不完整就自动重试。
+- 五个部署 Agent 实时回读均为版本1、doubao-seed-evolving-latest-version、Thinking enabled/ReasoningEffort high，均有自定义 Skills 和 agent_toolset_20260701；Producer 当前没有 Multiagent 配置。Session 的 Skills:[] 是整体清空，不是禁工具，Tools 实际仍保留。安全限制暂保留，未修改远端长期配置。
+- 官方提供 Agent 配置/版本、Session/线程/事件流、Tools/Skills、原生协调器委派与子线程。LocalMiniDrama负责作品资料、候选稿、人工批准边界、业务批次、成果展示/导出。当前这次验收复用已完成的独立Session，不宣称其为原生Multi Agent执行。
+- 来源：[Multi Agent](https://ark.volcengine.com/region:cn-beijing/docs/multi-agent)、[Session事件流](https://ark.volcengine.com/region:cn-beijing/docs/session-event-stream)、[Agent定义](https://ark.volcengine.com/region:cn-beijing/docs/define-agent)，以及已安装ArkCLI Session overrides/事件参考。
+- 3014 已实际提交独立候选 cand_bb291a3d-d770-4fb7-b35d-dba1ff545e21，Writer mat_149f5170-b30c-48ed-8467-1f2be0861521 的输入11,297字符，包含完整10,490字符专业策划及其哈希。Writer/Editor真实结果继续按原Task回查，不重复生成。
+
+## 历史状态（2026-10-14）
 
 核心已有作品流程有条件通过，完整产品目标尚未全部通过。基线 `fe08f2eea808710f8df6a362bbb783fa3243207a`，分支 `codex/localminidrama-quality`，启动时本地与远端一致。历史 UI、成本记录、ZIP 缺失及临时文件保留。最新提交以本报告所在提交及 git log 为准，避免文档自身哈希循环。
 

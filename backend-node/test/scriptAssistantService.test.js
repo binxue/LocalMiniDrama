@@ -42,6 +42,12 @@ test('episode planning selects only the requested episode section', () => {
   assert.equal(service._episodePlanning(plan, 9), plan);
 });
 
+test('single episode professional plan preserves final constraints instead of truncating them', () => {
+  const plan = 'Producer策划：\n' + '人物和场次依据。'.repeat(650) + '\n硬约束：九点白灯两闪，钥匙由周野保管。';
+  assert.equal(service._episodePlanning(plan, 1), plan);
+  assert.match(service._episodePlanning(plan, 1), /硬约束：九点白灯两闪/);
+});
+
 test('batch schema preserves awaiting recovery as a paused, resumable state', () => {
   const db = new Database(':memory:'); service.ensureTable(db);
   const now = new Date().toISOString();
