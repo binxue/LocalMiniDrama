@@ -136,9 +136,17 @@ function status(db, storyboardId = null) {
     video_authorized: false,
   };
 }
-function validateAnalysis(result) {
+function validateAnalysis(result, expected = null) {
   if (typeof result.optimized_prompt !== 'string' || result.optimized_prompt.trim().length < 40
       || result.optimized_prompt.length > 6000 || typeof result.analysis !== 'string') throw new Error('Agent 未返回有效专业分析和优化提示词');
+  if (expected) {
+    const key = String(expected.shotKey || '').trim();
+    const haystack = `${result.approved_shot_key || ''}\n${result.analysis}\n${result.optimized_prompt}`;
+    if (result.approved_shot_key !== key || !key || !haystack.includes(key)) throw new Error('PRECHECK_CONTEXT_MISMATCH: Agent 未绑定当前分镜合同');
+    if (key !== 's01_01A' && /A镜|A 镜|s01_01A|手机右侧尚未推送|A镜动作起点/i.test(haystack)) throw new Error('PRECHECK_CONTEXT_MISMATCH: Agent 混入其它镜头动作');
+    const required = (expected.characterNames || []).filter(Boolean);
+    if (required.length && !required.some(name => haystack.includes(name))) throw new Error('PRECHECK_CONTEXT_MISMATCH: 缺少当前镜头人物绑定');
+  }
   return result;
 }
 function validateReview(result) {
@@ -238,13 +246,13 @@ async function execute(db, cfg, log, run, dependencies = {}) {
         input: { instructions: '你是专业摄影指导。仅分析当前 approved_shot 对应镜头，不修改导演方案。禁止调用任何工具或生成媒体。'
           + '参考图顺序与用途必须以 approved_shot.references 为准，不得套用其他镜头合同；核对剧情动作、构图、角色、场景道具、连续性和提示词可执行性。'
           + '不得自行添加未批准的角色、道具或动作；不要在图片画文字对白。'
-          + '只有全部生成前条件满足时 generation_gate 才能返回 APPROVE，否则返回 BLOCKED 或 REVISE 并说明 gate_reasons。返回 JSON: {execution_id,input_hash,analysis,optimized_prompt,negative_prompt,generation_gate,gate_reasons}。'
+          + '只有全部生成前条件满足时 generation_gate 才能返回 APPROVE，否则返回 BLOCKED 或 REVISE 并说明 gate_reasons。必须返回 approved_shot_key 且严格等于当前镜头 key。返回 JSON: {execution_id,input_hash,approved_shot_key,analysis,optimized_prompt,negative_prompt,generation_gate,gate_reasons}。'
           + (round > 1 ? '第4张是上一轮实际候选，仅用于诊断修正，生成参考仍固定前三张。' : '')
           + 'optimized_prompt 必须可直接用于 Seedream 首帧图生图；写清 Image 1/2/3 对应关系。总回复不超过1800汉字。',
           context: { approved_shot: initial.shot, first_last_frames: initial.desc.first_last_frames,
             model: MODEL, size: '1440x2560', correction } },
       });
-      validateAnalysis(analysis.result);
+      validateAnalysis(analysis.result, { shotKey: initial.sb.title, characterNames: (initial.shot.characters || []).map(item => item.name) });
       if (analysis.result.generation_gate !== 'APPROVE') throw new Error('PRECHECK_BLOCKED: Agent 未批准收费图片生成：' + JSON.stringify(analysis.result.gate_reasons || {}));
       run.optimized_prompt = analysis.result.optimized_prompt;
       run.analysis = analysis.result.analysis;
@@ -431,7 +439,7 @@ function resume(db, cfg, log, runId, options = {}) {
   const reviseFromRealReview = options.revise_from_review === true && run.status === 'NEEDS_REVISION';
   if (reuseAfterUnknownImage) {
     const image = db.prepare('SELECT id, storyboard_id, status, error_msg FROM image_generations WHERE id = ?').get(run.pending_image_generation_id);
-    if (!image || image.storyboard_id !== 3 || !['failed', 'processing', 'pending'].includes(image.status)) throw new Error('未知图片任务证据不匹配，请先核对状态');
+    if (!image || image.storyboard_id !== run.storyboard_id || !['failed', 'processing', 'pending'].includes(image.status)) throw new Error('未知图片任务证据不匹配，请先核对状态');
     run.unresolved_image_generations = [...(run.unresolved_image_generations || []), {
       image_generation_id: image.id, local_status: image.status, cloud_status: 'UNKNOWN', actual_cost_cny: null,
       error: image.error_msg || run.generation_error, noted_at: new Date().toISOString(),
