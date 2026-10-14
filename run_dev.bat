@@ -12,12 +12,12 @@ del "%TEMP%\lmd_netstat.txt" >nul 2>&1
 del "%TEMP%\lmd_port.txt" >nul 2>&1
 
 echo [1/2] Starting backend (backend-node)...
-start "Backend" cmd /k "cd /d %ROOT%backend-node && npm run dev"
+start "LocalMiniDrama Backend" /D "%ROOT%backend-node" cmd /k "npm run dev"
 
 echo [2/2] Starting frontend (frontweb)...
-start "Frontend" cmd /k "cd /d %ROOT%frontweb && npm run dev"
+start "LocalMiniDrama Frontend" /D "%ROOT%frontweb" cmd /k "npm run dev"
 
-echo Done. Backend: http://127.0.0.1:3013  Frontend: http://127.0.0.1:5173
+echo Done. Backend: http://127.0.0.1:5679  Frontend: http://127.0.0.1:3013
 
 timeout /t 3 /nobreak >nul
 start http://127.0.0.1:3013

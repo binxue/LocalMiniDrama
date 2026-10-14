@@ -27,6 +27,8 @@ GitHub: https://github.com/binxue/LocalMiniDrama
 
 ### 启动服务
 
+推荐使用仓库根目录的 `run_dev.bat`。它通过 `start /D` 固定后端和前端工作目录，避免 Windows 将窗口标题或路径解析为网络路径；脚本只清理 5679 上的旧后端进程，然后分别启动正式 npm 脚本。
+
 ```bash
 # 后端
 cd H:/localminidrama-clean/backend-node
@@ -36,6 +38,8 @@ npm start
 cd H:/localminidrama-clean/frontweb
 npm run dev
 ```
+
+Windows 一键入口：`H:\localminidrama-clean\run_dev.bat`。后端应监听 5679，前端应监听 3013；不要使用未带 `/D` 工作目录的 `start "..." cmd /k "cd ..."` 变体。
 
 ---
 
