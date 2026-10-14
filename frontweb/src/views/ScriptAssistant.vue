@@ -49,8 +49,8 @@
       </section>
       <section v-if="episodeCandidates.length || batches.length" class="creation-progress">
         <h3>分集创作进度</h3>
-        <article v-for="batch in batches.slice(0, 3)" :key="batch.batch_id" class="progress-row"><div><strong>第 {{ batch.episode_start }}—{{ batch.episode_end }} 集 · {{ batch.status }}</strong><p class="muted">已完成 {{ batch.completed_count }}/{{ batch.total_count }} · 当前第 {{ batch.current_episode || '等待' }} 集</p></div></article>
-        <article v-for="candidate in episodeCandidates.slice(0, 5)" :key="candidate.candidate_id" class="progress-row"><div><strong>第 {{ candidate.episode_no }} 集 · {{ candidate.status }}</strong><p class="muted">审核：{{ editorLabel(candidate.editor_review) }} · {{ candidate.approval_status === 'not_approved' ? '尚未确认' : '已确认，待发布' }}</p></div><el-button v-if="candidate.candidate_text" size="small" @click="openEpisodeCandidate(candidate)">阅读剧本</el-button></article>
+        <article v-for="batch in batches.slice(0, 3)" :key="batch.batch_id" class="progress-row"><div><strong>第 {{ batch.episode_start }}—{{ batch.episode_end }} 集 · {{ batchStatusLabel(batch.status) }}</strong><p class="muted">已完成 {{ batch.completed_count }}/{{ batch.total_count }} · 当前第 {{ batch.current_episode || '等待' }} 集</p><p v-if="batch.error_text" class="error-text">{{ batch.error_text }}</p></div><div class="progress-actions"><el-button v-if="['queued','running','pause_requested'].includes(batch.status)" size="small" @click="pauseBatch(batch)">暂停</el-button><el-button v-if="['paused','failed'].includes(batch.status)" size="small" type="primary" @click="resumeBatch(batch)">继续</el-button></div></article>
+        <article v-for="candidate in episodeCandidates.slice(0, 5)" :key="candidate.candidate_id" class="progress-row"><div><strong>第 {{ candidate.episode_no }} 集 · {{ candidateStatusLabel(candidate.status) }}</strong><p class="muted">审核：{{ editorLabel(candidate.editor_review) }} · {{ candidate.approval_status === 'not_approved' ? '尚未确认' : '已确认，待发布' }}</p><p v-if="candidate.error_text" class="error-text">{{ candidate.error_text }}</p></div><div class="progress-actions"><el-button v-if="candidate.candidate_text" size="small" @click="openEpisodeCandidate(candidate)">阅读剧本</el-button><el-button v-if="candidate.candidate_text" size="small" @click="exportText(`第${candidate.episode_no}集 · 候选稿`,candidate.candidate_text)">导出草稿</el-button><el-button v-if="candidate.status==='awaiting_recovery'" size="small" @click="recoverEpisode(candidate)">回查原任务</el-button></div></article>
       </section>
         <p v-if="lastIntentNotice" class="intent-notice">{{ lastIntentNotice }}</p>
         <details v-if="mode === 'team'" open class="advanced-tools">
@@ -132,7 +132,7 @@ import { ElMessageBox } from 'element-plus'
 import { revisionDiff } from '@/utils/revisionDiff'
 import { useRouter, useRoute } from 'vue-router'
 import { ArrowLeft, ChatDotRound } from '@element-plus/icons-vue'
-import { getAssistantWorks, getAssistantContext, getAssistantIntent, getAssistantMessages, sendAssistantMessage, refreshAssistantMessage, getAssistantSource, getAssistantRuns, createAssistantRun, getAssistantRevisions, createAssistantRevision, approveAssistantRevision, refreshAssistantRevision, recoverAssistantEditor, getReviewDecisions, saveReviewDecision, getAssistantCandidates, getAssistantBatches, createAssistantEpisode, createAssistantBatch } from '@/api/scriptAssistant'
+import { getAssistantWorks, getAssistantContext, getAssistantIntent, getAssistantMessages, sendAssistantMessage, refreshAssistantMessage, getAssistantSource, getAssistantRuns, createAssistantRun, getAssistantRevisions, createAssistantRevision, approveAssistantRevision, refreshAssistantRevision, recoverAssistantEditor, getReviewDecisions, saveReviewDecision, getAssistantCandidates, getAssistantBatches, createAssistantEpisode, createAssistantBatch, pauseAssistantBatch, resumeAssistantBatch, recoverAssistantEpisode } from '@/api/scriptAssistant'
 
 const router = useRouter(), route = useRoute()
 const works = ref([]), selected = ref(''), context = ref(null), messages = ref([]), draft = ref(''), budget = ref({})
@@ -155,6 +155,11 @@ const isActive = task => ['queued', 'starting', 'submitted', 'running'].includes
 const canSend = computed(() => selected.value && draft.value.trim() && !sending.value && !messages.value.some(m => isActive(m.task)) && (!budget.value.chat?.limit || budget.value.chat.remaining > 0) && !context.value?.gaps?.length)
 const episodeTitle = id => context.value?.scripts?.find(s => s.id === id)?.title || id
 const statusLabel = state => ({ queued: '排队', starting: '创建 Session', submitted: '已提交', running: '执行中', completed: '回复已返回', failed: '执行失败', incomplete: '正文不完整', interrupted: '服务重启中断' }[state] || state)
+const batchStatusLabel = state => ({ queued: '等待创作', running: '创作中', pause_requested: '即将暂停', paused: '已暂停', completed: '已完成', failed: '需要处理' }[state] || state)
+const candidateStatusLabel = state => ({ queued: '等待创作', writing: '正在创作', reviewing: '正在审核', awaiting_recovery: '等待恢复', completed: '候选已完成', failed: '创作失败' }[state] || state)
+async function pauseBatch(batch) { try { await pauseAssistantBatch(batch.batch_id); await reload() } catch (e) { error.value = e.message } }
+async function resumeBatch(batch) { try { await resumeAssistantBatch(batch.batch_id); await reload() } catch (e) { error.value = e.message } }
+async function recoverEpisode(candidate) { try { await recoverAssistantEpisode(candidate.candidate_id); await reload() } catch (e) { error.value = e.response?.data?.error?.message || e.message } }
 async function reloadMessages() {
   const id = selected.value, token = generation
   const data = await getAssistantMessages(id)

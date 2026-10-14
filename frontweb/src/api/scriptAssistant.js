@@ -16,6 +16,7 @@ export const createAssistantEpisode = (id, episode_no, requestText) => request.p
 export const createAssistantBatch = (id, episode_start, episode_end, requestText) => request.post(`${work(id)}/batches`, { episode_start, episode_end, request: requestText })
 export const pauseAssistantBatch = id => request.post(`/script-assistant/batches/${encodeURIComponent(id)}/pause`)
 export const resumeAssistantBatch = id => request.post(`/script-assistant/batches/${encodeURIComponent(id)}/resume`)
+export const recoverAssistantEpisode = id => request.post(`/script-assistant/candidates/${encodeURIComponent(id)}/recover`)
 export const createAssistantRevision = (id, sourceId, goal) => request.post(`${work(id)}/revisions`, { source_id: sourceId, request: goal })
 export const approveAssistantRevision = (id, version) => request.post(`/script-assistant/revisions/${encodeURIComponent(id)}/approve`, { actor: 'user', ...version })
 export const refreshAssistantRevision = id => request.post(`/script-assistant/revisions/${encodeURIComponent(id)}/refresh`)

@@ -420,8 +420,8 @@ function classifyCreativeRequest(text, scripts = []) {
   const range = q.match(/第\s*(\d+)\s*(?:到|至|-|—)\s*第?\s*(\d+)\s*集/);
   if (!q) return { intent: 'chat', status: 'ready' };
   if (/全集|全剧|全部集数/.test(q)) return { intent: 'create_all', status: 'clarification_required', reason: '需要先确认总集数和分集规划' };
-  if (range) return { intent: 'create_episode_range', status: 'clarification_required', episode_start: Number(range[1]), episode_end: Number(range[2]), reason: '批量创作调度尚未配置为可持续任务' };
-  if (/下一集|后面一集|接着写/.test(q)) return { intent: 'next_episode', status: 'clarification_required', reason: '需要确认下一集是否已有分集规划' };
+  if (range) return { intent: 'create_episode_range', status: 'ready', episode_start: Number(range[1]), episode_end: Number(range[2]) };
+  if (/下一集|后面一集|接着写/.test(q)) return { intent: 'next_episode', status: 'ready' };
   if (/审核|审查|评审/.test(q)) return { intent: 'review', status: 'ready', episode: episodeNumber };
   if (/优化|修改|加强|润色|返修/.test(q)) return { intent: 'revise_episode', status: 'ready', episode: episodeNumber, available_scripts: scripts.filter(s => s.available).map(s => s.id) };
   return { intent: 'chat', status: 'ready' };

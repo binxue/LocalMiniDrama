@@ -44,7 +44,8 @@ test('script assistant rejects an unverified source hash', () => {
 test('classifyCreativeRequest routes natural language without model calls', () => {
   assert.deepEqual(service.classifyCreativeRequest('帮我优化第三集', [{ id: 'ep3', available: true }]), { intent: 'revise_episode', status: 'ready', episode: 3, available_scripts: ['ep3'] });
   assert.equal(service.classifyCreativeRequest('按现在的剧情写下一集').intent, 'next_episode');
-  assert.equal(service.classifyCreativeRequest('写第5到第8集').status, 'clarification_required');
+  assert.equal(service.classifyCreativeRequest('写第5到第8集').status, 'ready');
+  assert.equal(service.classifyCreativeRequest('按现在的剧情写下一集').status, 'ready');
   assert.equal(service.classifyCreativeRequest('按照规划把全集写完').reason, '需要先确认总集数和分集规划');
 });
 
