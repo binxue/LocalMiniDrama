@@ -1,7 +1,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const Database = require('better-sqlite3');
-const { quarantine, reserve, validateReview, validateAnalysis, approvedStoryboard, status, assertNewCorrectivePrompt } = require('../src/services/staticProductionService');
+const { quarantine, reserve, validateReview, validateAnalysis, approvedStoryboard, status, assertNewCorrectivePrompt, resume, context } = require('../src/services/staticProductionService');
 const { hash } = require('../src/services/managedAgentReviewEvidence');
 const { validateTransmissionRecovery } = require('../src/services/staticProductionService');
 test('post-fix independent request requires real completed correction, preserves source and prevents duplicate submission', () => {
@@ -17,8 +17,8 @@ test('post-fix independent request requires real completed correction, preserves
 });
 function database(description) {
   const db = new Database(':memory:');
-  db.exec('CREATE TABLE storyboards (id INTEGER, description TEXT, updated_at TEXT);');
-  db.prepare('INSERT INTO storyboards VALUES (3, ?, NULL)').run(JSON.stringify(description));
+  db.exec('CREATE TABLE storyboards (id INTEGER, description TEXT, updated_at TEXT, episode_id INTEGER, title TEXT, characters TEXT, location TEXT, polished_prompt TEXT, image_prompt TEXT, deleted_at TEXT);');
+  db.prepare('INSERT INTO storyboards (id, description, updated_at) VALUES (3, ?, NULL)').run(JSON.stringify(description));
   return db;
 }
 test('simulated 88 score and fake production round are isolated with original evidence intact', () => {
@@ -92,4 +92,23 @@ test('unknown generation cannot be resent with the same prompt or without a revi
   assert.throws(() => assertNewCorrectivePrompt(run, 'new reviewed test prompt', 1), /未知图片请求禁止重发/);
   assert.throws(() => assertNewCorrectivePrompt({ ...run, corrective_generation_authorized: false }, 'new reviewed test prompt', 2), /未知图片请求禁止重发/);
   assert.doesNotThrow(() => assertNewCorrectivePrompt(run, 'new reviewed test prompt', 2));
+});
+test('B storyboard without runs reports NOT_STARTED and missing storyboard is explicit', () => {
+  const db = database({ approval: { verdict: 'APPROVE' } });
+  try {
+    db.prepare('INSERT INTO storyboards (id, description) VALUES (4, ?)').run(JSON.stringify({ approval: { verdict: 'APPROVE' } }));
+    assert.equal(status(db, 4).status, 'NOT_STARTED');
+    assert.deepEqual(status(db, 4).runs, []);
+    assert.throws(() => status(db, 404), error => error.code === 'STORYBOARD_NOT_FOUND');
+  } finally { db.close(); }
+});
+test('resume locates B run by storyboard and never reads A run as fallback', () => {
+  const db = database({ static_production_runs: [{ run_id: 'run-a', storyboard_id: 3 }] });
+  try {
+    db.prepare('INSERT INTO storyboards (id, description) VALUES (4, ?)').run(JSON.stringify({
+      approval: { execution_id: 'approved-b', verdict: 'APPROVE' },
+      static_production_runs: [{ run_id: 'run-b', storyboard_id: 4, executions: [], candidates: [], costs: { reservations: [] } }],
+    }));
+    assert.throws(() => resume(db, {}, {}, 'missing-run'), /制作任务不存在/);
+  } finally { db.close(); }
 });

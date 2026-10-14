@@ -14,21 +14,37 @@ const AGENTS = {
   review: { agentId: 'agent-20261011103929-0cx2g', agentName: 'film-visual-inspector' },
 };
 const ENVIRONMENT_ID = 'env-20261011083635-eeeu2';
-function approvedStoryboard(db) {
-  const sb = db.prepare('SELECT s.*, e.drama_id FROM storyboards s JOIN episodes e ON e.id = s.episode_id WHERE s.id = 3 AND s.deleted_at IS NULL').get();
-  if (!sb || sb.drama_id !== 2 || sb.episode_id !== 2) throw new Error('固定 A 镜业务数据不匹配');
+function approvedStoryboard(db, storyboardId = 3) {
+  const sb = db.prepare('SELECT s.*, e.drama_id FROM storyboards s JOIN episodes e ON e.id = s.episode_id WHERE s.id = ? AND s.deleted_at IS NULL').get(storyboardId);
+  if (!sb || sb.drama_id !== 2 || sb.episode_id !== 2) throw new Error('业务数据不匹配');
   return sb;
 }
-function context(db, cfg) {
-  const sb = approvedStoryboard(db);
+function context(db, cfg, storyboardId = 3) {
+  const sb = approvedStoryboard(db, storyboardId);
   const desc = JSON.parse(sb.description);
-  const bytes = fs.readFileSync(process.env.LOCALMINIDRAMA_APPROVED_PLAN || PLAN_PATH);
-  if (hash(bytes) !== PLAN_HASH || desc.approval?.input_hash !== PLAN_HASH || desc.approval?.verdict !== 'APPROVE') throw new Error('导演批准方案/记录不匹配');
-  const plan = JSON.parse(bytes);
-  const shot = plan.shots.find(item => item.key === 's01_01A');
-  if (!shot || shot.references.length !== 3) throw new Error('批准参考图合同不完整');
+  if (!desc.approval?.execution_id || desc.approval?.verdict !== 'APPROVE') throw new Error('该镜头没有有效导演批准记录');
+  const bytes = fs.existsSync(process.env.LOCALMINIDRAMA_APPROVED_PLAN || PLAN_PATH)
+    ? fs.readFileSync(process.env.LOCALMINIDRAMA_APPROVED_PLAN || PLAN_PATH) : Buffer.from('');
+  const plan = bytes.length ? JSON.parse(bytes) : null;
+  const shot = plan?.shots?.find(item => item.key === sb.title) || {
+    key: sb.title, prompt: sb.polished_prompt || sb.image_prompt || '', references: [],
+  };
   const root = fs.realpathSync(path.resolve(cfg.storage?.local_path || 'data/storage'));
-  const files = shot.references.map(item => safeMedia(root, item.path));
+  const refs = [...(shot.references || [])];
+  let characterRefs = [];
+  try { characterRefs = JSON.parse(sb.characters || '[]'); } catch (_) {}
+  for (const ref of characterRefs) {
+    const requestedName = String(ref?.name || '').trim();
+    const id = Number(ref?.id);
+    const row = requestedName
+      ? db.prepare('SELECT id, name, local_path FROM characters WHERE drama_id = ? AND name = ? ORDER BY id LIMIT 1').get(sb.drama_id, requestedName)
+      : db.prepare('SELECT id, name, local_path FROM characters WHERE id = ?').get(id);
+    if (row?.local_path && !refs.some(item => item.path === row.local_path)) refs.push({ label: row.name, path: row.local_path });
+  }
+  const scene = db.prepare('SELECT local_path FROM scenes WHERE drama_id = ? AND location = ? ORDER BY id LIMIT 1').get(sb.drama_id, sb.location);
+  if (scene?.local_path && !refs.some(item => item.path === scene.local_path)) refs.unshift({ label: '场景', path: scene.local_path });
+  shot.references = refs;
+  const files = refs.map(item => safeMedia(root, item.path));
   return { sb, desc, shot, root, files, approvalHash: hash(JSON.stringify(desc.approval)) };
 }
 function safeMedia(root, relative) {
@@ -37,21 +53,32 @@ function safeMedia(root, relative) {
   if (!rel || rel.startsWith('..') || path.isAbsolute(rel) || !fs.statSync(file).isFile()) throw new Error('媒体路径不安全或不存在');
   return file;
 }
-function readDescription(db) {
-  return JSON.parse(db.prepare('SELECT description FROM storyboards WHERE id = 3').get().description);
+function readDescription(db, storyboardId = 3) {
+  const row = db.prepare('SELECT description FROM storyboards WHERE id = ?').get(storyboardId);
+  if (!row) { const error = new Error('STORYBOARD_NOT_FOUND: storyboard_id=' + storyboardId); error.code = 'STORYBOARD_NOT_FOUND'; throw error; }
+  try { return JSON.parse(row.description || '{}'); } catch (cause) { const error = new Error('STORYBOARD_DESCRIPTION_INVALID: storyboard_id=' + storyboardId); error.code = 'STORYBOARD_DESCRIPTION_INVALID'; error.cause = cause; throw error; }
+}
+function findRun(db, runId) {
+  for (const row of db.prepare('SELECT id, description FROM storyboards').all()) {
+    let desc; try { desc = JSON.parse(row.description || '{}'); } catch (_) { continue; }
+    const run = (desc.static_production_runs || []).find(item => item.run_id === runId);
+    if (run) return { run, storyboardId: row.id };
+  }
+  return null;
 }
 function persist(db, run) {
-  const desc = readDescription(db);
+  const storyboardId = Number(run.storyboard_id || 3);
+  const desc = readDescription(db, storyboardId);
   if (hash(JSON.stringify(desc.approval)) !== run.approval_sha256) throw new Error('批准记录已变化，停止制作');
   const list = desc.static_production_runs || [];
   const index = list.findIndex(item => item.run_id === run.run_id);
   run.updated_at = new Date().toISOString();
   if (index < 0) list.push(run); else list[index] = run;
   desc.static_production_runs = list;
-  db.prepare('UPDATE storyboards SET description = ?, updated_at = ? WHERE id = 3').run(JSON.stringify(desc), run.updated_at);
+  db.prepare('UPDATE storyboards SET description = ?, updated_at = ? WHERE id = ?').run(JSON.stringify(desc), run.updated_at, storyboardId);
 }
-function quarantine(db) {
-  const desc = readDescription(db);
+function quarantine(db, storyboardId = 3) {
+  const desc = readDescription(db, storyboardId);
   const checks = desc.quality_checks || [];
   const unverified = checks.filter(check => !check.evidence?.submit_event_id || !check.evidence?.result_event_id);
   if (!unverified.length && !desc.production_round_1?.agent_review_completed) return;
@@ -64,11 +91,21 @@ function quarantine(db) {
       reason: '历史模拟轮次，不代表真实 Agent 审核' }];
     delete desc.production_round_1;
   }
-  db.prepare('UPDATE storyboards SET description = ?, updated_at = ? WHERE id = 3').run(JSON.stringify(desc), new Date().toISOString());
+  db.prepare('UPDATE storyboards SET description = ?, updated_at = ? WHERE id = ?').run(JSON.stringify(desc), new Date().toISOString(), storyboardId);
 }
-function status(db) {
-  const desc = readDescription(db);
-  const runs = JSON.parse(JSON.stringify(desc.static_production_runs || []));
+function status(db, storyboardId = null) {
+  if (storyboardId != null) {
+    const desc = readDescription(db, Number(storyboardId));
+    const runs = desc.static_production_runs || [];
+    if (!runs.length) return { storyboard_id: Number(storyboardId), status: 'NOT_STARTED', model: MODEL,
+      size: '1440x2560', budget_limit_cny: 10, runs: [], quarantined_checks: (desc.quarantined_quality_checks || []).length,
+      unverified_checks: (desc.quality_checks || []).filter(check => !check.evidence?.result_event_id).length,
+      historical_unknown_tasks: [23, 24, 25, 26, 27], video_authorized: false };
+  }
+  const desc = storyboardId ? readDescription(db, storyboardId) : {};
+  const sourceRuns = storyboardId ? (desc.static_production_runs || []) : db.prepare('SELECT description FROM storyboards').all()
+    .flatMap(row => { try { return JSON.parse(row.description).static_production_runs || []; } catch (_) { return []; } });
+  const runs = JSON.parse(JSON.stringify(sourceRuns));
   for (const run of runs) {
     releaseUnsubmittedReservations(run);
     for (const execution of run.executions || []) {
@@ -87,11 +124,11 @@ function status(db) {
     }
   }
   return {
-    storyboard_id: 3, model: MODEL, size: '1440x2560', budget_limit_cny: 10,
+    storyboard_id: storyboardId, model: MODEL, size: '1440x2560', budget_limit_cny: 10,
     runs,
     quarantined_checks: (desc.quarantined_quality_checks || []).length,
     unverified_checks: (desc.quality_checks || []).filter(check => !check.evidence?.result_event_id).length,
-    historical_unknown_tasks: [23, 24, 25],
+    historical_unknown_tasks: [23, 24, 25, 26, 27],
     video_authorized: false,
   };
 }
@@ -108,7 +145,11 @@ function validateReview(result) {
   return result;
 }
 function reserve(db, run, kind, amount, stage) {
-  const spent = status(db).runs.reduce((sum, item) => sum + (item.costs?.reservations || []).reduce((n, cost) => n + cost.reserved_cny, 0), 0);
+  const persistedSpent = db.prepare('SELECT description FROM storyboards').all().flatMap(row => {
+    try { return JSON.parse(row.description || '{}').static_production_runs || []; } catch (_) { return []; }
+  }).reduce((sum, item) => sum + (item.costs?.reservations || []).reduce((n, cost) => n + Number(cost.reserved_cny || 0), 0), 0);
+  const currentSpent = (run.costs?.reservations || []).reduce((sum, cost) => sum + Number(cost.reserved_cny || 0), 0);
+  const spent = persistedSpent + currentSpent;
   if (spent + amount > 10) throw new Error('BUDGET_BLOCKED: A 镜累计静态预算不足，停止新增调用');
   run.costs.reservations.push({ kind, stage, reserved_cny: amount, actual_cost_cny: null, billing_status: 'PENDING_SETTLEMENT' });
   persist(db, run);
@@ -132,7 +173,7 @@ function assertNewCorrectivePrompt(run, prompt, round) {
   }
 }
 async function execute(db, cfg, log, run, dependencies = {}) {
-  const initial = context(db, cfg);
+  const initial = context(db, cfg, run.storyboard_id);
   const evidenceRoot = process.env.LOCALMINIDRAMA_STATIC_EVIDENCE_ROOT || 'H:/localminidrama-runtime-static/evidence';
   const root = path.join(evidenceRoot, run.run_id);
   fs.mkdirSync(root, { recursive: true });
@@ -167,7 +208,7 @@ async function execute(db, cfg, log, run, dependencies = {}) {
   try {
     let correction = null;
     for (let round = 1; round <= (run.transmission_recovery_of ? 1 : 2); round++) {
-      context(db, cfg); // Revalidate authority before each new round.
+      context(db, cfg, run.storyboard_id); // Revalidate authority before each new round.
       const analyzeStage = 'analysis-' + round;
       update(analyzeStage, round === 1 ? 'Agent 专业分析与首帧提示词优化' : 'Agent 根据真实审片缺陷修正提示词', 10 + (round - 1) * 40);
       const analysis = await agentStage(analyzeStage, { ...AGENTS.analyze, environmentId: ENVIRONMENT_ID, stage: analyzeStage,
@@ -191,8 +232,8 @@ async function execute(db, cfg, log, run, dependencies = {}) {
         candidate = db.prepare('SELECT * FROM image_generations WHERE id = ?').get(previousCandidate.image_generation_id);
         if (candidate?.status !== 'completed') throw new Error('Recorded candidate is no longer completed');
       } else if (round === 1 && run.candidate_strategy === 'reuse_latest') {
-        candidate = db.prepare("SELECT * FROM image_generations WHERE storyboard_id = 3 AND status = 'completed' AND deleted_at IS NULL AND model = ? AND size = '1440x2560' AND reference_images = ? ORDER BY id DESC LIMIT 1")
-          .get(MODEL, JSON.stringify(initial.shot.references.map(item => item.path)));
+        candidate = db.prepare("SELECT * FROM image_generations WHERE storyboard_id = ? AND status = 'completed' AND deleted_at IS NULL AND model = ? AND size = '1440x2560' AND reference_images = ? ORDER BY id DESC LIMIT 1")
+          .get(run.storyboard_id, MODEL, JSON.stringify(initial.shot.references.map(item => item.path)));
         if (!candidate?.local_path) throw new Error('没有符合固定规格和参考合同的可复用候选');
       } else {
         update('generation-' + round, '使用既有生成服务创建新首帧候选', 30 + (round - 1) * 40);
@@ -203,12 +244,12 @@ async function execute(db, cfg, log, run, dependencies = {}) {
           assertNewCorrectivePrompt(run, analysis.result.optimized_prompt, round);
         }
         if (!run.pending_image_generation_id) reserve(db, run, 'seedream_image', 1, 'generation-' + round);
-        context(db, cfg);
+        context(db, cfg, run.storyboard_id);
         const created = run.pending_image_generation_id ? { id: run.pending_image_generation_id }
           : (dependencies.createImage || imageService.create)(db, log, {
-          storyboard_id: 3, drama_id: 2, provider: 'volcengine', model: MODEL, size: '1440x2560',
+          storyboard_id: run.storyboard_id, drama_id: run.drama_id, provider: 'volcengine', model: MODEL, size: '1440x2560',
           aspect_ratio: '9:16', frame_type: 'first', prompt: analysis.result.optimized_prompt,
-          negative_prompt: analysis.result.negative_prompt || '', reference_images: initial.shot.references.map(item => item.path),
+          negative_prompt: analysis.result.negative_prompt || '', reference_images: (initial.shot.references || []).map(item => item.path),
         });
         run.pending_image_generation_id = Number(created.id);
         persist(db, run);
@@ -257,7 +298,7 @@ async function execute(db, cfg, log, run, dependencies = {}) {
           result_event_id: reviewed.execution.result_event_id, input_hash: reviewed.execution.input_hash,
           media_sha256: entry.media_sha256, plan_sha256: PLAN_HASH, approval_sha256: run.approval_sha256 } };
       const port = Number(process.env.PORT) || cfg.server?.port || 5679;
-      const result = await fetch('http://127.0.0.1:' + port + '/api/v1/storyboards/3/quality-check', {
+      const result = await fetch('http://127.0.0.1:' + port + '/api/v1/storyboards/' + run.storyboard_id + '/quality-check', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(quality), signal: AbortSignal.timeout(15000),
       });
       const imported = await result.json();
@@ -292,7 +333,8 @@ async function execute(db, cfg, log, run, dependencies = {}) {
   } finally { running.delete(run.run_id); }
 }
 function start(db, cfg, log, body = {}) {
-  const ctx = context(db, cfg);
+  const storyboardId = Number(body.storyboard_id || 3);
+  const ctx = context(db, cfg, storyboardId);
   const previous = ctx.desc.static_production_runs || [];
   for (const oldRun of previous) {
     if (oldRun.status === 'BLOCKED' && oldRun.executions?.some(execution => execution.execution_status === 'FAILED' && !execution.session_id)) {
@@ -311,10 +353,10 @@ function start(db, cfg, log, body = {}) {
   if (!recovery && strategy === 'generate' && previous.some(item => item.unresolved_image_generations?.length)) throw new Error('已有未知图片请求，不能重新开始同一生成；请基于真实审片意见修正或核实云端状态');
   if (recovery && (strategy !== 'generate' || !process.env.LOCALMINIDRAMA_ARK_IMAGE_LOCAL_ADDRESS)) throw new Error('独立传输修复请求需要已配置的方舟物理网卡出口');
   if (recovery && status(db).runs.reduce((sum, item) => sum + (item.costs?.reservations || []).reduce((n, cost) => n + cost.reserved_cny, 0), 0) + 2 > 10) throw new Error('BUDGET_BLOCKED: 新图片和一次真实审核需要预留 ¥2');
-  quarantine(db);
-  const task = taskService.createTask(db, log, 'static_production', '3');
+  quarantine(db, storyboardId);
+  const task = taskService.createTask(db, log, 'static_production', String(storyboardId));
   const run = { run_id: 'static-' + crypto.randomUUID(), request_id: body.request_id, task_id: task.id,
-    storyboard_id: 3, drama_id: 2, episode_id: 2, shot_key: 's01_01A', status: 'RUNNING', stage: 'queued',
+    storyboard_id: storyboardId, drama_id: ctx.sb.drama_id, episode_id: ctx.sb.episode_id, shot_key: ctx.sb.title, status: 'RUNNING', stage: 'queued',
     model: MODEL, size: '1440x2560', candidate_strategy: strategy, approval_sha256: ctx.approvalHash,
     plan_sha256: PLAN_HASH, executions: [], candidates: [], costs: { currency: 'CNY', budget_limit: 10,
       reservations: [], actual_cost_cny: null, billing_status: 'PENDING_SETTLEMENT',
@@ -347,9 +389,10 @@ function validateTransmissionRecovery(previous, sourceId) {
   return { source, analysis };
 }
 function resume(db, cfg, log, runId, options = {}) {
-  context(db, cfg);
-  const run = (readDescription(db).static_production_runs || []).find(item => item.run_id === runId);
+  const located = findRun(db, runId);
+  const run = located && located.run;
   if (!run) throw new Error('制作任务不存在');
+  context(db, cfg, run.storyboard_id);
   if (running.has(runId)) return run;
   const reuseAfterUnknownImage = options.reuse_existing === true && run.pending_image_generation_id && run.generation_error && run.candidates.length === 0;
   const reviseFromRealReview = options.revise_from_review === true && run.status === 'NEEDS_REVISION';
@@ -387,9 +430,10 @@ function resume(db, cfg, log, runId, options = {}) {
   return run;
 }
 async function checkBilling(db, cfg, log, runId) {
-  context(db, cfg);
-  const run = (readDescription(db).static_production_runs || []).find(item => item.run_id === runId);
+  const located = findRun(db, runId);
+  const run = located && located.run;
   if (!run) throw new Error('制作任务不存在');
+  context(db, cfg, run.storyboard_id);
   if (running.has(runId)) throw new Error('制作执行中，请稍后核对账单');
   const root = path.join(process.env.LOCALMINIDRAMA_STATIC_EVIDENCE_ROOT || 'H:/localminidrama-runtime-static/evidence', runId);
   const client = new ManagedAgentWorkbenchClient({ root });
