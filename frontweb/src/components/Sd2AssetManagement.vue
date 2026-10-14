@@ -36,6 +36,7 @@
         <el-input v-model="apiKey" type="password" show-password placeholder="推理用 ARK / 中转 API Key" clearable />
       </el-form-item>
       <template v-else>
+        <p v-if="credentialFile" class="field-hint">已复用本机保存的火山访问密钥，由后端读取；无需重新填写，浏览器不接收密钥内容。</p>
         <el-form-item label="Access Key ID">
           <el-input v-model="accessKeyId" placeholder="控制台 IAM Access Key ID" clearable />
         </el-form-item>
@@ -274,6 +275,7 @@ const projectName = ref('')
 const authMode = ref('volc_sign')
 const accessKeyId = ref('')
 const secretAccessKey = ref('')
+const credentialFile = ref('')
 const signRegion = ref('')
 /** 仅合并到 List / Create 类请求，避免影响 Get/Update/Delete */
 const billingModel = ref('')
@@ -359,6 +361,7 @@ function loadFromSavedRow(row) {
   assetGroupIdForCert.value = s.asset_group_id || ''
   accessKeyId.value = s.access_key_id || ''
   secretAccessKey.value = s.secret_access_key || ''
+  credentialFile.value = s.credential_file || ''
   signRegion.value = s.sign_region || ''
   if (assetGroupIdForCert.value) assetGroupIdInput.value = assetGroupIdForCert.value
 }
@@ -405,8 +408,11 @@ async function saveToAiConfig() {
     asset_group_id: assetGroupIdForCert.value.trim(),
   }
   if (authMode.value === 'volc_sign') {
-    settings.access_key_id = accessKeyId.value.trim()
-    settings.secret_access_key = secretAccessKey.value.trim()
+    if (credentialFile.value && !accessKeyId.value.trim() && !secretAccessKey.value.trim()) settings.credential_file = credentialFile.value
+    else {
+      settings.access_key_id = accessKeyId.value.trim()
+      settings.secret_access_key = secretAccessKey.value.trim()
+    }
     if (signRegion.value.trim()) settings.sign_region = signRegion.value.trim()
   }
   const payload = {
@@ -500,7 +506,7 @@ function mergeBillingModel(payload, withModel) {
 function connReady() {
   if (!baseUrl.value.trim()) return false
   if (authMode.value === 'volc_sign') {
-    return !!(accessKeyId.value.trim() && secretAccessKey.value.trim())
+    return !!(accessKeyId.value.trim() && secretAccessKey.value.trim()) || !!(credentialFile.value && savedConfigId.value)
   }
   return !!apiKey.value.trim()
 }
@@ -508,7 +514,7 @@ function connReady() {
 function connWarn() {
   if (!baseUrl.value.trim()) return '请先填写 Base URL'
   if (authMode.value === 'volc_sign') {
-    if (!accessKeyId.value.trim() || !secretAccessKey.value.trim()) {
+    if (!credentialFile.value && (!accessKeyId.value.trim() || !secretAccessKey.value.trim())) {
       return '官方 OpenAPI 请填写 Access Key ID 与 Secret Access Key（控制台 IAM，非推理 API Key）'
     }
   } else if (!apiKey.value.trim()) {
@@ -536,8 +542,11 @@ async function call(action, payload, opts = {}) {
   if (authMode.value === 'bearer') {
     body.api_key = apiKey.value
   } else {
-    body.access_key_id = accessKeyId.value.trim()
-    body.secret_access_key = secretAccessKey.value.trim()
+    if (credentialFile.value && savedConfigId.value) body.config_id = savedConfigId.value
+    else {
+      body.access_key_id = accessKeyId.value.trim()
+      body.secret_access_key = secretAccessKey.value.trim()
+    }
     if (signRegion.value.trim()) body.sign_region = signRegion.value.trim()
   }
   return aiAPI.modelArkAsset(body)

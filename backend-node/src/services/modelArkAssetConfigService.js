@@ -1,6 +1,19 @@
 'use strict';
 
 const { callModelArkAsset } = require('./modelArkAssetProxyService');
+const fs = require('node:fs');
+
+function readLocalAccessKeys(filename) {
+  const fields = {};
+  try {
+    for (const line of fs.readFileSync(filename, 'utf8').split(/\r?\n/)) {
+      const split = line.indexOf(':');
+      if (split > 0) fields[line.slice(0, split).trim()] = line.slice(split + 1).trim();
+    }
+  } catch (_) { throw new Error('无法读取已配置的本机火山访问密钥'); }
+  if (!fields.AccessKeyId || !fields.SecretAccessKey) throw new Error('本机访问密钥文件缺少 AK/SK');
+  return { access_key_id: fields.AccessKeyId, secret_access_key: fields.SecretAccessKey };
+}
 
 function loadModelArkAssetRow(db) {
   if (!db) return null;
@@ -62,6 +75,10 @@ function buildModelArkContext(db, log) {
   } else {
     callOpts.access_key_id = (settings.access_key_id || '').toString().trim();
     callOpts.secret_access_key = (settings.secret_access_key || '').toString().trim();
+    if (settings.credential_file && (!callOpts.access_key_id || !callOpts.secret_access_key)) {
+      try { Object.assign(callOpts, readLocalAccessKeys(settings.credential_file)); }
+      catch (error) { return { ready: false, row, settings, diag: { db_model_ark_row_found: true, missing: error.message } }; }
+    }
     if (settings.sign_region) callOpts.sign_region = settings.sign_region;
     if (!baseUrl || !callOpts.access_key_id || !callOpts.secret_access_key) {
       return {

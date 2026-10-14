@@ -128,12 +128,18 @@ function testConnection(log) {
 }
 
 /** ModelArk / 方舟私有资产库：代理调用 CreateAssetGroup、ListAssets 等（与官方 Action 名一致） */
-function modelArkAsset(log) {
+function modelArkAsset(db, log) {
   return async (req, res) => {
     const body = req.body || {};
     const action = (body.action || '').toString().trim();
     try {
       const modelArkAssetProxyService = require('../services/modelArkAssetProxyService');
+      let saved = {};
+      if (body.config_id != null) {
+        const ctx = require('../services/modelArkAssetConfigService').buildModelArkContext(db, log);
+        if (!ctx.ready || Number(ctx.row.id) !== Number(body.config_id)) throw new Error('已保存的火山资产库配置不可用');
+        saved = ctx.callOpts;
+      }
       const data = await modelArkAssetProxyService.callModelArkAsset(
         {
           base_url: body.base_url,
@@ -150,6 +156,7 @@ function modelArkAsset(log) {
           sign_service: body.sign_service,
           session_token: body.session_token,
           project_name: body.project_name,
+          ...saved,
         },
         log
       );
@@ -192,7 +199,7 @@ module.exports = function aiConfigRoutes(db, log, cfg) {
     delete: remove(db, log, cfg),
     testConnection: testConnection(log),
     listJimeng2MaterialAssets: listJimeng2MaterialAssets(log),
-    modelArkAsset: modelArkAsset(log),
+    modelArkAsset: modelArkAsset(db, log),
     bulkUpdateKey: bulkUpdateKey(db, log, cfg),
   };
 };

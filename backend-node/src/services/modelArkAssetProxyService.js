@@ -149,6 +149,7 @@ async function fetchSignedOpenApi({
     params,
     headers: {
       'Content-Type': 'application/json; charset=utf-8',
+      Host: host,
     },
     body: bodyStr,
   };
