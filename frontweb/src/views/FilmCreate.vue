@@ -4,8 +4,8 @@
     <header class="header">
       <div class="header-inner">
         <h1 class="logo" @click="goList">
-          <span class="logo-main">本地短剧助手</span>
-          <span class="logo-sub">LocalMiniDrama</span>
+          <span class="logo-main">择梦短剧工作台</span>
+          <span class="logo-sub">ZemoraDrama</span>
         </h1>
         <span class="breadcrumb-sep">›</span>
         <span class="page-title">{{ dramaId ? (store.drama?.title || '项目') : '新建故事' }}</span>
@@ -462,6 +462,7 @@
                 </el-button>
                 <el-button size="small" :disabled="!dramaId" @click="openAddCharacter">添加角色</el-button>
                 <el-button size="small" @click="showCharLibrary = true">本剧角色库</el-button>
+                <el-button size="small" @click="openArkAssetConfig">火山角色库设置</el-button>
               </div>
               <div class="asset-list asset-list-two">
                 <div v-for="char in characters" :key="char.id" class="asset-item asset-item-left-right">
@@ -482,7 +483,7 @@
                         加入本剧库
                       </el-button>
                       <el-button size="small" :loading="addingCharToMaterialId === char.id" :disabled="!hasAssetImage(char)" @click="onAddCharacterToMaterialLibrary(char)">
-                        加入素材库
+                        加入本地素材库
                       </el-button><el-button
                         size="small"
                         :type="char.seedance2_asset?.status === 'active' ? 'success' : 'warning'"
@@ -1857,7 +1858,7 @@
 
     <el-dialog
       v-model="showCharSd2Cert"
-      title="SD2 认证详情"
+      title="角色入库详情"
       width="min(720px, 92vw)"
       destroy-on-close
       class="sd2-cert-dialog"
@@ -2647,7 +2648,7 @@
 
     <!-- AI 配置弹窗（不跳转，避免本页内容丢失） -->
     <el-dialog v-model="showAiConfigDialog" title="AI 配置" width="90%" destroy-on-close class="ai-config-dialog">
-      <AIConfigContent v-if="showAiConfigDialog" />
+      <AIConfigContent v-if="showAiConfigDialog" :initial-tab="aiConfigInitialTab" />
     </el-dialog>
 
     <!-- 图片放大预览：点击遮罩或图片关闭 -->
@@ -2731,6 +2732,11 @@ function goCanvasMode() {
 
 
 const showAiConfigDialog = ref(false)
+const aiConfigInitialTab = ref('configs')
+function openArkAssetConfig() {
+  aiConfigInitialTab.value = 'sd2_assets'
+  showAiConfigDialog.value = true
+}
 watch(showAiConfigDialog, (open) => {
   if (!open) invalidateActiveVideoAiConfigCache()
 })
@@ -2948,7 +2954,7 @@ const {
   openEditCharLibrary, submitEditCharLibrary,
   onDeleteCharLibrary, onAddCharacterToLibrary, onAddCharacterToMaterialLibrary,
   onAddCharFromLibrary, onAddDramaCharToEpisode,
-} = useCharacters({ store, dramaId, currentEpisodeId, getSelectedStyle, loadDrama, pollTask, pollUntilResourceHasImage, hasAssetImage })
+} = useCharacters({ store, dramaId, currentEpisodeId, getSelectedStyle, loadDrama, pollTask, pollUntilResourceHasImage, hasAssetImage, openArkAssetConfig })
 
 // ── Composable: Props ──────────────────────────────────
 const {

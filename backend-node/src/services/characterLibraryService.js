@@ -777,7 +777,11 @@ function readSeedance2AssetJson(text) {
   }
 }
 
-function resolveSd2RegisterProvider(cfg, db, log) {
+function resolveSd2RegisterProvider(cfg, db, log, preferredProvider) {
+  if (preferredProvider === 'model_ark') {
+    const arkCtx = modelArkAssetConfigService.buildModelArkContext(db, log);
+    return { provider: arkCtx.ready ? 'model_ark' : null, arkCtx };
+  }
   const hubCtx = jimengMaterialHubService.buildHubContext(cfg, db, log);
   if (hubCtx.token) return { provider: 'hub', hubCtx };
   const arkCtx = modelArkAssetConfigService.buildModelArkContext(db, log);
@@ -984,9 +988,11 @@ async function registerCharacterViaModelArk(db, log, cfg, characterId, arkCtx, p
  * 注册角色主图为 Seedance 2.0 可用 asset 引用。
  * 优先即梦2角色认证（hub）；否则使用已保存的 ModelArk 官方资产库配置。
  */
-async function registerCharacterJimengMaterialAsset(db, log, cfg, characterId) {
-  const route = resolveSd2RegisterProvider(cfg, db, log);
+async function registerCharacterJimengMaterialAsset(db, log, cfg, characterId, preferredProvider) {
+  if (preferredProvider && preferredProvider !== 'model_ark') return { ok: false, error: '不支持的角色库提供方' };
+  const route = resolveSd2RegisterProvider(cfg, db, log, preferredProvider);
   if (!route.provider) {
+    if (preferredProvider === 'model_ark') return { ok: false, error: '未配置火山角色库：请在「火山角色库设置」填写 AK/SK 和默认资产组，并保存到 AI 配置。现有角色认证记录保留。' };
     return { ok: false, error: sd2ConfigMissingError(route.hubCtx, route.arkCtx) };
   }
   const prep = await prepareCharacterRegisterImage(db, log, cfg, characterId);
@@ -1063,4 +1069,5 @@ module.exports = {
   extractAppearanceFromImage,
   registerCharacterJimengMaterialAsset,
   refreshCharacterJimengMaterialAsset,
+  resolveSd2RegisterProvider,
 };

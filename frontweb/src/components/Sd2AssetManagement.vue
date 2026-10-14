@@ -4,7 +4,7 @@
       <template #title>
         <span>
           对接 BytePlus ModelArk / 火山方舟<strong>私有资产库</strong>（Seedance 2.0 等使用的 <code>Asset://</code> 素材）。
-          配置完成后请点击下方<strong>「保存到 AI 配置」</strong>，创作页「SD2认证」将优先使用「即梦2角色认证」；若未配置则使用此处保存的官方资产库配置。
+          配置完成后请点击下方<strong>「保存到 AI 配置」</strong>，角色区「加入火山角色库」直接使用此处保存的官方资产库配置。已有网关认证记录及状态查询继续保留。
           官方流程：<a href="https://docs.byteplus.com/en/docs/ModelArk/2318270" target="_blank" rel="noopener">CreateAssetGroup</a>
           → CreateAsset → List / Get / Update / Delete。
           带 <code>?Action=</code> 的接口为<strong>控制面 OpenAPI</strong>，须使用控制台
@@ -20,10 +20,10 @@
       <el-form-item label="Base URL">
         <el-input
           v-model="baseUrl"
-          placeholder="须含 /api/v3，如 https://ark.ap-southeast-1.byteplusapi.com/api/v3（仅域名时后端会尝试自动补全）"
+          placeholder="火山角色库：https://ark.cn-beijing.volcengineapi.com"
           clearable
         />
-        <p class="field-hint">OpenAPI 与推理共用前缀一般为 <code>/api/v3</code>；若只填域名可能导致路由不对、工程名不生效。</p>
+        <p class="field-hint">火山角色库使用控制面地址 <code>https://ark.cn-beijing.volcengineapi.com</code> 与 AK/SK 签名；与图片、视频推理地址分开配置。旧推理地址由后端兼容转换，不修改原配置。</p>
       </el-form-item>
       <el-form-item label="鉴权方式">
         <el-radio-group v-model="authMode">

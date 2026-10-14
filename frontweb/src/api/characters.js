@@ -44,8 +44,8 @@ export const characterAPI = {
   extractAnchors(characterId) {
     return request.post(`/characters/${characterId}/extract-anchors`, {})
   },
-  sd2Certify(characterId) {
-    return request.post(`/characters/${characterId}/sd2-certify`, {})
+  sd2Certify(characterId, provider) {
+    return request.post(`/characters/${characterId}/sd2-certify`, provider ? { provider } : {})
   },
   sd2CertifyRefresh(characterId) {
     return request.post(`/characters/${characterId}/sd2-certify/refresh`, {})

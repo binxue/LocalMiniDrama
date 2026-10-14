@@ -26,7 +26,7 @@ function normalizeBaseUrl(raw) {
 /**
  * 仅主机、无路径时补全 /api/v3，与控制台 OpenAPI 一致；否则 IAM/路由可能不按预期解析 ProjectName。
  */
-function ensureArkOpenApiBasePath(raw) {
+function ensureArkOpenApiBasePath(raw, signed = false) {
   const s0 = String(raw || '').trim();
   if (!s0) return s0;
   let u;
@@ -37,6 +37,15 @@ function ensureArkOpenApiBasePath(raw) {
   }
   const path = (u.pathname || '/').replace(/\/+$/, '') || '/';
   const host = (u.host || '').toLowerCase();
+  if (signed && host === 'ark.cn-beijing.volces.com' && path === '/api/v3') {
+    u.host = 'ark.cn-beijing.volcengineapi.com'; u.pathname = '/'; u.search = '';
+    return u.toString().replace(/\/$/, '');
+  }
+  if (signed && ['ark.cn-beijing.volcengineapi.com', 'ark.ap-southeast-1.byteplusapi.com'].includes(host)
+      && ['/', '/api/v3'].includes(path)) {
+    u.pathname = '/'; u.search = '';
+    return u.toString().replace(/\/$/, '');
+  }
   const looksArk =
     /(^|\.)ark\./.test(host) ||
     host.includes('byteplus') ||
@@ -201,7 +210,7 @@ async function callModelArkAsset(opts, log) {
   const act = action.trim();
   if (!ALLOWED_ACTIONS.has(act)) throw new Error('不支持的 action: ' + act);
 
-  const base = normalizeBaseUrl(ensureArkOpenApiBasePath(base_url));
+  const base = normalizeBaseUrl(ensureArkOpenApiBasePath(base_url, auth_mode === 'volc_sign'));
   const pathMode = (path_mode || 'open_api_query').toString();
   const modeAuth = (auth_mode || 'bearer').toString();
 
@@ -266,4 +275,5 @@ async function callModelArkAsset(opts, log) {
 module.exports = {
   callModelArkAsset,
   ALLOWED_ACTIONS,
+  ensureArkOpenApiBasePath,
 };

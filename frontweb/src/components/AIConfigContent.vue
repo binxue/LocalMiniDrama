@@ -1200,7 +1200,8 @@ import PromptEditor from '@/components/PromptEditor.vue'
 import SceneModelMap from '@/components/SceneModelMap.vue'
 import Sd2AssetManagement from '@/components/Sd2AssetManagement.vue'
 
-const activeTab = ref('configs')
+const props = defineProps({ initialTab: { type: String, default: 'configs' } })
+const activeTab = ref(props.initialTab === 'sd2_assets' ? 'sd2_assets' : 'configs')
 const importFileRef = ref(null)
 
 // ---- 生成设置 ----

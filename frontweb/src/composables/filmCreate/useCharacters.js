@@ -628,7 +628,7 @@ export function useCharacters(deps) {
     }
   }
 
-  async function onSd2CertifyCharacter(char) {
+  async function onSd2CertifyCharacter(char, provider = 'model_ark') {
     if (!char?.id) return
     if (!hasAssetImage(char)) {
       ElMessage.warning('请先为该角色生成或上传图片')
@@ -636,9 +636,9 @@ export function useCharacters(deps) {
     }
     sd2CertifyingId.value = char.id
     try {
-      await characterAPI.sd2Certify(char.id)
+      await characterAPI.sd2Certify(char.id, provider)
       await loadDrama()
-      ElMessage.success('SD2 认证请求已提交')
+      ElMessage.success(provider === 'model_ark' ? '火山角色库入库请求已提交' : 'SD2 认证请求已提交')
     } catch (e) {
       const msg = e?.message || ''
       if (/已存在|已认证|already/i.test(msg)) {
@@ -652,6 +652,7 @@ export function useCharacters(deps) {
         }
       }
       ElMessage.error(msg || 'SD2 认证失败')
+      if (msg.includes('未配置火山角色库')) deps.openArkAssetConfig?.()
     } finally {
       sd2CertifyingId.value = null
     }
@@ -673,10 +674,10 @@ export function useCharacters(deps) {
 
   function sd2ActionLabel(char) {
     const status = String(char?.seedance2_asset?.status || '').toLowerCase()
-    if (status === 'active') return '查看认证'
-    if (status === 'processing') return '刷新认证'
-    if (status === 'failed') return '重新认证'
-    return 'sd2认证'
+    if (status === 'active') return char?.seedance2_asset?.sd2_provider === 'model_ark' ? '查看火山角色' : '查看认证'
+    if (status === 'processing') return '刷新入库状态'
+    if (status === 'failed') return char?.seedance2_asset?.sd2_provider === 'hub' ? '重新认证' : '重新加入火山角色库'
+    return '加入火山角色库'
   }
 
   async function onSd2PrimaryAction(char) {
@@ -689,7 +690,7 @@ export function useCharacters(deps) {
       await onSd2CertifyRefresh(char)
       return
     }
-    await onSd2CertifyCharacter(char)
+    await onSd2CertifyCharacter(char, char?.seedance2_asset?.sd2_provider === 'hub' ? null : 'model_ark')
   }
 
   function openCharSd2CertDialog(char) {
