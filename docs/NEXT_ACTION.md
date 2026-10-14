@@ -6,6 +6,8 @@
 
 The batch executor now repairs legacy unsubmitted candidates by binding them to the same batch's completed predecessor before any cloud call. It only resets a failed candidate with no Writer task; any existing Writer/Editor task remains read-only recovery state. This preserves completed episodes and prevents duplicate paid calls across restart. Full Node tests are 99/99 and frontend build passes. 3014 route/API evidence and refresh-safe candidate/review data are available; full interactive Chromium Console/Network evidence is still an explicit gap.
 
+After the latest restart, the completed episode 2 batch item is normalized to `completed` with no stale error text. Episode 3 remains `awaiting_recovery` with its single unknown Writer task; no retry is allowed.
+
 Next action: keep episode-3 unknown state paused, finish deterministic browser/export evidence on the two completed adaptation episodes, and only continue the batch after explicit terminal evidence or a new bounded product decision. Preserve Rainforest Canon, 3013, 5679, Runtime data and all historical tasks.
 
 ## 2026-10-14 改编首集真实验收与五集批次推进

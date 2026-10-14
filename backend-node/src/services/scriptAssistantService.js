@@ -69,6 +69,10 @@ function ensureTable(db) {
     status TEXT NOT NULL, error_text TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
     PRIMARY KEY(batch_id, episode_no)
   )`);
+  db.exec(`UPDATE script_assistant_batch_items
+    SET error_text=NULL
+    WHERE status='completed' AND error_text IS NOT NULL
+      AND candidate_id IN (SELECT candidate_id FROM script_assistant_episode_candidates WHERE status='completed')`);
 }
 
 function revisions(db, workId) { ensureTable(db); return db.prepare('SELECT * FROM script_assistant_revisions WHERE work_id=? ORDER BY created_at DESC').all(workId); }
@@ -214,7 +218,7 @@ async function executeBatch(db,log,config,batchId){
       db.prepare("UPDATE script_assistant_batch_items SET status='queued',error_text=NULL,updated_at=? WHERE batch_id=? AND episode_no=? AND status='failed'").run(new Date().toISOString(), batchId, item.episode_no);
       c.status = 'queued';
     }
-    if(c.status==='completed'){if(item.status!=='completed'){const stamp=new Date().toISOString();db.transaction(()=>{const changed=db.prepare("UPDATE script_assistant_batch_items SET status='completed',updated_at=? WHERE batch_id=? AND episode_no=? AND status!='completed'").run(stamp,batchId,item.episode_no);if(changed.changes)db.prepare('UPDATE script_assistant_batches SET completed_count=completed_count+1,updated_at=? WHERE batch_id=?').run(stamp,batchId);})();}continue;}
+    if(c.status==='completed'){if(item.status!=='completed' || item.error_text){const stamp=new Date().toISOString();db.transaction(()=>{const changed=db.prepare("UPDATE script_assistant_batch_items SET status='completed',error_text=NULL,updated_at=? WHERE batch_id=? AND episode_no=? AND (status!='completed' OR error_text IS NOT NULL)").run(stamp,batchId,item.episode_no);if(changed.changes && item.status!=='completed')db.prepare('UPDATE script_assistant_batches SET completed_count=completed_count+1,updated_at=? WHERE batch_id=?').run(stamp,batchId);})();}continue;}
     if(['writing','reviewing','awaiting_recovery'].includes(c.status)){const stamp=new Date().toISOString();db.prepare("UPDATE script_assistant_batch_items SET status='awaiting_recovery',error_text=?,updated_at=? WHERE batch_id=? AND episode_no=? AND status!='completed'").run('分集任务需回查原Session后恢复；不会重新提交',stamp,batchId,item.episode_no);db.prepare("UPDATE script_assistant_batches SET status='paused',current_episode=?,error_text='分集任务需回查原Session后恢复；不会重新提交',updated_at=? WHERE batch_id=?").run(item.episode_no,stamp,batchId);return;}
     db.prepare("UPDATE script_assistant_batches SET status='running',current_episode=?,updated_at=? WHERE batch_id=?").run(item.episode_no,new Date().toISOString(),batchId);
     try{
