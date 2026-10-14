@@ -39,6 +39,26 @@ function ensureTable(db) {
     action TEXT NOT NULL, note TEXT, source_sha256 TEXT NOT NULL, candidate_sha256 TEXT,
     created_at TEXT NOT NULL
   )`);
+  db.exec(`CREATE TABLE IF NOT EXISTS script_assistant_episode_candidates (
+    candidate_id TEXT PRIMARY KEY, work_id TEXT NOT NULL, episode_no INTEGER NOT NULL,
+    title TEXT, status TEXT NOT NULL, candidate_text TEXT, candidate_sha256 TEXT,
+    writer_task_id TEXT, editor_task_id TEXT, editor_review TEXT,
+    approval_status TEXT NOT NULL DEFAULT 'not_approved', request TEXT,
+    created_at TEXT NOT NULL, completed_at TEXT, error_text TEXT,
+    UNIQUE(work_id, episode_no, candidate_id)
+  )`);
+  db.exec(`CREATE TABLE IF NOT EXISTS script_assistant_batches (
+    batch_id TEXT PRIMARY KEY, work_id TEXT NOT NULL, request TEXT NOT NULL,
+    episode_start INTEGER NOT NULL, episode_end INTEGER NOT NULL, status TEXT NOT NULL,
+    current_episode INTEGER, completed_count INTEGER NOT NULL DEFAULT 0,
+    total_count INTEGER NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+    error_text TEXT
+  )`);
+  db.exec(`CREATE TABLE IF NOT EXISTS script_assistant_batch_items (
+    batch_id TEXT NOT NULL, episode_no INTEGER NOT NULL, candidate_id TEXT,
+    status TEXT NOT NULL, error_text TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+    PRIMARY KEY(batch_id, episode_no)
+  )`);
 }
 
 function revisions(db, workId) { ensureTable(db); return db.prepare('SELECT * FROM script_assistant_revisions WHERE work_id=? ORDER BY created_at DESC').all(workId); }
@@ -97,6 +117,39 @@ function approveRevision(db, id, actor='user', expected={}) {
 }
 async function refreshRevision(db, id) { const r=db.prepare('SELECT * FROM script_assistant_revisions WHERE revision_id=?').get(id); if(!r) throw new Error('修订不存在'); if(!r.editor_task_id) { const taskId=r.writer_task_id || r.producer_task_id; if(taskId) { await managed.refreshTask(db,taskId); const t=managed.getTask(db,taskId); if(t?.task_status==='completed' && r.writer_task_id && t.output_text) db.prepare('UPDATE script_assistant_revisions SET candidate_text=?,candidate_sha256=?,status=?,error_text=? WHERE revision_id=?').run(t.output_text,hash(t.output_text),'awaiting_next_authorization','候选已恢复，后续独立审核需要明确授权；未重发任何任务',id); else db.prepare('UPDATE script_assistant_revisions SET status=?,error_text=? WHERE revision_id=?').run('awaiting_recovery','原任务状态已回查；恢复后续收费阶段需明确授权，不自动重试',id); } return db.prepare('SELECT * FROM script_assistant_revisions WHERE revision_id=?').get(id); } await managed.refreshTask(db,r.editor_task_id); const e=managed.getTask(db,r.editor_task_id); const w=r.writer_task_id&&managed.getTask(db,r.writer_task_id); if(e?.task_status==='completed' && w?.output_text && e.agent_id===EDITOR && e.work_id===r.work_id && e.revision_id===id && e.source_sha256===r.source_sha256 && e.candidate_sha256===hash(w.output_text) && (!r.candidate_sha256 || r.candidate_sha256===hash(w.output_text)) && reviewVerdict(e.output_text)!=='UNKNOWN') db.prepare('UPDATE script_assistant_revisions SET status=?,candidate_text=?,candidate_sha256=?,editor_review=?,completed_at=?,error_text=NULL WHERE revision_id=?').run('completed',w.output_text,hash(w.output_text),e.output_text,r.completed_at||new Date().toISOString(),id); return db.prepare('SELECT * FROM script_assistant_revisions WHERE revision_id=?').get(id); }
 function createEditorRecovery(db, log, id) { const r=db.prepare('SELECT * FROM script_assistant_revisions WHERE revision_id=?').get(id); if(!r||!r.writer_task_id) throw new Error('没有可复用的Writer候选'); const w=managed.getTask(db,r.writer_task_id); if(!w?.output_text) throw new Error('Writer候选正文不可用'); const input=`Independent Editor复审任务。只评审以下既有候选，不重写。必须在一次回复中明确 PASS、CONDITIONAL PASS 或 FAIL，并列出最多5条具体证据和最小建议。原稿SHA256=${r.source_sha256}。候选正文：\n${String(w.output_text).slice(0,7600)}\n候选仍非Canon，人工批准未记录。不要读取文件、不要调用工具。`; const t=managed.createTask(db,log,{agent_id:EDITOR,work_id:r.work_id,input,orchestration:true,episode_id:r.source_id,revision_id:id,source_sha256:r.source_sha256,candidate_sha256:w.output_version,context_hash:hash(input)}); db.prepare('UPDATE script_assistant_revisions SET status=?,editor_task_id=?,error_text=NULL WHERE revision_id=?').run('reviewing',t.task_id,id); return db.prepare('SELECT * FROM script_assistant_revisions WHERE revision_id=?').get(id); }
+
+function episodeCandidates(db, workId) { ensureTable(db); return db.prepare('SELECT * FROM script_assistant_episode_candidates WHERE work_id=? ORDER BY episode_no,created_at DESC').all(workId); }
+function batches(db, workId) { ensureTable(db); return db.prepare('SELECT * FROM script_assistant_batches WHERE work_id=? ORDER BY created_at DESC').all(workId).map(b => ({ ...b, items: db.prepare('SELECT * FROM script_assistant_batch_items WHERE batch_id=? ORDER BY episode_no').all(b.batch_id) })); }
+function latestEpisodeContext(db, workId, episodeNo) {
+  const row = db.prepare('SELECT * FROM script_assistant_episode_candidates WHERE work_id=? AND episode_no=? AND status=? ORDER BY created_at DESC LIMIT 1').get(workId, episodeNo);
+  return row?.candidate_text || '';
+}
+async function executeEpisodeCandidate(db, log, config, candidateId) {
+  const c = db.prepare('SELECT * FROM script_assistant_episode_candidates WHERE candidate_id=?').get(candidateId); if (!c || c.status !== 'queued') return;
+  try {
+    const work = loadWork(config, c.work_id); const scripts = work.sources.filter(s => s.available); const prior = scripts.filter(s => s.kind === 'script').slice(-3).map(s => `${s.title}:\n${s.text}`).join('\n');
+    const previous = latestEpisodeContext(db, c.work_id, c.episode_no - 1);
+    const input = `你是Story Writer。创作《${work.title}》第${c.episode_no}集独立候选剧本。不要改写既有集，不写Canon。必须输出完整可读正文，保持人物、道具、事件和悬念连续。\n用户目标：${c.request || '按照当前故事继续创作'}\n已核验前文资料：\n${prior.slice(-6000)}\n本批次上一集候选（临时事实，非Canon）：\n${previous.slice(-5000)}\n请只返回第${c.episode_no}集正文。`;
+    const writer = managed.createTask(db, log, { agent_id: 'agent-20261011131619-47ft8', work_id: c.work_id, input, orchestration: true, episode_id: `ep${c.episode_no}`, context_hash: hash(input) });
+    db.prepare('UPDATE script_assistant_episode_candidates SET status=?,writer_task_id=? WHERE candidate_id=?').run('writing', writer.task_id, candidateId); const wt = await waitTask(db, writer.task_id); if (wt.task_status !== 'completed' || !wt.output_text) throw new Error('Story Writer 未返回完整新集正文');
+    const text = wt.output_text; const editorInput = `你是Independent Editor。只审核第${c.episode_no}集候选，必须输出 PASS、CONDITIONAL PASS 或 FAIL，并列出最多5条连续性和质量证据。不要改写正文，不要把候选视为Canon。候选正文：\n${text}`;
+    const editor = managed.createTask(db, log, { agent_id: EDITOR, work_id: c.work_id, input: editorInput, orchestration: true, episode_id: `ep${c.episode_no}`, candidate_sha256: hash(text), context_hash: hash(editorInput) });
+    db.prepare('UPDATE script_assistant_episode_candidates SET status=?,candidate_text=?,candidate_sha256=?,editor_task_id=? WHERE candidate_id=?').run('reviewing',text,hash(text),editor.task_id,candidateId); const et = await waitTask(db, editor.task_id); if (et.task_status !== 'completed' || !et.output_text) throw new Error('Independent Editor 未返回有效审核');
+    db.prepare('UPDATE script_assistant_episode_candidates SET status=?,editor_review=?,completed_at=? WHERE candidate_id=?').run('completed',et.output_text,new Date().toISOString(),candidateId);
+  } catch (e) { db.prepare('UPDATE script_assistant_episode_candidates SET status=?,error_text=?,completed_at=? WHERE candidate_id=?').run('failed',e.message,new Date().toISOString(),candidateId); log.error('episode candidate failed',{candidate_id:candidateId,error:e.message}); }
+}
+function createEpisodeCandidate(db, log, config, workId, episodeNo, request='') {
+  ensureTable(db); episodeNo=Number(episodeNo); if (!Number.isInteger(episodeNo)||episodeNo<1) throw new Error('集数无效');
+  const active=db.prepare("SELECT 1 FROM script_assistant_episode_candidates WHERE work_id=? AND episode_no=? AND status IN ('queued','writing','reviewing')").get(workId,episodeNo); if(active) throw new Error(`第${episodeNo}集已有进行中的创作任务`);
+  const id=`cand_${crypto.randomUUID()}`, now=new Date().toISOString(); db.prepare('INSERT INTO script_assistant_episode_candidates(candidate_id,work_id,episode_no,title,status,request,created_at) VALUES(?,?,?,?,?,?,?)').run(id,workId,episodeNo,`第${episodeNo}集`,'queued',String(request||'').slice(0,1200),now); setImmediate(()=>executeEpisodeCandidate(db,log,config,id)); return db.prepare('SELECT * FROM script_assistant_episode_candidates WHERE candidate_id=?').get(id);
+}
+function createBatch(db, log, config, workId, request, start, end) {
+  start=Number(start); end=Number(end); if(!Number.isInteger(start)||!Number.isInteger(end)||start<1||end<start||end-start>4) throw new Error('连续创作范围必须为1–5集'); ensureTable(db); const now=new Date().toISOString(); const id=`batch_${crypto.randomUUID()}`;
+  db.transaction(()=>{db.prepare('INSERT INTO script_assistant_batches(batch_id,work_id,request,episode_start,episode_end,status,current_episode,total_count,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)').run(id,workId,String(request||''),start,end,'queued',start,end-start+1,now,now); const ins=db.prepare('INSERT INTO script_assistant_batch_items(batch_id,episode_no,status,created_at,updated_at) VALUES(?,?,?,?,?)'); for(let n=start;n<=end;n++) ins.run(id,n,'queued',now,now);})(); setImmediate(()=>executeBatch(db,log,config,id)); return batches(db,workId).find(x=>x.batch_id===id);
+}
+async function executeBatch(db,log,config,batchId){const b=db.prepare('SELECT * FROM script_assistant_batches WHERE batch_id=?').get(batchId);if(!b)return;for(const item of db.prepare('SELECT * FROM script_assistant_batch_items WHERE batch_id=? ORDER BY episode_no').all(batchId)){const existing=db.prepare('SELECT * FROM script_assistant_episode_candidates WHERE candidate_id=(SELECT candidate_id FROM script_assistant_batch_items WHERE batch_id=? AND episode_no=?)').get(batchId,item.episode_no);if(existing?.status==='completed')continue;if(existing && ['queued','writing','reviewing','awaiting_recovery'].includes(existing.status)){db.prepare('UPDATE script_assistant_batches SET status=?,current_episode=?,updated_at=? WHERE batch_id=?').run('paused',item.episode_no,new Date().toISOString(),batchId);return;}db.prepare('UPDATE script_assistant_batches SET status=?,current_episode=?,updated_at=? WHERE batch_id=?').run('running',item.episode_no,new Date().toISOString(),batchId);try{const c=createEpisodeCandidate(db,log,config,b.work_id,item.episode_no,b.request);db.prepare('UPDATE script_assistant_batch_items SET candidate_id=?,status=?,updated_at=? WHERE batch_id=? AND episode_no=?').run(c.candidate_id,'running',new Date().toISOString(),batchId,item.episode_no);let done=false;for(let i=0;i<180&&!done;i++){await new Promise(r=>setTimeout(r,1000));const row=db.prepare('SELECT status,error_text FROM script_assistant_episode_candidates WHERE candidate_id=?').get(c.candidate_id);if(row?.status==='completed'){done=true;db.prepare('UPDATE script_assistant_batch_items SET status=?,updated_at=? WHERE batch_id=? AND episode_no=?').run('completed',new Date().toISOString(),batchId,item.episode_no);db.prepare('UPDATE script_assistant_batches SET completed_count=completed_count+1,updated_at=? WHERE batch_id=?').run(new Date().toISOString(),batchId);}else if(row?.status==='failed')throw new Error(row.error_text||'分集失败');}if(!done)throw new Error('分集等待超时，可恢复查询');}catch(e){db.prepare('UPDATE script_assistant_batch_items SET status=?,error_text=?,updated_at=? WHERE batch_id=? AND episode_no=?').run('failed',e.message,new Date().toISOString(),batchId,item.episode_no);db.prepare('UPDATE script_assistant_batches SET status=?,error_text=?,updated_at=? WHERE batch_id=?').run('failed',e.message,new Date().toISOString(),batchId);return;}}db.prepare('UPDATE script_assistant_batches SET status=?,updated_at=? WHERE batch_id=?').run('completed',new Date().toISOString(),batchId);}
+function pauseBatch(db,id){const b=db.prepare('SELECT * FROM script_assistant_batches WHERE batch_id=?').get(id);if(!b)throw new Error('批次不存在');if(b.status==='running')throw new Error('当前分集正在执行；将在本集安全终态后暂停');db.prepare("UPDATE script_assistant_batches SET status='paused',updated_at=? WHERE batch_id=?").run(new Date().toISOString(),id);return db.prepare('SELECT * FROM script_assistant_batches WHERE batch_id=?').get(id);}
+function resumeBatch(db,log,config,id){const b=db.prepare('SELECT * FROM script_assistant_batches WHERE batch_id=?').get(id);if(!b)throw new Error('批次不存在');if(!['paused','failed'].includes(b.status))throw new Error('只有暂停或失败的批次可恢复');setImmediate(()=>executeBatch(db,log,config,id));return db.prepare("UPDATE script_assistant_batches SET status='queued',error_text=NULL,updated_at=? WHERE batch_id=? RETURNING *").get(new Date().toISOString(),id);}
 
 function runs(db, workId) {
   ensureTable(db);
@@ -341,4 +394,4 @@ function budget(db) {
   return { chat: { used: chatUsed, limit: chatLimit, remaining: chatLimit > 0 ? Math.max(0, chatLimit - chatUsed) : null }, orchestration: { used: orchestrationUsed, limit: orchestrationLimit, remaining: orchestrationLimit > 0 ? Math.max(0, orchestrationLimit - orchestrationUsed) : null }, in_flight: db.prepare("SELECT count(*) n FROM managed_agent_tasks WHERE task_status IN ('queued','starting','submitted','running')").get().n };
 }
 
-module.exports = { ensureTable, works, loadWork, summary, messages, buildInput, classifyCreativeRequest, createMessage, budget, runs, createRun, revisions, reviewDecisions, saveReviewDecision, createRevision, approveRevision, refreshRevision, createEditorRecovery, PRODUCER };
+module.exports = { ensureTable, works, loadWork, summary, messages, buildInput, classifyCreativeRequest, createMessage, budget, runs, createRun, revisions, episodeCandidates, batches, createEpisodeCandidate, createBatch, pauseBatch, resumeBatch, reviewDecisions, saveReviewDecision, createRevision, approveRevision, refreshRevision, createEditorRecovery, PRODUCER };

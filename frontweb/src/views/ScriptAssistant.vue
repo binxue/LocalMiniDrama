@@ -47,6 +47,11 @@
           <div><el-button v-if="revision.candidate_text" size="small" @click="openRevision(revision.revision_id)">查看剧本与审核</el-button><el-button v-else-if="revision.status==='awaiting_recovery'" size="small" @click="recoverRevision(revision.revision_id)">恢复进度</el-button></div>
         </article>
       </section>
+      <section v-if="episodeCandidates.length || batches.length" class="creation-progress">
+        <h3>分集创作进度</h3>
+        <article v-for="batch in batches.slice(0, 3)" :key="batch.batch_id" class="progress-row"><div><strong>第 {{ batch.episode_start }}—{{ batch.episode_end }} 集 · {{ batch.status }}</strong><p class="muted">已完成 {{ batch.completed_count }}/{{ batch.total_count }} · 当前第 {{ batch.current_episode || '等待' }} 集</p></div></article>
+        <article v-for="candidate in episodeCandidates.slice(0, 5)" :key="candidate.candidate_id" class="progress-row"><div><strong>第 {{ candidate.episode_no }} 集 · {{ candidate.status }}</strong><p class="muted">审核：{{ editorLabel(candidate.editor_review) }} · {{ candidate.approval_status === 'not_approved' ? '尚未确认' : '已确认，待发布' }}</p></div><el-button v-if="candidate.candidate_text" size="small" @click="openEpisodeCandidate(candidate)">阅读剧本</el-button></article>
+      </section>
         <p v-if="lastIntentNotice" class="intent-notice">{{ lastIntentNotice }}</p>
         <details v-if="mode === 'team'" open class="advanced-tools">
         <summary>高级创作与审阅工具</summary>
@@ -127,13 +132,13 @@ import { ElMessageBox } from 'element-plus'
 import { revisionDiff } from '@/utils/revisionDiff'
 import { useRouter, useRoute } from 'vue-router'
 import { ArrowLeft, ChatDotRound } from '@element-plus/icons-vue'
-import { getAssistantWorks, getAssistantContext, getAssistantIntent, getAssistantMessages, sendAssistantMessage, refreshAssistantMessage, getAssistantSource, getAssistantRuns, createAssistantRun, getAssistantRevisions, createAssistantRevision, approveAssistantRevision, refreshAssistantRevision, recoverAssistantEditor, getReviewDecisions, saveReviewDecision } from '@/api/scriptAssistant'
+import { getAssistantWorks, getAssistantContext, getAssistantIntent, getAssistantMessages, sendAssistantMessage, refreshAssistantMessage, getAssistantSource, getAssistantRuns, createAssistantRun, getAssistantRevisions, createAssistantRevision, approveAssistantRevision, refreshAssistantRevision, recoverAssistantEditor, getReviewDecisions, saveReviewDecision, getAssistantCandidates, getAssistantBatches, createAssistantEpisode, createAssistantBatch } from '@/api/scriptAssistant'
 
 const router = useRouter(), route = useRoute()
 const works = ref([]), selected = ref(''), context = ref(null), messages = ref([]), draft = ref(''), budget = ref({})
 const loading = ref(false), sending = ref(false), error = ref(''), showSource = ref(false), sourceView = ref(null), citationNotice = ref('')
 const mode = ref('chat'), runRequest = ref(''), runs = ref([]), runSending = ref(false)
-const revisions = ref([]), revisionSending = ref(false), revisionTarget = ref('ep3'), revisionGoal = ref('')
+const revisions = ref([]), revisionSending = ref(false), revisionTarget = ref('ep3'), revisionGoal = ref(''), episodeCandidates = ref([]), batches = ref([])
 const revisionSource = ref({}), decisions = ref({})
 const diffMode = ref({}), reviewNotes = ref({})
 const lastIntentNotice = computed(() => {
@@ -159,7 +164,7 @@ async function reloadMessages() {
 async function reload() {
   if (!selected.value) return
   error.value = ''
-  try { await reloadMessages(); context.value = await getAssistantContext(selected.value); runs.value = (await getAssistantRuns(selected.value)).runs; revisions.value = (await getAssistantRevisions(selected.value)).revisions; await loadRevisionDetails() } catch (e) { error.value = e.message }
+  try { await reloadMessages(); context.value = await getAssistantContext(selected.value); runs.value = (await getAssistantRuns(selected.value)).runs; revisions.value = (await getAssistantRevisions(selected.value)).revisions; episodeCandidates.value=(await getAssistantCandidates(selected.value)).candidates; batches.value=(await getAssistantBatches(selected.value)).batches; await loadRevisionDetails() } catch (e) { error.value = e.message }
 }
 async function loadRevisionDetails() {
   for (const r of revisions.value) {
@@ -171,7 +176,7 @@ async function changeWork() {
   generation++; messages.value = []; context.value = null; error.value = ''; loading.value = true
   requestKey = null; submittedText = null
   await router.replace({ query: { work: selected.value } })
-  try { context.value = await getAssistantContext(selected.value); await reloadMessages(); runs.value = (await getAssistantRuns(selected.value)).runs; revisions.value = (await getAssistantRevisions(selected.value)).revisions; for (const r of revisions.value) { decisions.value[r.revision_id] = (await getReviewDecisions(r.revision_id)).decisions; for (const d of decisions.value[r.revision_id]) reviewNotes.value[d.block_id] = d.note || ''; if (r.candidate_text) { const s = context.value.sources.find(x => x.id === r.source_id); if (s) revisionSource.value[r.revision_id] = await getAssistantSource(selected.value, s.id) } } } catch (e) { error.value = e.message } finally { loading.value = false }
+  try { context.value = await getAssistantContext(selected.value); await reloadMessages(); runs.value = (await getAssistantRuns(selected.value)).runs; revisions.value = (await getAssistantRevisions(selected.value)).revisions; episodeCandidates.value=(await getAssistantCandidates(selected.value)).candidates; batches.value=(await getAssistantBatches(selected.value)).batches; for (const r of revisions.value) { decisions.value[r.revision_id] = (await getReviewDecisions(r.revision_id)).decisions; for (const d of decisions.value[r.revision_id]) reviewNotes.value[d.block_id] = d.note || ''; if (r.candidate_text) { const s = context.value.sources.find(x => x.id === r.source_id); if (s) revisionSource.value[r.revision_id] = await getAssistantSource(selected.value, s.id) } } } catch (e) { error.value = e.message } finally { loading.value = false }
 }
 async function startRevision() { if (revisionSending.value) return; revisionSending.value=true; error.value=''; try { await createAssistantRevision(selected.value,revisionTarget.value,revisionGoal.value); revisionGoal.value=''; await reload() } catch(e) { error.value=e.message } finally { revisionSending.value=false } }
 async function approveRevision(id) { const r = revisions.value.find(x => x.revision_id === id); const version = {source_sha256:r.source_sha256,candidate_sha256:r.candidate_sha256}; try { await ElMessageBox.confirm('确认指定的完整修改版本？逐项接受不是整集批准。本操作仅记录待发布确认，不写入正式版本或视频制作。', '最终版本确认', { confirmButtonText: '明确确认此版本', cancelButtonText: '继续审阅' }); await approveAssistantRevision(id, version); await reload() } catch(e) { if (e !== 'cancel' && e !== 'close') error.value=e.message } }
@@ -197,6 +202,7 @@ async function startRun() {
   try { await createAssistantRun(selected.value, runRequest.value.trim()); runRequest.value = ''; await reload() } catch (e) { error.value = e.message } finally { runSending.value = false }
 }
 async function openRevision(id) { mode.value = 'team'; await reload(); requestAnimationFrame(() => document.querySelector(`[data-revision="${CSS.escape(id)}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })) }
+function openEpisodeCandidate(candidate) { sourceView.value = { title: `第${candidate.episode_no}集候选稿`, text: candidate.candidate_text, available: true, sha256: candidate.candidate_sha256 }; showSource.value = true }
 async function send() {
   if (!canSend.value) return
   const text = draft.value.trim()
@@ -210,6 +216,14 @@ async function send() {
       if (!source) throw new Error(`当前作品资料中没有可核验的第${n}集原稿，未启动修改。`)
       await createAssistantRevision(selected.value, source.id, text)
       draft.value = ''; mode.value = 'chat'; await reload(); return
+    }
+    if (route.intent?.intent === 'next_episode') {
+      const nums = context.value?.scripts?.map(s => Number((s.id.match(/(?:ep|episode)[_-]?(\d+)/i)||[])[1])).filter(Number.isFinite) || []
+      const next = Math.max(0, ...nums) + 1
+      await createAssistantEpisode(selected.value, next, text); draft.value = ''; await reload(); return
+    }
+    if (route.intent?.intent === 'create_episode_range') {
+      await createAssistantBatch(selected.value, route.intent.episode_start, route.intent.episode_end, text); draft.value = ''; await reload(); return
     }
     if (route.intent?.status === 'clarification_required') { error.value = route.intent.reason; return }
   if (submittedText !== draft.value.trim()) { requestKey = crypto.randomUUID(); submittedText = draft.value.trim() }

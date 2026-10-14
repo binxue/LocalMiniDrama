@@ -38,6 +38,13 @@ test('classifyCreativeRequest routes natural language without model calls', () =
   assert.equal(service.classifyCreativeRequest('按照规划把全集写完').reason, '需要先确认总集数和分集规划');
 });
 
+test('new episode candidate and batch tables are isolated from revisions', () => {
+  const db = new Database(':memory:'); service.ensureTable(db);
+  assert.ok(db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='script_assistant_episode_candidates'").get());
+  assert.ok(db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='script_assistant_batches'").get());
+  assert.equal(db.prepare('SELECT count(*) n FROM script_assistant_revisions').get().n, 0);
+});
+
 test('revision review decisions persist without changing approval state', () => {
   const db = new Database(':memory:'); service.ensureTable(db);
   db.prepare(`INSERT INTO script_assistant_revisions(revision_id,work_id,source_id,source_sha256,status,candidate_sha256,approval_status,created_at) VALUES('rev1','w','ep3','source','completed','candidate','not_approved',?)`).run(new Date().toISOString());
