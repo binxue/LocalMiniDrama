@@ -24,14 +24,32 @@ function approvedStoryboard(db, storyboardId = 3) {
 }
 function context(db, cfg, storyboardId = 3) {
   const sb = approvedStoryboard(db, storyboardId);
-  const desc = JSON.parse(sb.description);
-  if (!desc.approval?.execution_id || desc.approval?.verdict !== 'APPROVE') throw new Error('该镜头没有有效导演批准记录');
+  const desc = JSON.parse(sb.description || '{}');
+  const groupShots = [];
+  for (const [groupId, group] of Object.entries(desc.production_plan || {})) {
+    const shot = group?.shots?.[String(sb.id)];
+    if (shot) groupShots.push({ groupId, group, shot });
+  }
+  const approvedGroup = groupShots.find(item => item.shot?.status === 'APPROVED'
+    && item.shot?.approval?.decision === 'APPROVE'
+    && Number(item.shot.approval.storyboard_id) === Number(sb.id));
+  const hasLegacyApproval = desc.approval?.execution_id && desc.approval?.verdict === 'APPROVE';
+  if (!hasLegacyApproval && !approvedGroup) throw new Error('该镜头没有有效导演批准记录');
   const bytes = fs.existsSync(process.env.LOCALMINIDRAMA_APPROVED_PLAN || PLAN_PATH)
     ? fs.readFileSync(process.env.LOCALMINIDRAMA_APPROVED_PLAN || PLAN_PATH) : Buffer.from('');
   const plan = bytes.length ? JSON.parse(bytes) : null;
+  const proposal = approvedGroup?.shot?.proposal || {};
   const shot = plan?.shots?.find(item => item.key === sb.title) || {
-    key: sb.title, prompt: sb.polished_prompt || sb.image_prompt || '', references: [],
+    key: sb.title, prompt: proposal.optimized_prompt || sb.polished_prompt || sb.image_prompt || '', references: [],
+    characters: proposal.asset_references?.characters || [],
   };
+  if (approvedGroup && proposal.asset_references) {
+    const names = new Set([...(proposal.asset_references.scene_assets || []), ...(proposal.asset_references.props || [])].map(String));
+    const assetRows = db.prepare('SELECT name, local_path FROM props WHERE drama_id = ? AND local_path IS NOT NULL').all(sb.drama_id);
+    for (const asset of assetRows) if (names.has(asset.name)) shot.references.push({ label: asset.name, path: asset.local_path });
+    const sceneAsset = db.prepare('SELECT location, local_path FROM scenes WHERE drama_id = ? AND location = ? AND local_path IS NOT NULL ORDER BY id LIMIT 1').get(sb.drama_id, sb.location);
+    if (sceneAsset) shot.references.unshift({ label: '场景', path: sceneAsset.local_path });
+  }
   const root = fs.realpathSync(path.resolve(cfg.storage?.local_path || 'data/storage'));
   const refs = [...(shot.references || [])];
   let characterRefs = [];
@@ -48,7 +66,8 @@ function context(db, cfg, storyboardId = 3) {
   if (scene?.local_path && !refs.some(item => item.path === scene.local_path)) refs.unshift({ label: '场景', path: scene.local_path });
   shot.references = refs;
   const files = refs.map(item => safeMedia(root, item.path));
-  return { sb, desc, shot, root, files, approvalHash: hash(JSON.stringify(desc.approval)) };
+  const approvalContract = approvedGroup?.shot?.approval || desc.approval;
+  return { sb, desc, shot, root, files, approvalHash: hash(JSON.stringify(approvalContract)) };
 }
 function safeMedia(root, relative) {
   const file = fs.realpathSync(path.resolve(root, relative));
