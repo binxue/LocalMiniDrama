@@ -1,5 +1,13 @@
 # Current Action
 
+## Latest recovery evidence — 2026-10-14
+
+5688 is running the active code on PID `26780` with the existing Runtime/SQLite (`m4.3-session-isolation-recovery`, health `ok`). The adaptation batch `batch_95d4741c-7912-4a5e-82ac-f1cb115e2104` now has real completed episodes 1 and 2; episode 2 candidate `cand_b03b58e0-af3a-40c8-85dd-fca648bb41f5` has Writer and Editor results, 4,730 characters, pinned episode-1 SHA, and `not_approved`. A single repaired resume attempt submitted episode-3 Writer `mat_34147ae7-d250-42df-b87d-034ef5e4d203`; the cloud task remains without正文 at `span.model_request_start`, so episode 3 is `awaiting_recovery`, the batch is paused, and episodes 4–5 remain queued. Do not retry this unknown Session.
+
+The batch executor now repairs legacy unsubmitted candidates by binding them to the same batch's completed predecessor before any cloud call. It only resets a failed candidate with no Writer task; any existing Writer/Editor task remains read-only recovery state. This preserves completed episodes and prevents duplicate paid calls across restart. Full Node tests are 99/99 and frontend build passes. 3014 route/API evidence and refresh-safe candidate/review data are available; full interactive Chromium Console/Network evidence is still an explicit gap.
+
+Next action: keep episode-3 unknown state paused, finish deterministic browser/export evidence on the two completed adaptation episodes, and only continue the batch after explicit terminal evidence or a new bounded product decision. Preserve Rainforest Canon, 3013, 5679, Runtime data and all historical tasks.
+
 ## 2026-10-14 改编首集真实验收与五集批次推进
 
 合法测试改编作品 `adapted-intake` 已完成一次真实 Writer→Editor：候选 `cand_2bf3b7f1-0f34-4daf-8765-537ec8d89404`，Writer `mat_41339582-b6ed-4bc3-bc82-a9a208943326` / Session `sesn-20261014095104-0mmg4`，Editor `mat_e7ceda50-f254-410f-a92e-00bab3f52eec` / Session `sesn-20261014095348-368dw`，正文 SHA `1c8b56fa5196a2861a349d023fa278fc393becd7442014e2a55a48b0c1317234`，真实结论 `CONDITIONAL PASS`，批准仍为 `not_approved`。首个候选曾因 Editor 使用“评定”标题被错误标记失败；已修复解析并通过原 Editor Task 恢复，没有重发调用。

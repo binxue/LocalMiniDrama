@@ -193,6 +193,27 @@ async function executeBatch(db,log,config,batchId){
   for(const item of db.prepare('SELECT * FROM script_assistant_batch_items WHERE batch_id=? ORDER BY episode_no').all(batchId)){
     const c=db.prepare('SELECT * FROM script_assistant_episode_candidates WHERE candidate_id=?').get(item.candidate_id);
     if(!c){db.prepare("UPDATE script_assistant_batches SET status='failed',error_text='分集候选记录缺失' WHERE batch_id=?").run(batchId);return;}
+    // Re-pin the next candidate from this batch's completed predecessor before
+    // any cloud task is submitted. This repairs state written by older code
+    // without creating a duplicate Writer request.
+    if (item.episode_no > b.episode_start) {
+      const previous = db.prepare(`SELECT c.candidate_id,c.candidate_sha256,c.status
+        FROM script_assistant_batch_items i
+        JOIN script_assistant_episode_candidates c ON c.candidate_id=i.candidate_id
+        WHERE i.batch_id=? AND i.episode_no=?`).get(batchId, item.episode_no - 1);
+      if (previous?.status === 'completed' && previous.candidate_sha256) {
+        if (c.continuity_source_candidate_id !== previous.candidate_id || c.continuity_source_sha256 !== previous.candidate_sha256) {
+          db.prepare('UPDATE script_assistant_episode_candidates SET continuity_source_candidate_id=?,continuity_source_sha256=? WHERE candidate_id=? AND writer_task_id IS NULL').run(previous.candidate_id, previous.candidate_sha256, c.candidate_id);
+          c.continuity_source_candidate_id = previous.candidate_id;
+          c.continuity_source_sha256 = previous.candidate_sha256;
+        }
+      }
+    }
+    if (c.status === 'failed' && !c.writer_task_id && c.continuity_source_candidate_id && c.continuity_source_sha256) {
+      db.prepare("UPDATE script_assistant_episode_candidates SET status='queued',error_text=NULL,completed_at=NULL WHERE candidate_id=? AND status='failed' AND writer_task_id IS NULL").run(c.candidate_id);
+      db.prepare("UPDATE script_assistant_batch_items SET status='queued',error_text=NULL,updated_at=? WHERE batch_id=? AND episode_no=? AND status='failed'").run(new Date().toISOString(), batchId, item.episode_no);
+      c.status = 'queued';
+    }
     if(c.status==='completed'){if(item.status!=='completed'){const stamp=new Date().toISOString();db.transaction(()=>{const changed=db.prepare("UPDATE script_assistant_batch_items SET status='completed',updated_at=? WHERE batch_id=? AND episode_no=? AND status!='completed'").run(stamp,batchId,item.episode_no);if(changed.changes)db.prepare('UPDATE script_assistant_batches SET completed_count=completed_count+1,updated_at=? WHERE batch_id=?').run(stamp,batchId);})();}continue;}
     if(['writing','reviewing','awaiting_recovery'].includes(c.status)){const stamp=new Date().toISOString();db.prepare("UPDATE script_assistant_batch_items SET status='awaiting_recovery',error_text=?,updated_at=? WHERE batch_id=? AND episode_no=? AND status!='completed'").run('分集任务需回查原Session后恢复；不会重新提交',stamp,batchId,item.episode_no);db.prepare("UPDATE script_assistant_batches SET status='paused',current_episode=?,error_text='分集任务需回查原Session后恢复；不会重新提交',updated_at=? WHERE batch_id=?").run(item.episode_no,stamp,batchId);return;}
     db.prepare("UPDATE script_assistant_batches SET status='running',current_episode=?,updated_at=? WHERE batch_id=?").run(item.episode_no,new Date().toISOString(),batchId);
@@ -237,7 +258,7 @@ async function recoverEpisodeCandidate(db,log,config,candidateId){
   return db.prepare('SELECT * FROM script_assistant_episode_candidates WHERE candidate_id=?').get(candidateId);
 }
 function pauseBatch(db,id){const b=db.prepare('SELECT * FROM script_assistant_batches WHERE batch_id=?').get(id);if(!b)throw new Error('批次不存在');const status=b.status==='running'?'pause_requested':'paused';db.prepare('UPDATE script_assistant_batches SET status=?,updated_at=? WHERE batch_id=?').run(status,new Date().toISOString(),id);return db.prepare('SELECT * FROM script_assistant_batches WHERE batch_id=?').get(id);}
-async function resumeBatch(db,log,config,id){const b=db.prepare('SELECT * FROM script_assistant_batches WHERE batch_id=?').get(id);if(!b)throw new Error('批次不存在');if(!['paused','failed'].includes(b.status))throw new Error('只有暂停或失败的批次可恢复');const item=db.prepare("SELECT * FROM script_assistant_batch_items WHERE batch_id=? AND status!='completed' ORDER BY episode_no LIMIT 1").get(id);if(item?.candidate_id){try{await recoverEpisodeCandidate(db,log,config,item.candidate_id);}catch(e){db.prepare("UPDATE script_assistant_batches SET status='paused',error_text=?,updated_at=? WHERE batch_id=?").run(e.message,new Date().toISOString(),id);return db.prepare('SELECT * FROM script_assistant_batches WHERE batch_id=?').get(id);}}db.prepare("UPDATE script_assistant_batches SET status='queued',error_text=NULL,updated_at=? WHERE batch_id=?").run(new Date().toISOString(),id);setImmediate(()=>executeBatch(db,log,config,id));return db.prepare('SELECT * FROM script_assistant_batches WHERE batch_id=?').get(id);}
+async function resumeBatch(db,log,config,id){const b=db.prepare('SELECT * FROM script_assistant_batches WHERE batch_id=?').get(id);if(!b)throw new Error('批次不存在');if(!['paused','failed'].includes(b.status))throw new Error('只有暂停或失败的批次可恢复');const item=db.prepare("SELECT * FROM script_assistant_batch_items WHERE batch_id=? AND status!='completed' ORDER BY episode_no LIMIT 1").get(id);if(item?.candidate_id){let candidate=db.prepare('SELECT * FROM script_assistant_episode_candidates WHERE candidate_id=?').get(item.candidate_id);if(candidate?.status==='failed'&&!candidate.writer_task_id){const previous=db.prepare(`SELECT c.candidate_id,c.candidate_sha256,c.status FROM script_assistant_batch_items i JOIN script_assistant_episode_candidates c ON c.candidate_id=i.candidate_id WHERE i.batch_id=? AND i.episode_no=?`).get(id,candidate.episode_no-1);if(previous?.status==='completed'&&previous.candidate_sha256){db.prepare("UPDATE script_assistant_episode_candidates SET status='queued',error_text=NULL,completed_at=NULL,continuity_source_candidate_id=?,continuity_source_sha256=? WHERE candidate_id=? AND writer_task_id IS NULL").run(previous.candidate_id,previous.candidate_sha256,candidate.candidate_id);db.prepare("UPDATE script_assistant_batch_items SET status='queued',error_text=NULL,updated_at=? WHERE batch_id=? AND episode_no=?").run(new Date().toISOString(),id,candidate.episode_no);}}else{try{await recoverEpisodeCandidate(db,log,config,item.candidate_id);}catch(e){db.prepare("UPDATE script_assistant_batches SET status='paused',error_text=?,updated_at=? WHERE batch_id=?").run(e.message,new Date().toISOString(),id);return db.prepare('SELECT * FROM script_assistant_batches WHERE batch_id=?').get(id);}}}db.prepare("UPDATE script_assistant_batches SET status='queued',error_text=NULL,updated_at=? WHERE batch_id=?").run(new Date().toISOString(),id);setImmediate(()=>executeBatch(db,log,config,id));return db.prepare('SELECT * FROM script_assistant_batches WHERE batch_id=?').get(id);}
 
 function runs(db, workId) {
   ensureTable(db);
