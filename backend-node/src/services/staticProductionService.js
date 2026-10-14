@@ -80,6 +80,14 @@ function readDescription(db, storyboardId = 3) {
   if (!row) { const error = new Error('STORYBOARD_NOT_FOUND: storyboard_id=' + storyboardId); error.code = 'STORYBOARD_NOT_FOUND'; throw error; }
   try { return JSON.parse(row.description || '{}'); } catch (cause) { const error = new Error('STORYBOARD_DESCRIPTION_INVALID: storyboard_id=' + storyboardId); error.code = 'STORYBOARD_DESCRIPTION_INVALID'; error.cause = cause; throw error; }
 }
+function approvalContract(desc, storyboardId) {
+  for (const group of Object.values(desc.production_plan || {})) {
+    const shot = group?.shots?.[String(storyboardId)];
+    if (shot?.status === 'APPROVED' && shot.approval?.decision === 'APPROVE'
+      && Number(shot.approval.storyboard_id) === Number(storyboardId)) return shot.approval;
+  }
+  return desc.approval;
+}
 function findRun(db, runId) {
   for (const row of db.prepare('SELECT id, description FROM storyboards').all()) {
     let desc; try { desc = JSON.parse(row.description || '{}'); } catch (_) { continue; }
@@ -115,7 +123,7 @@ function productionPlanGroups(db, ownGroups = {}, storyboardId = null) {
 function persist(db, run) {
   const storyboardId = Number(run.storyboard_id || 3);
   const desc = readDescription(db, storyboardId);
-  if (hash(JSON.stringify(desc.approval)) !== run.approval_sha256) throw new Error('批准记录已变化，停止制作');
+  if (hash(JSON.stringify(approvalContract(desc, storyboardId))) !== run.approval_sha256) throw new Error('批准记录已变化，停止制作');
   const list = desc.static_production_runs || [];
   const index = list.findIndex(item => item.run_id === run.run_id);
   run.updated_at = new Date().toISOString();
