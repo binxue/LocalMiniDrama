@@ -419,7 +419,11 @@ function classifyCreativeRequest(text, scripts = []) {
   const episodeNumber = episode ? (Number(episode[1]) || chineseNumber(episode[1])) : null;
   const range = q.match(/第\s*(\d+)\s*(?:到|至|-|—)\s*第?\s*(\d+)\s*集/);
   if (!q) return { intent: 'chat', status: 'ready' };
-  if (/全集|全剧|全部集数/.test(q)) return { intent: 'create_all', status: 'clarification_required', reason: '需要先确认总集数和分集规划' };
+  if (/全集|全剧|全部集数/.test(q)) {
+    const plan = scripts.map(s => s.text || '').join('\n');
+    const total = plan.match(/(?:共|总计|总共)\s*(\d+)\s*集/);
+    return total ? { intent: 'create_all', status: 'ready', total_episodes: Number(total[1]) } : { intent: 'create_all', status: 'clarification_required', reason: '需要先确认总集数和分集规划' };
+  }
   if (range) return { intent: 'create_episode_range', status: 'ready', episode_start: Number(range[1]), episode_end: Number(range[2]) };
   if (/下一集|后面一集|接着写/.test(q)) return { intent: 'next_episode', status: 'ready' };
   if (/审核|审查|评审/.test(q)) return { intent: 'review', status: 'ready', episode: episodeNumber };

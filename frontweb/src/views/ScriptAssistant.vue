@@ -230,6 +230,12 @@ async function send() {
     if (route.intent?.intent === 'create_episode_range') {
       await createAssistantBatch(selected.value, route.intent.episode_start, route.intent.episode_end, text); draft.value = ''; await reload(); return
     }
+    if (route.intent?.intent === 'create_all' && route.intent?.status === 'ready') {
+      const existing = [...(context.value?.scripts || []).map(s => Number((s.id.match(/(?:ep|episode)[_-]?(\d+)/i) || [])[1])), ...episodeCandidates.value.map(c => Number(c.episode_no))].filter(Number.isFinite)
+      const start = Math.max(0, ...existing) + 1
+      if (start > route.intent.total_episodes) throw new Error(`已存在第${route.intent.total_episodes}集或更高集数，没有可创建的剩余集数。`)
+      await createAssistantBatch(selected.value, start, route.intent.total_episodes, text); draft.value = ''; await reload(); return
+    }
     if (route.intent?.status === 'clarification_required') { error.value = route.intent.reason; return }
   if (submittedText !== draft.value.trim()) { requestKey = crypto.randomUUID(); submittedText = draft.value.trim() }
     await sendAssistantMessage(selected.value, submittedText, requestKey); draft.value = ''; requestKey = null; submittedText = null; await reloadMessages()

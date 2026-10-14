@@ -14,6 +14,7 @@
 - Candidate/batch persistence, pinned continuity IDs/hashes, read-only recovery, conditional completion counts, and terminal-only retry are implemented. Backend regression suite: 95/95.
 - Retry of second episode is correctly refused while original task is `incomplete` without a cloud terminal event.
 - 3014 progress UI now exposes user-language batch states, pause/continue, read-only recovery, and candidate draft export; the backend intent classifier routes explicit episode ranges and “next episode” as executable requests without a model call. Frontend build passed and script-assistant regression tests remain green.
+- When a continuity/core source explicitly contains `共 N 集`, `写全集` now routes to the remaining range; without that declaration the API conservatively asks for the total instead of guessing. The isolated acceptance manifest currently has no such declaration, so its real endpoint correctly remains clarification-required.
 
 ## Open evidence and blockers
 

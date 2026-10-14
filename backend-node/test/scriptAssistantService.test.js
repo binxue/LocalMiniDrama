@@ -47,6 +47,7 @@ test('classifyCreativeRequest routes natural language without model calls', () =
   assert.equal(service.classifyCreativeRequest('写第5到第8集').status, 'ready');
   assert.equal(service.classifyCreativeRequest('按现在的剧情写下一集').status, 'ready');
   assert.equal(service.classifyCreativeRequest('按照规划把全集写完').reason, '需要先确认总集数和分集规划');
+  assert.deepEqual(service.classifyCreativeRequest('按照规划把全集写完', [{ id: 'plan', kind: 'continuity', available: true, text: '本剧共 5 集。' }]), { intent: 'create_all', status: 'ready', total_episodes: 5 });
 });
 
 test('new episode candidate and batch tables are isolated from revisions', () => {
