@@ -33,6 +33,7 @@ module.exports = function scriptAssistant(db, log, config) {
     batches: wrap(req => ({ batches: service.batches(db, req.params.work_id) })),
     createEpisode: wrap(req => service.createEpisodeCandidate(db, log, config, req.params.work_id, req.body?.episode_no, req.body?.request)),
     createBatch: wrap(req => service.createBatch(db, log, config, req.params.work_id, req.body?.request, req.body?.episode_start, req.body?.episode_end)),
+    approveEpisode: wrap(req => service.approveEpisodeCandidate(db, req.params.candidate_id, req.body?.actor || 'user', req.body)),
     resumeBatch: wrap(req => service.resumeBatch(db, log, config, req.params.batch_id)),
     pauseBatch: wrap(req => service.pauseBatch(db, req.params.batch_id)),
     reviewDecisions: wrap(req => ({ decisions: service.reviewDecisions(db, req.params.revision_id) })),
