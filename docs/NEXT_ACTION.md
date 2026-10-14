@@ -1,5 +1,13 @@
 # Current Action
 
+## 2026-10-14 第二集恢复与批次可靠性收口
+
+已修复原 Session 恢复和批次状态一致性：`incomplete`/`awaiting_recovery` Writer 或 Editor 只读回查原 Session；未知云端终态保持候选和批次暂停，不重发收费任务；批次 item 与 batch 同步暂停，完成计数采用条件更新；批次固定上一集候选 ID/SHA-256，服务重启保留 queued（尚未提交云端）候选。后端全量测试 95/95 通过。
+
+第二集原 Writer Task `mat_177d7139-fca6-4b3c-a83c-75682a586060` / Session `sesn-20261014043634-864i3` 只读恢复仍为 `incomplete`，无 `agent.message`、正文或 Editor；候选 `cand_c56a9d18-3edc-4ecb-bc76-932673c9ca62` 保持 `awaiting_recovery`，不得重复提交。第一集 `cand_f97b6eb3-b6bb-4564-9c2e-9fce640ee3a3` 保持真实正文、Editor `CONDITIONAL PASS`、`not_approved`。
+
+真实连续两集、批次暂停/恢复和 3014 两集阅读仍未通过，原因是第二集官方数据面没有形成终态正文；本轮新增真实调用 0、Token 0、价格未配置。下一步应等待/按授权窗口再次只读回查该 Session；仅在云端真实形成正文后创建一次必要 Editor，继续隔离作品验收，不启动《雨林》新集。
+
 ## 2026-10-14 新集创作链路阻塞收口
 
 本轮修复了新集候选执行中的确定性 SQL 参数错误：连续性查询原先为三个占位符只提供两个值，导致 Writer 提交前即失败。修复后新增测试并通过 92/92 后端测试。新集 Prompt 现纳入已核验的 core、continuity、script、character 资料；批次对相同作品/请求/集数范围复用活动批次，并增加进程内执行锁，降低 HTTP 重试和服务并发导致的重复提交风险。

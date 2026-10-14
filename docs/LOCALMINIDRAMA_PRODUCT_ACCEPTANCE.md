@@ -76,6 +76,10 @@
 
 因此本轮尚未取得真实新集候选稿、连续两集、批次暂停/恢复或浏览器业务验收证据；没有修改《雨林》正文、Canon、批准状态或 3013。模型价格未配置，不能计算金额。
 
+本轮恢复与批次一致性修复（2026-10-14）：`recoverEpisodeCandidate` 现在对原 Writer/Editor 的 `incomplete`、运行中和 `awaiting_recovery` 状态统一执行只读 Session 回查，只有拿到真实 `agent.message` 才推进到候选或审核完成，不会创建替代 Writer。批次遇到 `awaiting_recovery` 会同步暂停 batch item 与 batch，不再把未知状态写成永久失败；完成计数使用条件更新，重复恢复不会重复计数。批次首集会固定既有上一集 completed 候选及 SHA-256，后续集只使用同批次来源，来源变化会拒绝静默继续。服务启动时保留尚未提交云端任务的 queued 候选，只有 writing/reviewing 候选进入恢复态。
+
+针对第二集候选 `cand_c56a9d18-3edc-4ecb-bc76-932673c9ca62` 的原 Writer `mat_177d7139-fca6-4b3c-a83c-75682a586060` / Session `sesn-20261014043634-864i3` 已再次只读回查；云端仍为 `incomplete`，没有 `agent.message`、正文或 Editor Task，接口返回“批次保持暂停”，没有新增模型调用。第一集候选与真实 Editor `CONDITIONAL PASS` 未改变。后端全量测试 95/95 通过；本轮新增真实调用 0，Token 0，价格未配置。
+
 已将“优化第N集”从普通聊天入口接入现有 Revision 链：服务端先做确定性意图与作品集数校验，再创建已有 Producer→Writer→Editor 修订任务；缺少可核验原稿时不调用模型。前端默认展示作品对话和最近创作成果，Agent/Revision 细节放入高级审阅。
 
 本轮新增 `script_assistant_episode_candidates`、`script_assistant_batches` 和 `script_assistant_batch_items`，新集候选正文、哈希、Writer/Editor 任务、审核结论和批准状态与原有 Revision 分离；批次逐集执行，保存当前集和已完成数，支持暂停/恢复与服务重启后的可恢复状态，已完成集跳过以避免重复收费。新增接口用于新集候选、批次查询、创建、暂停和恢复。由于当前 Runtime 只有《雨林》既有资料，没有隔离测试作品，本轮没有启动《雨林》第四集，也未声称通过真实新集验收。

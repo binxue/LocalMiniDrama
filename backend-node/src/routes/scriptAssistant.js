@@ -7,8 +7,10 @@ module.exports = function scriptAssistant(db, log, config) {
   service.ensureTable(db);
   // Startup preserves existing cloud sessions; it never repeats paid stages.
   db.prepare("UPDATE script_assistant_revisions SET status='awaiting_recovery',error_text='服务已重启，请回查原任务；不会自动重复收费调用' WHERE status IN ('queued','planning','writing','reviewing')").run();
-  db.prepare("UPDATE script_assistant_episode_candidates SET status='awaiting_recovery',error_text='服务已重启；请回查已有 Writer/Editor 任务，不会自动重复调用' WHERE status IN ('queued','writing','reviewing')").run();
-  db.prepare("UPDATE script_assistant_batches SET status='paused',error_text='服务已重启；可恢复未完成分集' WHERE status IN ('queued','running')").run();
+  // Queued candidates have not submitted a cloud task and remain safe to start.
+  // Only candidates with an existing Writer/Editor stage require read-only recovery.
+  db.prepare("UPDATE script_assistant_episode_candidates SET status='awaiting_recovery',error_text='服务已重启；请回查已有 Writer/Editor 任务，不会自动重复调用' WHERE status IN ('writing','reviewing')").run();
+  db.prepare("UPDATE script_assistant_batches SET status='paused',error_text='服务已重启；可恢复未完成分集' WHERE status='running'").run();
   const wrap = fn => async (req, res) => {
     try { guard(req); response.success(res, await fn(req)); }
     catch (err) { response.badRequest(res, err.message); }

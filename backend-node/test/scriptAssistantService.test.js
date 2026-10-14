@@ -64,6 +64,14 @@ test('new episode continuity context only reads the latest completed candidate',
   assert.equal(service._latestEpisodeContext(db, 'w', 2), '');
 });
 
+test('explicit continuity source rejects a changed prior candidate', () => {
+  const db = new Database(':memory:'); service.ensureTable(db);
+  const text = '前集正文'; const sha = require('crypto').createHash('sha256').update(text).digest('hex');
+  db.prepare('INSERT INTO script_assistant_episode_candidates(candidate_id,work_id,episode_no,title,status,candidate_text,candidate_sha256,created_at) VALUES(?,?,?,?,?,?,?,?)').run('prev','w',1,'第1集','completed',text,sha,new Date().toISOString());
+  db.prepare('INSERT INTO script_assistant_episode_candidates(candidate_id,work_id,episode_no,title,status,continuity_source_candidate_id,continuity_source_sha256,created_at) VALUES(?,?,?,?,?,?,?,?)').run('next','w',2,'第2集','queued','prev','changed',new Date().toISOString());
+  assert.throws(() => service._continuityContext(db, db.prepare('SELECT * FROM script_assistant_episode_candidates WHERE candidate_id=?').get('next')), /连续性来源/);
+});
+
 test('new episode prompt includes available story bible and episode plan sources', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'localminidrama-episode-context-'));
   const bible = path.join(dir, 'bible.md'); const plan = path.join(dir, 'plan.md');
