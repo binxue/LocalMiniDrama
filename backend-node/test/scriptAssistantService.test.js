@@ -34,11 +34,19 @@ test('script assistant rejects an unverified source hash', () => {
 test('revision review decisions persist without changing approval state', () => {
   const db = new Database(':memory:'); service.ensureTable(db);
   db.prepare(`INSERT INTO script_assistant_revisions(revision_id,work_id,source_id,source_sha256,status,candidate_sha256,approval_status,created_at) VALUES('rev1','w','ep3','source','completed','candidate','not_approved',?)`).run(new Date().toISOString());
-  const saved = service.saveReviewDecision(db, 'rev1', 'change-1', 'revise', '需要补充证据');
-  service.saveReviewDecision(db, 'rev1', 'change-1', 'undecided', '撤销决定');
+  const saved = service.saveReviewDecision(db, 'rev1', 'change-1', 'revise', '需要补充证据', { source_sha256: 'source', candidate_sha256: 'candidate' });
+  service.saveReviewDecision(db, 'rev1', 'change-1', 'undecided', '撤销决定', { source_sha256: 'source', candidate_sha256: 'candidate' });
   assert.equal(saved[0].action, 'revise'); assert.equal(saved[0].source_sha256, 'source');
   assert.equal(service.reviewDecisions(db, 'rev1')[0].action, 'undecided');
   assert.equal(db.prepare('SELECT count(*) n FROM script_assistant_review_decision_events').get().n, 2);
   assert.equal(service.reviewDecisions(db, 'rev1').length, 1);
   assert.equal(db.prepare('SELECT approval_status FROM script_assistant_revisions WHERE revision_id=?').get('rev1').approval_status, 'not_approved');
+  assert.throws(() => service.saveReviewDecision(db, 'rev1', 'change-1', 'accept', '', { source_sha256: 'source', candidate_sha256: 'different' }), /版本/);
+  assert.throws(() => service.approveRevision(db, 'rev1', 'test', {source_sha256:'source',candidate_sha256:'candidate'}), /审核/);
+  assert.throws(() => service.approveRevision(db, 'rev1', 'test', {source_sha256:'source',candidate_sha256:'stale'}), /版本/);
+  const candidate = 'isolated candidate'; const sha = require('crypto').createHash('sha256').update(candidate).digest('hex');
+  db.prepare('UPDATE script_assistant_revisions SET candidate_text=?,candidate_sha256=?,editor_task_id=? WHERE revision_id=?').run(candidate, sha, 'editor-fail', 'rev1');
+  db.prepare(`INSERT INTO managed_agent_tasks(task_id,work_id,agent_id,task_status,input_version,input_text,output_text,revision_id,candidate_sha256,source_sha256,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`).run('editor-fail','w','agent-20261011131710-ncebb','completed','input','input','复审结论：FAIL','rev1',sha,'source',new Date().toISOString(),new Date().toISOString());
+  assert.throws(() => service.approveRevision(db,'rev1','test',{source_sha256:'source',candidate_sha256:sha}),/审核/);
+  assert.equal(db.prepare('SELECT approval_status FROM script_assistant_revisions WHERE revision_id=?').get('rev1').approval_status,'not_approved');
 });

@@ -33,6 +33,7 @@ function ensureTable(db) {
     action TEXT NOT NULL, note TEXT, source_sha256 TEXT NOT NULL, candidate_sha256 TEXT,
     created_at TEXT NOT NULL, updated_at TEXT NOT NULL, UNIQUE(revision_id, block_id)
   )`);
+  if (!db.prepare('PRAGMA table_info(script_assistant_revisions)').all().some(c => c.name === 'revision_request')) db.exec('ALTER TABLE script_assistant_revisions ADD COLUMN revision_request TEXT');
   db.exec(`CREATE TABLE IF NOT EXISTS script_assistant_review_decision_events (
     event_id TEXT PRIMARY KEY, revision_id TEXT NOT NULL, block_id TEXT NOT NULL,
     action TEXT NOT NULL, note TEXT, source_sha256 TEXT NOT NULL, candidate_sha256 TEXT,
@@ -42,35 +43,58 @@ function ensureTable(db) {
 
 function revisions(db, workId) { ensureTable(db); return db.prepare('SELECT * FROM script_assistant_revisions WHERE work_id=? ORDER BY created_at DESC').all(workId); }
 function reviewDecisions(db, revisionId) { ensureTable(db); return db.prepare('SELECT * FROM script_assistant_review_decisions WHERE revision_id=? ORDER BY created_at').all(revisionId); }
-function saveReviewDecision(db, revisionId, blockId, action, note = '') {
+function saveReviewDecision(db, revisionId, blockId, action, note = '', expected = {}) {
   ensureTable(db); const r = db.prepare('SELECT * FROM script_assistant_revisions WHERE revision_id=?').get(revisionId);
   if (!r) throw new Error('修订不存在');
+  if (expected.source_sha256 !== r.source_sha256 || expected.candidate_sha256 !== r.candidate_sha256) throw new Error('审阅版本已变更，请刷新后重试');
   if (!blockId || !['accept','reject','revise','undecided'].includes(action)) throw new Error('无效审阅动作');
   const stamp = new Date().toISOString(); const id = `decision_${crypto.randomUUID()}`;
-  db.prepare(`INSERT INTO script_assistant_review_decisions(decision_id,revision_id,block_id,action,note,source_sha256,candidate_sha256,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(revision_id,block_id) DO UPDATE SET action=excluded.action,note=excluded.note,updated_at=excluded.updated_at`).run(id, revisionId, blockId, action, String(note || '').slice(0, 2000), r.source_sha256, r.candidate_sha256 || null, stamp, stamp);
-  db.prepare('INSERT INTO script_assistant_review_decision_events(event_id,revision_id,block_id,action,note,source_sha256,candidate_sha256,created_at) VALUES(?,?,?,?,?,?,?,?)').run(`event_${crypto.randomUUID()}`, revisionId, blockId, action, String(note || '').slice(0, 2000), r.source_sha256, r.candidate_sha256 || null, stamp);
+  db.transaction(() => {
+    db.prepare(`INSERT INTO script_assistant_review_decisions(decision_id,revision_id,block_id,action,note,source_sha256,candidate_sha256,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(revision_id,block_id) DO UPDATE SET action=excluded.action,note=excluded.note,updated_at=excluded.updated_at`).run(id, revisionId, blockId, action, String(note || '').slice(0, 2000), r.source_sha256, r.candidate_sha256 || null, stamp, stamp);
+    db.prepare('INSERT INTO script_assistant_review_decision_events(event_id,revision_id,block_id,action,note,source_sha256,candidate_sha256,created_at) VALUES(?,?,?,?,?,?,?,?)').run(`event_${crypto.randomUUID()}`, revisionId, blockId, action, String(note || '').slice(0, 2000), r.source_sha256, r.candidate_sha256 || null, stamp);
+  })();
   return reviewDecisions(db, revisionId);
 }
 async function executeRevision(db, log, config, id) {
   const r = db.prepare('SELECT * FROM script_assistant_revisions WHERE revision_id=?').get(id); if (!r || r.status !== 'queued') return;
   try {
     const work = loadWork(config, r.work_id); const source = work.sources.find(s => s.id === r.source_id); if (!source?.available) throw new Error('原稿资料不可用');
+    if (source.text.length > 4800) throw new Error('原稿超出本次完整修订输入范围；未调用模型，不能截断原稿后生成整版替代');
     const prior = runs(db, r.work_id).find(x => x.status === 'completed'); const review = prior?.result?.editor_review || '请独立检查连续性和人物关系问题';
     const bounded = (v,n) => String(v||'').slice(0,n);
+    const producerInput = `你是Producer。对指定原稿安排局部返修，不改变人物设定与已确认事实。只输出可交给编剧的具体修改任务、保留项和独立审核标准，不写正文。用户目标：${r.revision_request || '依据已有审核意见提出必要的局部修订'}\n原稿：\n${source.text}\n已有审核依据（最多1800字符，超过部分未提供）：\n${bounded(review,1800)}`;
+    const producer = managed.createTask(db, log, { agent_id: PRODUCER, work_id: r.work_id, input: producerInput, orchestration: true, episode_id:r.source_id, revision_id:id, source_sha256:source.sha256, context_hash:hash(producerInput) });
+    db.prepare('UPDATE script_assistant_revisions SET status=?,producer_task_id=? WHERE revision_id=?').run('planning',producer.task_id,id);
+    const pt = await waitTask(db, producer.task_id);
+    if (pt.task_status !== 'completed' || !pt.output_text) throw new Error('主编返修任务未完成，请查看原任务证据');
     db.prepare('UPDATE script_assistant_revisions SET status=? WHERE revision_id=?').run('writing', id);
-    const writerInput = `你是Story Writer。对以下冻结原稿做定向局部修订，保留未涉及内容，输出完整独立候选版本，不写第四集、不改Canon。\n原稿(${source.title}, SHA256=${source.sha256})：\n${bounded(source.text,5200)}\n\nIndependent Editor依据：\n${bounded(review,1800)}\n\n只返回修订后的完整候选正文。`;
+    const writerInput = `你是Story Writer。依据Producer任务对以下冻结原稿做局部修订，保留未涉及内容，输出独立完整候选，不写后续集、不改Canon。\n人物设定：${bounded(work.sources.filter(s => s.kind === 'character' && s.available).map(s => s.text).join('\n'),500)}\n原稿(${source.title}, SHA256=${source.sha256})：\n${bounded(source.text,4800)}\n主编具体任务：\n${bounded(pt.output_text,2200)}\n只返回完整候选正文；任何未提供原文不得凭空补充。`;
     const writer = managed.createTask(db, log, { agent_id: 'agent-20261011131619-47ft8', work_id: r.work_id, input: writerInput, orchestration: true, episode_id: r.source_id, revision_id: id, source_sha256: source.sha256, context_hash: hash(writerInput) });
     db.prepare('UPDATE script_assistant_revisions SET writer_task_id=? WHERE revision_id=?').run(writer.task_id,id); const wt = await waitTask(db, writer.task_id); if (wt.task_status !== 'completed' || !wt.output_text) throw new Error('Story Writer 未返回完整候选');
-    db.prepare('UPDATE script_assistant_revisions SET status=? WHERE revision_id=?').run('reviewing',id);
-    const editorInput = `你是Independent Editor。独立复审以下候选修订，必须输出 PASS、CONDITIONAL PASS 或 FAIL，并给具体证据。不要改写正文，不把候选稿当Canon。\n原稿SHA256=${source.sha256}\n候选修订：\n${bounded(wt.output_text,6200)}`;
+    db.prepare('UPDATE script_assistant_revisions SET status=?,candidate_text=?,candidate_sha256=? WHERE revision_id=?').run('reviewing',wt.output_text,hash(wt.output_text),id);
+    const editorInput = `你是Independent Editor。独立复审以下完整原稿与完整修改稿，必须输出结论：PASS、CONDITIONAL PASS 或 FAIL，并给最多5项具体证据与建议。不要调用工具、不要改写正文，候选不是正式版本。\n用户目标：${r.revision_request || '依据已有评审做局部返修'}\n原稿SHA256=${source.sha256}\n原稿：\n${source.text}\n候选修订SHA256=${hash(wt.output_text)}：\n${wt.output_text}`;
+    if (editorInput.length > 8000) throw new Error('完整复审资料超出输入范围，候选已保留；未提交审核，不以摘要冒充全文审核');
     const editor = managed.createTask(db, log, { agent_id: EDITOR, work_id: r.work_id, input: editorInput, orchestration: true, episode_id: r.source_id, revision_id: id, source_sha256: source.sha256, candidate_sha256: hash(wt.output_text), context_hash: hash(editorInput) });
     db.prepare('UPDATE script_assistant_revisions SET editor_task_id=? WHERE revision_id=?').run(editor.task_id,id); const et = await waitTask(db, editor.task_id); if (et.task_status !== 'completed') throw new Error('Editor 未完成');
     db.prepare('UPDATE script_assistant_revisions SET status=?, candidate_text=?, candidate_sha256=?, editor_review=?, completed_at=? WHERE revision_id=?').run('completed',wt.output_text,hash(wt.output_text),et.output_text,new Date().toISOString(),id);
   } catch(e) { db.prepare('UPDATE script_assistant_revisions SET status=?, error_text=?, completed_at=? WHERE revision_id=?').run('failed',e.message,new Date().toISOString(),id); log.error('revision failed',{revision_id:id,error:e.message}); }
 }
-function createRevision(db, log, config, workId, sourceId) { const work=loadWork(config,workId); const s=work.sources.find(x=>x.id===sourceId); if(!s?.available) throw new Error('原稿不可用'); const id=`rev_${crypto.randomUUID()}`; db.prepare('INSERT INTO script_assistant_revisions(revision_id,work_id,source_id,source_sha256,status,created_at) VALUES(?,?,?,?,?,?)').run(id,workId,sourceId,s.sha256,'queued',new Date().toISOString()); setImmediate(()=>executeRevision(db,log,config,id)); return db.prepare('SELECT * FROM script_assistant_revisions WHERE revision_id=?').get(id); }
-function approveRevision(db, id, actor='user') { const r=db.prepare('SELECT * FROM script_assistant_revisions WHERE revision_id=?').get(id); if(!r||r.status!=='completed') throw new Error('只能批准已完成候选'); db.prepare('UPDATE script_assistant_revisions SET approval_status=?,approved_at=?,approved_by=? WHERE revision_id=?').run('approved_pending_canon',new Date().toISOString(),actor,id); return db.prepare('SELECT * FROM script_assistant_revisions WHERE revision_id=?').get(id); }
-async function refreshRevision(db, id) { const r=db.prepare('SELECT * FROM script_assistant_revisions WHERE revision_id=?').get(id); if(!r) throw new Error('修订不存在'); if(!r.editor_task_id) return r; await managed.refreshTask(db,r.editor_task_id); const e=managed.getTask(db,r.editor_task_id); const w=r.writer_task_id&&managed.getTask(db,r.writer_task_id); if(e?.task_status==='completed' && w?.output_text) db.prepare('UPDATE script_assistant_revisions SET status=?,candidate_text=?,candidate_sha256=?,editor_review=?,completed_at=?,error_text=NULL WHERE revision_id=?').run('completed',w.output_text,hash(w.output_text),e.output_text,r.completed_at||new Date().toISOString(),id); return db.prepare('SELECT * FROM script_assistant_revisions WHERE revision_id=?').get(id); }
+function createRevision(db, log, config, workId, sourceId, request = '') { ensureTable(db); if (typeof request !== 'string' || request.length > 1200) throw new Error('修改目标最多1200字符'); if (revisions(db,workId).some(r => ['queued','planning','writing','reviewing'].includes(r.status))) throw new Error('已有进行中的修改任务，请等待或回查'); const work=loadWork(config,workId); const s=work.sources.find(x=>x.id===sourceId); if(!s?.available || s.kind !== 'script') throw new Error('原稿不可用或不是剧本正文'); if(s.text.length > 4800) throw new Error('完整原稿超出本次修订范围，未调用模型'); const id=`rev_${crypto.randomUUID()}`; db.prepare('INSERT INTO script_assistant_revisions(revision_id,work_id,source_id,source_sha256,status,created_at,revision_request) VALUES(?,?,?,?,?,?,?)').run(id,workId,sourceId,s.sha256,'queued',new Date().toISOString(),request); setImmediate(()=>executeRevision(db,log,config,id)); return db.prepare('SELECT * FROM script_assistant_revisions WHERE revision_id=?').get(id); }
+function reviewVerdict(text) {
+  const heading = String(text || '').split('\n').slice(0, 4).join('\n')
+  const match = heading.match(/(?:结论|裁定|判定|Verdict)[^\n:：]*[:：]\s*(?:\*\*)?(CONDITIONAL PASS|PASS|FAIL)\b/i)
+  return match ? match[1].toUpperCase() : 'UNKNOWN'
+}
+function approveRevision(db, id, actor='user', expected={}) {
+  const r=db.prepare('SELECT * FROM script_assistant_revisions WHERE revision_id=?').get(id)
+  if(!r||r.status!=='completed') throw new Error('只能确认已完成候选')
+  if (expected.source_sha256 !== r.source_sha256 || expected.candidate_sha256 !== r.candidate_sha256) throw new Error('确认版本已变化，请重新阅读后确认')
+  const e = managed.getTask(db, r.editor_task_id)
+  if (!e || e.task_status !== 'completed' || e.agent_id !== EDITOR || e.work_id !== r.work_id || e.revision_id !== id || e.candidate_sha256 !== r.candidate_sha256 || hash(r.candidate_text || '') !== r.candidate_sha256 || !['PASS','CONDITIONAL PASS'].includes(reviewVerdict(e.output_text))) throw new Error('审核尚未满足确认条件或版本证据不一致')
+  db.prepare('UPDATE script_assistant_revisions SET approval_status=?,approved_at=?,approved_by=? WHERE revision_id=?').run('approved_pending_canon',new Date().toISOString(),actor,id)
+  return db.prepare('SELECT * FROM script_assistant_revisions WHERE revision_id=?').get(id)
+}
+async function refreshRevision(db, id) { const r=db.prepare('SELECT * FROM script_assistant_revisions WHERE revision_id=?').get(id); if(!r) throw new Error('修订不存在'); if(!r.editor_task_id) { const taskId=r.writer_task_id || r.producer_task_id; if(taskId) { await managed.refreshTask(db,taskId); const t=managed.getTask(db,taskId); if(t?.task_status==='completed' && r.writer_task_id && t.output_text) db.prepare('UPDATE script_assistant_revisions SET candidate_text=?,candidate_sha256=?,status=?,error_text=? WHERE revision_id=?').run(t.output_text,hash(t.output_text),'awaiting_next_authorization','候选已恢复，后续独立审核需要明确授权；未重发任何任务',id); else db.prepare('UPDATE script_assistant_revisions SET status=?,error_text=? WHERE revision_id=?').run('awaiting_recovery','原任务状态已回查；恢复后续收费阶段需明确授权，不自动重试',id); } return db.prepare('SELECT * FROM script_assistant_revisions WHERE revision_id=?').get(id); } await managed.refreshTask(db,r.editor_task_id); const e=managed.getTask(db,r.editor_task_id); const w=r.writer_task_id&&managed.getTask(db,r.writer_task_id); if(e?.task_status==='completed' && w?.output_text && e.agent_id===EDITOR && e.work_id===r.work_id && e.revision_id===id && e.source_sha256===r.source_sha256 && e.candidate_sha256===hash(w.output_text) && (!r.candidate_sha256 || r.candidate_sha256===hash(w.output_text)) && reviewVerdict(e.output_text)!=='UNKNOWN') db.prepare('UPDATE script_assistant_revisions SET status=?,candidate_text=?,candidate_sha256=?,editor_review=?,completed_at=?,error_text=NULL WHERE revision_id=?').run('completed',w.output_text,hash(w.output_text),e.output_text,r.completed_at||new Date().toISOString(),id); return db.prepare('SELECT * FROM script_assistant_revisions WHERE revision_id=?').get(id); }
 function createEditorRecovery(db, log, id) { const r=db.prepare('SELECT * FROM script_assistant_revisions WHERE revision_id=?').get(id); if(!r||!r.writer_task_id) throw new Error('没有可复用的Writer候选'); const w=managed.getTask(db,r.writer_task_id); if(!w?.output_text) throw new Error('Writer候选正文不可用'); const input=`Independent Editor复审任务。只评审以下既有候选，不重写。必须在一次回复中明确 PASS、CONDITIONAL PASS 或 FAIL，并列出最多5条具体证据和最小建议。原稿SHA256=${r.source_sha256}。候选正文：\n${String(w.output_text).slice(0,7600)}\n候选仍非Canon，人工批准未记录。不要读取文件、不要调用工具。`; const t=managed.createTask(db,log,{agent_id:EDITOR,work_id:r.work_id,input,orchestration:true,episode_id:r.source_id,revision_id:id,source_sha256:r.source_sha256,candidate_sha256:w.output_version,context_hash:hash(input)}); db.prepare('UPDATE script_assistant_revisions SET status=?,editor_task_id=?,error_text=NULL WHERE revision_id=?').run('reviewing',t.task_id,id); return db.prepare('SELECT * FROM script_assistant_revisions WHERE revision_id=?').get(id); }
 
 function runs(db, workId) {
@@ -294,7 +318,7 @@ function budget(db) {
   const chatUsed = db.prepare("SELECT count(*) n FROM managed_agent_tasks WHERE task_mode = 'chat' AND created_at >= ?").get(since).n;
   const orchestrationUsed = db.prepare("SELECT count(*) n FROM managed_agent_tasks WHERE task_mode = 'orchestration' AND created_at >= ?").get(since).n;
   const chatLimit = Number(process.env.LOCALMINIDRAMA_CHAT_DAILY_LIMIT || 0);
-  const orchestrationLimit = Number(process.env.LOCALMINIDRAMA_ORCHESTRATION_DAILY_LIMIT || 5);
+  const orchestrationLimit = Number(process.env.LOCALMINIDRAMA_ORCHESTRATION_DAILY_LIMIT || 0);
   return { chat: { used: chatUsed, limit: chatLimit, remaining: chatLimit > 0 ? Math.max(0, chatLimit - chatUsed) : null }, orchestration: { used: orchestrationUsed, limit: orchestrationLimit, remaining: orchestrationLimit > 0 ? Math.max(0, orchestrationLimit - orchestrationUsed) : null }, in_flight: db.prepare("SELECT count(*) n FROM managed_agent_tasks WHERE task_status IN ('queued','starting','submitted','running')").get().n };
 }
 

@@ -5,6 +5,8 @@ const managed = require('../services/managedAgentService');
 
 module.exports = function scriptAssistant(db, log, config) {
   service.ensureTable(db);
+  // Startup preserves existing cloud sessions; it never repeats paid stages.
+  db.prepare("UPDATE script_assistant_revisions SET status='awaiting_recovery',error_text='服务已重启，请回查原任务；不会自动重复收费调用' WHERE status IN ('queued','planning','writing','reviewing')").run();
   const wrap = fn => async (req, res) => {
     try { guard(req); response.success(res, await fn(req)); }
     catch (err) { response.badRequest(res, err.message); }
@@ -25,9 +27,29 @@ module.exports = function scriptAssistant(db, log, config) {
     createRun: wrap(req => service.createRun(db, log, config, req.params.work_id, req.body?.request)),
     revisions: wrap(req => ({ revisions: service.revisions(db, req.params.work_id) })),
     reviewDecisions: wrap(req => ({ decisions: service.reviewDecisions(db, req.params.revision_id) })),
-    saveReviewDecision: wrap(req => ({ decisions: service.saveReviewDecision(db, req.params.revision_id, req.body?.block_id, req.body?.action, req.body?.note) })),
-    createRevision: wrap(req => service.createRevision(db, log, config, req.params.work_id, req.body?.source_id)),
-    approveRevision: wrap(req => service.approveRevision(db, req.params.revision_id, req.body?.actor || 'user')),
+    saveReviewDecision: wrap(req => {
+      const r = db.prepare('SELECT * FROM script_assistant_revisions WHERE revision_id=?').get(req.params.revision_id);
+      if (!r) throw new Error('修改版本不存在');
+      const s = service.loadWork(config, r.work_id).sources.find(x => x.id === r.source_id);
+      if (!s?.available || s.sha256 !== r.source_sha256) throw new Error('原稿已变更或不可用，不能提交审阅');
+      const { diffLines } = require('diff');
+      const parts = diffLines(s.text, r.candidate_text || '');
+      let oldLine = 1, newLine = 1; const ids = [];
+      for (let i = 0; i < parts.length; i++) {
+        const p = parts[i]; let a = '', b = '';
+        if (!p.added && !p.removed) a = b = p.value;
+        else {
+          ids.push(`${r.source_sha256}:${r.candidate_sha256}:${oldLine}:${newLine}`);
+          if (p.removed) a = p.value; else b = p.value;
+          if (p.removed && parts[i + 1]?.added) b = parts[++i].value;
+        }
+        oldLine += (a.match(/\n/g) || []).length; newLine += (b.match(/\n/g) || []).length;
+      }
+      if (!ids.includes(req.body?.block_id)) throw new Error('修改块不存在或版本已过期');
+      return { decisions: service.saveReviewDecision(db, r.revision_id, req.body?.block_id, req.body?.action, req.body?.note, req.body) };
+    }),
+    createRevision: wrap(req => service.createRevision(db, log, config, req.params.work_id, req.body?.source_id, req.body?.request)),
+    approveRevision: wrap(req => service.approveRevision(db, req.params.revision_id, req.body?.actor || 'user', req.body)),
     refreshRevision: wrap(req => service.refreshRevision(db, req.params.revision_id)),
     recoverEditor: wrap(req => service.createEditorRecovery(db, log, req.params.revision_id)),
     create: wrap(req => service.createMessage(db, log, config, req.params.work_id, req.body)),

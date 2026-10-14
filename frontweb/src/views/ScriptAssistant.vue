@@ -2,10 +2,17 @@
   <div class="assistant-page">
     <header class="assistant-header">
       <el-button @click="$router.push('/')" :icon="ArrowLeft">工作台</el-button>
-      <div><h1>AI 剧本创作助手</h1><p>与 Producer 讨论作品，保留每次对话的资料依据。</p></div>
-      <el-tag effect="plain">Producer · 真实 Managed Agent</el-tag>
+      <div><h1>AI 剧本创作助手</h1><p>与 AI 创作助手讨论作品，查看剧本、修改和审核结果。</p></div>
+      <el-tag effect="plain">AI 创作助手</el-tag>
     </header>
     <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon />
+    <section class="product-start">
+      <h2>继续创作已有作品</h2>
+      <p>选择作品，阅读剧本或修改版本；直接告诉 AI 创作助手你希望改善什么。团队协作会创建独立草稿，原稿保持不变。</p>
+      <el-button @click="mode='chat'">讨论创作目标</el-button>
+      <el-button @click="mode='team'">查看修改与审核</el-button>
+      <p class="muted">原创与小说改编：现有作品管理中可准备资料；当前 AI 助手仅支持服务端已关联作品，不提供空的创建入口。</p>
+    </section>
     <div class="assistant-layout" v-loading="loading">
       <aside class="context-panel">
         <h2>当前作品</h2>
@@ -15,8 +22,8 @@
         <p v-if="!works.length && !loading" class="muted">尚未关联作品资料。请由服务端配置原文件索引。</p>
         <div v-for="script in context?.scripts" :key="script.id" class="script-card">
           <strong>{{ script.title }}</strong>
-          <el-tag type="warning" size="small">{{ script.review_status }}</el-tag>
-          <p>候选版本 · 人工批准未记录 · 未确立 Canon</p>
+          <el-tag type="warning" size="small">{{ editorLabel(`结论：${script.review_status}`) }}</el-tag>
+          <p>草稿版本 · 尚未最终确认</p>
           <el-button link type="primary" @click="openSource(script.id)">查看原文</el-button>
         </div>
         <el-alert v-if="context" :title="context.approval_notice" type="info" :closable="false" />
@@ -29,32 +36,32 @@
       </aside>
       <main class="conversation-panel">
         <div class="conversation-top">
-          <h2>与 Producer 对话</h2>
+          <h2>与 AI 创作助手对话</h2>
           <el-button size="small" @click="reload" :disabled="loading">刷新记录</el-button>
         </div>
         <p class="conversation-note">讨论与建议不会改写剧本。分镜、视频生成及制作验收由视频模块负责。</p>
         <el-radio-group v-model="mode" size="small" class="mode-switch">
           <el-radio-button label="chat">普通问答</el-radio-button>
-          <el-radio-button label="team">Producer 编排</el-radio-button>
+          <el-radio-button label="team">AI 团队协作</el-radio-button>
         </el-radio-group>
         <section v-if="mode === 'team'" class="orchestration-panel">
-          <h3>多 Agent 创作协作</h3>
-          <p class="muted">Producer 先制定计划，再按计划调用白名单专家和 Independent Editor。结果始终是候选稿，等待人工批准。</p>
+          <h3>AI 团队协作</h3>
+          <p class="muted">主编分析需求后按需组织编剧、人物关系或互动专家，并交给独立审核。结果是草稿，等待你的最终确认。</p>
           <el-input v-model="runRequest" type="textarea" :rows="3" :maxlength="1200" placeholder="例如：检查《雨林》第三集的连续性和人物关系，必要时提出局部修改建议，交给独立 Editor 审核，不要写第四集。" />
-          <el-button type="primary" :loading="runSending" :disabled="!runRequest.trim()" @click="startRun">启动编排</el-button>
-          <article v-for="run in runs" :key="run.run_id" class="run-card">
+          <el-button type="primary" :loading="runSending" :disabled="!runRequest.trim()" @click="startRun">提交团队创作任务</el-button>
+          <details v-for="run in runs" :key="run.run_id" class="run-card"><summary>团队创作记录 · {{ statusLabel(run.status) }}</summary>
             <div><strong>{{ run.status }}</strong><span class="muted"> · {{ run.run_id }}</span></div>
             <p class="muted">所选 Agent：{{ run.selected_agents?.join(', ') || 'Producer 正在制定计划' }}</p>
             <p v-if="run.result?.editor_review" class="reply-text"><strong>Independent Editor：</strong>{{ run.result.editor_review }}</p>
             <p v-if="run.result?.producer_decision" class="reply-text"><strong>Producer 决策：</strong>{{ run.result.producer_decision }}</p>
             <p v-if="run.error_text" class="error-text">{{ run.error_text }}</p>
-            <p class="muted">候选稿 · 人工批准未记录 · 未确立 Canon</p>
-          </article>
+            <p class="muted">草稿 · 尚未最终确认</p>
+          </details>
         </section>
         <section v-if="mode === 'team'" class="orchestration-panel">
-          <h3>第三集定向修订</h3><p class="muted">基于最近一次 Editor 意见调用 Story Writer，原稿保持不变，候选版本独立复审。</p>
-          <el-button type="warning" :loading="revisionSending" @click="startRevision">修订第三集 v2</el-button>
-          <article v-for="revision in revisions" :key="revision.revision_id" class="run-card"><header class="revision-heading"><strong>{{ revision.source_id }} · {{ revision.status }}</strong><span>Editor：{{ revision.editor_review ? 'CONDITIONAL PASS · 原始审核意见' : '待完成' }} · 人工批准：{{ revision.approval_status }}</span></header><div v-if="revision.candidate_text" class="diff-toolbar"><el-radio-group v-model="diffMode[revision.revision_id]" size="small"><el-radio-button label="changes">只看修改</el-radio-button><el-radio-button label="all">查看全文</el-radio-button></el-radio-group><span>{{ diffBlocks(revision).length }} 个差异块 · {{ decisions[revision.revision_id]?.length || 0 }} 项审阅决定</span></div><div class="revision-workbench"><div v-if="revision.candidate_text" class="diff-blocks"><section v-for="block in visibleDiffBlocks(revision)" :key="block.id" class="diff-block" :class="block.type"><div class="block-label">{{ block.type === 'added' ? '新增' : block.type === 'removed' ? '删除' : block.type === 'unchanged' ? '未修改' : '修改' }} · {{ block.id }}</div><div class="revision-diff"><pre class="source-document"><span v-for="(part,i) in block.oldParts" :key="i" :class="{ 'diff-removed-text': part.removed }">{{ part.value }}</span></pre><pre class="source-document"><span v-for="(part,i) in block.newParts" :key="i" :class="{ 'diff-added-text': part.added }">{{ part.value }}</span></pre></div><div v-if="block.type !== 'unchanged'" class="review-actions"><el-button size="small" @click="decideRevision(revision,block,'accept')">接受修改</el-button><el-button size="small" @click="decideRevision(revision,block,'reject')">退回修改</el-button><el-button size="small" @click="decideRevision(revision,block,'revise')">要求继续修订</el-button><el-button size="small" @click="decideRevision(revision,block,'undecided')">暂不决定</el-button><span>{{ decisionLabel(decisions[revision.revision_id],block.id) }}</span></div></section></div><div v-else class="revision-diff"><pre class="source-document">{{ revisionSource[revision.revision_id]?.text || '原稿加载中…' }}</pre><pre class="source-document">{{ revision.candidate_text || '候选稿尚未生成' }}</pre></div><aside v-if="revision.editor_review" class="editor-review"><h4>Independent Editor · 全局意见 / 待定位</h4><div class="markdown-body" v-html="renderReply(revision.editor_review, null)"></div></aside></div><details class="trace"><summary>技术详情</summary><p>Revision：{{ revision.revision_id }}<br>原稿 SHA256：{{ revision.source_sha256 }}<br>候选 SHA256：{{ revision.candidate_sha256 || '等待生成' }}<br>Writer Task：{{ revision.writer_task_id || '无' }} · Editor Task：{{ revision.editor_task_id || '无' }}</p></details><el-button v-if="revision.status === 'failed' && revision.editor_task_id" size="small" @click="recoverRevision(revision.revision_id)">回查原 Editor Session</el-button><el-button v-if="revision.status === 'completed' && revision.approval_status === 'not_approved'" type="primary" size="small" @click="approveRevision(revision.revision_id)">批准为待发布版本</el-button></article>
+          <h3>阅读和审阅修改版本</h3><p class="muted">查看现有修改稿与独立审核意见。逐项决定不会批准整集，继续修订只记录你的要求。</p>
+          <el-select v-model="revisionTarget" aria-label="选择要修改的剧本"><el-option v-for="s in context?.scripts" :key="s.id" :label="s.title" :value="s.id" /></el-select><el-input v-model="revisionGoal" type="textarea" :maxlength="1200" placeholder="说明你希望改善的情节、人物或节奏，以及必须保持不变的内容" /><el-button type="warning" :loading="revisionSending" @click="startRevision">让主编安排独立修改稿</el-button>
+          <article v-for="revision in revisions" :key="revision.revision_id" :data-revision="revision.revision_id" class="run-card"><header class="revision-heading"><strong>{{ revision.revision_id.startsWith('acceptance_test_') ? '验收测试副本（不代表真实审阅） · ' : '' }}{{ revision.source_id === 'ep3' ? '第三集 · 修改版本' : revision.source_id }} · {{ statusLabel(revision.status) }}</strong><span>Editor：{{ editorLabel(revision.editor_review) }} · 最终确认：{{ revision.approval_status === 'not_approved' ? '尚未最终确认' : '已确认，待发布' }}</span></header><div v-if="revision.candidate_text" class="diff-toolbar"><el-radio-group v-model="diffMode[revision.revision_id]" size="small"><el-radio-button label="changes">只看修改</el-radio-button><el-radio-button label="all">查看全文</el-radio-button></el-radio-group><el-button size="small" @click="exportText((revisionSource[revision.revision_id]?.title || revision.source_id) + ' · 独立修改稿',revision.candidate_text)">导出修改稿（草稿）</el-button><span>{{ diffBlocks(revision).filter(b => b.type !== 'unchanged').length }} 处修改 · {{ decisions[revision.revision_id]?.length || 0 }} 项审阅决定</span></div><div class="revision-workbench"><div v-if="revision.candidate_text" class="diff-blocks"><section v-for="block in visibleDiffBlocks(revision)" :key="block.id" class="diff-block" :class="block.type"><div class="block-label">{{ block.type === 'added' ? '新增' : block.type === 'removed' ? '删除' : block.type === 'unchanged' ? '未修改' : '修改' }} · 原稿第 {{ block.oldLine }} 行 / 修改稿第 {{ block.newLine }} 行</div><div class="revision-diff"><pre class="source-document"><span v-for="(part,i) in block.oldParts" :key="i" :class="{ 'diff-removed-text': part.removed }">{{ part.value }}</span></pre><pre class="source-document"><span v-for="(part,i) in block.newParts" :key="i" :class="{ 'diff-added-text': part.added }">{{ part.value }}</span></pre></div><el-input v-if="block.type !== 'unchanged'" v-model="reviewNotes[block.id]" type="textarea" :maxlength="2000" placeholder="填写你的修改意见（可选）" /><div v-if="block.type !== 'unchanged'" class="review-actions"><el-button size="small" @click="decideRevision(revision,block,'accept')">接受修改</el-button><el-button size="small" @click="decideRevision(revision,block,'reject')">退回修改</el-button><el-button size="small" @click="decideRevision(revision,block,'revise')">要求继续修订</el-button><el-button size="small" @click="decideRevision(revision,block,'undecided')">暂不决定</el-button><span>{{ decisionLabel(decisions[revision.revision_id],block.id) }}</span></div></section></div><div v-else class="revision-diff"><pre class="source-document">{{ revisionSource[revision.revision_id]?.text || '原稿加载中…' }}</pre><pre class="source-document">{{ revision.candidate_text || '候选稿尚未生成' }}</pre></div><aside v-if="revision.editor_review" class="editor-review"><h4>Independent Editor · 全局意见 / 待定位</h4><div class="markdown-body" v-html="renderReply(revision.editor_review, null)"></div></aside></div><details class="trace"><summary>技术详情</summary><p>Revision：{{ revision.revision_id }}<br>原稿 SHA256：{{ revision.source_sha256 }}<br>候选 SHA256：{{ revision.candidate_sha256 || '等待生成' }}<br>Writer Task：{{ revision.writer_task_id || '无' }} · Editor Task：{{ revision.editor_task_id || '无' }}</p></details><el-button v-if="['failed','awaiting_recovery','awaiting_next_authorization'].includes(revision.status) && (revision.editor_task_id || revision.writer_task_id || revision.producer_task_id)" size="small" @click="recoverRevision(revision.revision_id)">恢复原任务状态（不重发）</el-button><el-button v-if="revision.status === 'completed' && revision.approval_status === 'not_approved' && ['审核通过','审核有条件通过，仍需修改或确认'].includes(editorLabel(revision.editor_review))" type="primary" size="small" @click="approveRevision(revision.revision_id)">确认完整修改版本</el-button></article>
         </section>
         <div v-if="!messages.length" class="empty-chat">
           <el-icon :size="32"><ChatDotRound /></el-icon>
@@ -65,7 +72,7 @@
         <article v-for="m in messages" :key="m.id" class="chat-turn">
           <section class="user-message"><span>你</span><p>{{ m.content }}</p></section>
           <section class="agent-message">
-            <div class="agent-label"><strong>Producer</strong><el-tag :type="m.task?.task_status === 'completed' ? 'success' : 'info'" size="small">{{ statusLabel(m.task?.task_status) }}</el-tag></div>
+            <div class="agent-label"><strong>AI 创作助手</strong><el-tag :type="m.task?.task_status === 'completed' ? 'success' : 'info'" size="small">{{ statusLabel(m.task?.task_status) }}</el-tag></div>
             <div v-if="m.task?.output_text" class="reply-text markdown-body" v-html="renderReply(m.task.output_text, m.context)"></div>
             <p v-else-if="isActive(m.task)" class="muted">任务由本地服务执行中，可以离开页面，稍后恢复结果。</p>
             <p v-else class="error-text">{{ m.task?.error_text || '尚未取得完整正文。执行状态不代表剧本质量通过。' }}</p>
@@ -74,7 +81,7 @@
             <details class="trace"><summary>资料依据与任务记录 · {{ m.context.input_chars }} / 8000 字符</summary>
               <p class="muted">{{ m.context.omission_notice }}</p>
               <p>使用历史轮次：{{ m.context.history_included.join(', ') || '无' }}；省略轮次：{{ m.context.history_omitted.join(', ') || '无' }}</p>
-              <p>Task：{{ m.task?.task_id }}<br>Session：{{ m.task?.session_id || '尚未创建' }}<br>模型：{{ m.task?.model_id || '尚未返回' }}<br>输入哈希：{{ m.task?.input_version }}<br>输出哈希：{{ m.task?.output_version || '尚未取得' }}</p>
+              <p>Task：{{ m.task?.task_id }}<br>Session：{{ m.task?.session_id || '尚未开始' }}<br>模型：{{ m.task?.model_id || '尚未返回' }}<br>输入哈希：{{ m.task?.input_version }}<br>输出哈希：{{ m.task?.output_version || '尚未取得' }}</p>
               <p v-if="m.task?.usage">tokens：输入 {{ m.task.usage.input_tokens || 0 }} / 输出 {{ m.task.usage.output_tokens || 0 }} / 缓存读取 {{ m.task.usage.cache_read_input_tokens || 0 }}；请求 {{ m.task.usage.requests || 0 }}，缺失 {{ m.task.usage.missing_usage_requests || 0 }}。</p>
               <p v-if="m.task?.cost?.status === 'calculated' || m.task?.cost?.status === 'partial'">费用：{{ m.task.cost.currency }} {{ m.task.cost.amount.toFixed(6) }}（{{ m.task.cost.status === 'partial' ? '已覆盖费用；总费用未知' : '按价格版本计算' }}）</p>
               <p v-else-if="m.task?.cost?.status === 'unconfigured'" class="muted">费用：价格未配置（模型 {{ m.task.cost.model_id || '未知' }}），仅展示真实 Token 用量。</p>
@@ -90,7 +97,7 @@
         <form class="composer" @submit.prevent="send">
           <el-input v-model="draft" type="textarea" :rows="3" :maxlength="1200" show-word-limit placeholder="向 Producer 提问，例如：前三集现在是什么状态？" aria-label="给 Producer 的消息" />
           <div class="composer-footer"><span>聊天额度：{{ budget.chat?.limit ? `${budget.chat.remaining} / ${budget.chat.limit}` : '不限' }} · 编排额度：{{ budget.orchestration?.limit ? `${budget.orchestration.remaining} / ${budget.orchestration.limit}` : '不限' }} · 不自动重试</span>
-            <el-button native-type="submit" type="primary" :loading="sending" :disabled="!canSend">发送给 Producer</el-button></div>
+            <el-button native-type="submit" type="primary" :loading="sending" :disabled="!canSend">发送给创作助手</el-button></div>
           <p class="muted">发送前费用预估：价格未配置；将显示真实 Token 用量，无法可靠估算金额。</p>
           <p v-if="budget.chat?.limit && budget.chat.remaining === 0" class="muted">聊天额度已达到配置上限，请等待24小时滚动窗口恢复。</p>
         </form>
@@ -98,6 +105,7 @@
     </div>
     <el-dialog v-model="showSource" :title="sourceView?.title || '作品原文件'" width="min(850px, 94vw)">
       <p class="muted">{{ sourceView?.path }}<br>SHA256：{{ sourceView?.sha256 }}</p>
+      <el-button :disabled="!sourceView?.available" @click="exportText(sourceView.title,sourceView.raw_text || sourceView.text)">导出当前剧本草稿</el-button>
       <el-alert v-if="citationNotice" :title="citationNotice" type="warning" :closable="false" />
       <pre class="source-document">{{ sourceView?.available ? sourceView.text : sourceView?.error }}</pre>
     </el-dialog>
@@ -108,18 +116,19 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
-import { diffLines, diffWords } from 'diff'
+import { ElMessageBox } from 'element-plus'
+import { revisionDiff } from '@/utils/revisionDiff'
 import { useRouter, useRoute } from 'vue-router'
 import { ArrowLeft, ChatDotRound } from '@element-plus/icons-vue'
-import { getAssistantWorks, getAssistantContext, getAssistantMessages, sendAssistantMessage, refreshAssistantMessage, getAssistantSource, getAssistantRuns, createAssistantRun, getAssistantRevisions, approveAssistantRevision, refreshAssistantRevision, recoverAssistantEditor, getReviewDecisions, saveReviewDecision } from '@/api/scriptAssistant'
+import { getAssistantWorks, getAssistantContext, getAssistantMessages, sendAssistantMessage, refreshAssistantMessage, getAssistantSource, getAssistantRuns, createAssistantRun, getAssistantRevisions, createAssistantRevision, approveAssistantRevision, refreshAssistantRevision, recoverAssistantEditor, getReviewDecisions, saveReviewDecision } from '@/api/scriptAssistant'
 
 const router = useRouter(), route = useRoute()
 const works = ref([]), selected = ref(''), context = ref(null), messages = ref([]), draft = ref(''), budget = ref({})
 const loading = ref(false), sending = ref(false), error = ref(''), showSource = ref(false), sourceView = ref(null), citationNotice = ref('')
 const mode = ref('chat'), runRequest = ref(''), runs = ref([]), runSending = ref(false)
-const revisions = ref([]), revisionSending = ref(false)
+const revisions = ref([]), revisionSending = ref(false), revisionTarget = ref('ep3'), revisionGoal = ref('')
 const revisionSource = ref({}), decisions = ref({})
-const diffMode = ref({})
+const diffMode = ref({}), reviewNotes = ref({})
 const prompts = ['我们前三集剧本现在是什么状态？', '第一集和第三集之间，有哪些需要注意的连续性问题？', '你建议先修改前三集，还是开始第四集？说明依据。']
 let timer, requestKey = null, submittedText = null, generation = 0, alive = true
 const isActive = task => ['queued', 'starting', 'submitted', 'running'].includes(task?.task_status)
@@ -134,38 +143,42 @@ async function reloadMessages() {
 async function reload() {
   if (!selected.value) return
   error.value = ''
-  try { await reloadMessages(); context.value = await getAssistantContext(selected.value); runs.value = (await getAssistantRuns(selected.value)).runs; revisions.value = (await getAssistantRevisions(selected.value)).revisions } catch (e) { error.value = e.message }
+  try { await reloadMessages(); context.value = await getAssistantContext(selected.value); runs.value = (await getAssistantRuns(selected.value)).runs; revisions.value = (await getAssistantRevisions(selected.value)).revisions; await loadRevisionDetails() } catch (e) { error.value = e.message }
+}
+async function loadRevisionDetails() {
+  for (const r of revisions.value) {
+    decisions.value[r.revision_id] = (await getReviewDecisions(r.revision_id)).decisions; for (const d of decisions.value[r.revision_id]) reviewNotes.value[d.block_id] = d.note || ''
+    if (r.candidate_text) revisionSource.value[r.revision_id] = await getAssistantSource(selected.value, r.source_id)
+  }
 }
 async function changeWork() {
   generation++; messages.value = []; context.value = null; error.value = ''; loading.value = true
   requestKey = null; submittedText = null
   await router.replace({ query: { work: selected.value } })
-  try { context.value = await getAssistantContext(selected.value); await reloadMessages(); runs.value = (await getAssistantRuns(selected.value)).runs; revisions.value = (await getAssistantRevisions(selected.value)).revisions; for (const r of revisions.value) { decisions.value[r.revision_id] = (await getReviewDecisions(r.revision_id)).decisions; if (r.candidate_text) { const s = context.value.sources.find(x => x.id === r.source_id); if (s) revisionSource.value[r.revision_id] = await getAssistantSource(selected.value, s.id) } } } catch (e) { error.value = e.message } finally { loading.value = false }
+  try { context.value = await getAssistantContext(selected.value); await reloadMessages(); runs.value = (await getAssistantRuns(selected.value)).runs; revisions.value = (await getAssistantRevisions(selected.value)).revisions; for (const r of revisions.value) { decisions.value[r.revision_id] = (await getReviewDecisions(r.revision_id)).decisions; for (const d of decisions.value[r.revision_id]) reviewNotes.value[d.block_id] = d.note || ''; if (r.candidate_text) { const s = context.value.sources.find(x => x.id === r.source_id); if (s) revisionSource.value[r.revision_id] = await getAssistantSource(selected.value, s.id) } } } catch (e) { error.value = e.message } finally { loading.value = false }
 }
-async function startRevision() { if (revisionSending.value) return; revisionSending.value=true; error.value=''; try { await createAssistantRevision(selected.value,'ep3'); await reload() } catch(e) { error.value=e.message } finally { revisionSending.value=false } }
-async function approveRevision(id) { try { await approveAssistantRevision(id); await reload() } catch(e) { error.value=e.message } }
+async function startRevision() { if (revisionSending.value) return; revisionSending.value=true; error.value=''; try { await ElMessageBox.confirm('将依次调用主编、AI编剧与独立审核，至少3项任务，内部模型请求数量可能更多。价格未配置，总费用无法可靠估算。是否授权本次有界执行？', '真实AI修订调用授权', { confirmButtonText:'授权本次执行', cancelButtonText:'暂不调用' }); await createAssistantRevision(selected.value,revisionTarget.value,revisionGoal.value); await reload() } catch(e) { if(e!=='cancel' && e!=='close') error.value=e.message } finally { revisionSending.value=false } }
+async function approveRevision(id) { const r = revisions.value.find(x => x.revision_id === id); const version = {source_sha256:r.source_sha256,candidate_sha256:r.candidate_sha256}; try { await ElMessageBox.confirm('确认指定的完整修改版本？逐项接受不是整集批准。本操作仅记录待发布确认，不写入正式版本或视频制作。', '最终版本确认', { confirmButtonText: '明确确认此版本', cancelButtonText: '继续审阅' }); await approveAssistantRevision(id, version); await reload() } catch(e) { if (e !== 'cancel' && e !== 'close') error.value=e.message } }
 function diffBlocks(revision) {
-  const oldText = revisionSource.value[revision.revision_id]?.text || ''
-  const parts = diffLines(oldText, revision.candidate_text || '')
-  const blocks = []; let pending = null
-  for (const part of parts) {
-    const type = part.added ? 'added' : part.removed ? 'removed' : 'unchanged'
-    if (!pending || pending.partType !== type) { if (pending) blocks.push(pending); pending = { oldText: '', newText: '', partType: type } }
-    if (part.removed) pending.oldText += part.value
-    else pending.newText += part.value
-  }
-  if (pending) blocks.push(pending)
-  return blocks.map(b => { let type = b.partType; if (type === 'added' && blocks.some(x => x.partType === 'removed') && blocks.some(x => x.partType === 'added')) type = 'modified'; const seed = `${revision.source_sha256}|${revision.candidate_sha256}|${b.oldText}|${b.newText}`; let h = 2166136261; for (const ch of seed) h = Math.imul(h ^ ch.charCodeAt(0), 16777619); const words = diffWords(b.oldText, b.newText); return { ...b, type, id: `change-${(h >>> 0).toString(16)}`, oldParts: words.filter(x => !x.added), newParts: words.filter(x => !x.removed) } })
+  const source = revisionSource.value[revision.revision_id]
+  if (!source?.available || source.sha256 !== revision.source_sha256) return []
+  return revisionDiff(source.text, revision.candidate_text || '', revision.source_sha256, revision.candidate_sha256)
 }
 function visibleDiffBlocks(revision) { const blocks = diffBlocks(revision); return diffMode.value[revision.revision_id] === 'all' ? blocks : blocks.filter(b => b.type !== 'unchanged') }
-function decisionLabel(items = [], blockId) { return items.find(x => x.block_id === blockId)?.action || '未决定' }
-async function decideRevision(revision, block, action) { try { decisions.value[revision.revision_id] = (await saveReviewDecision(revision.revision_id, { block_id: block.id, action, note: '' })).decisions } catch(e) { error.value=e.message } }
+function editorLabel(text) { const m = String(text || '').split('\n').slice(0,4).join('\n').match(/(?:结论|裁定|判定|Verdict)[^\n:：]*[:：]\s*(?:\*\*)?(CONDITIONAL PASS|PASS|FAIL)\b/i); return m ? ({ PASS: '审核通过', 'CONDITIONAL PASS': '审核有条件通过，仍需修改或确认', FAIL: '审核发现问题' }[m[1].toUpperCase()]) : '审核结论待核实' }
+function exportText(title, text) {
+  const body = `# ${title}\n\n> 草稿导出，尚未最终确认；AI 审核不替代人工批准。\n\n${text}`
+  const url = URL.createObjectURL(new Blob([body], { type: 'text/markdown;charset=utf-8' }))
+  const link = document.createElement('a'); link.href = url; link.download = `${title.replace(/[\\/:*?"<>|]/g,'_')}-草稿.md`; link.click(); URL.revokeObjectURL(url)
+}
+function decisionLabel(items = [], blockId) { return items.find(x => x.block_id === blockId)?.action ? ({accept:'已接受此项（不是整集批准）',reject:'已退回此项',revise:'已记录继续修订要求',undecided:'暂不决定'}[items.find(x => x.block_id === blockId).action]) : '未决定' }
+async function decideRevision(revision, block, action) { try { decisions.value[revision.revision_id] = (await saveReviewDecision(revision.revision_id, { block_id: block.id, action, note: reviewNotes.value[block.id] || '', source_sha256: revision.source_sha256, candidate_sha256: revision.candidate_sha256 })).decisions } catch(e) { error.value=e.message } }
 async function recoverRevision(id) { try { await refreshAssistantRevision(id); await reload() } catch(e) { error.value=e.message } }
 async function recoverEditor(id) { try { await recoverAssistantEditor(id); await reload() } catch(e) { error.value=e.message } }
 async function startRun() {
   if (!runRequest.value.trim() || runSending.value) return
   runSending.value = true; error.value = ''
-  try { await createAssistantRun(selected.value, runRequest.value.trim()); runRequest.value = ''; await reload() } catch (e) { error.value = e.message } finally { runSending.value = false }
+  try { await ElMessageBox.confirm('团队任务会产生多个真实模型请求，实际角色由主编决定，价格未配置、总费用未知。是否授权本次有界执行？', '真实 AI 团队调用授权', {confirmButtonText:'授权本次执行',cancelButtonText:'暂不调用'}); await createAssistantRun(selected.value, runRequest.value.trim()); runRequest.value = ''; await reload() } catch (e) { error.value = e.message } finally { runSending.value = false }
 }
 async function send() {
   if (!canSend.value) return
@@ -201,7 +214,7 @@ async function openCitation(sourceId, start, end) {
     const view = await getAssistantSource(selected.value, sourceId)
     const lines = String(view.text || '').split(/\r?\n/)
     if (start < 1 || end > lines.length) { citationNotice.value = '引用行号超出原始资料范围，未定位。'; return }
-    sourceView.value = { ...view, text: lines.map((line, i) => `${String(i + 1).padStart(4, ' ')} ${i + 1 >= start && i + 1 <= end ? '▸ ' : '  '}${line}`).join('\n') }
+    sourceView.value = { ...view, raw_text: view.text, text: lines.map((line, i) => `${String(i + 1).padStart(4, ' ')} ${i + 1 >= start && i + 1 <= end ? '▸ ' : '  '}${line}`).join('\n') }
     showSource.value = true
   } catch (e) { citationNotice.value = e.message }
 }
@@ -215,7 +228,7 @@ onMounted(async () => {
     if (selected.value) await changeWork()
   } catch (e) { error.value = e.response?.status === 404 ? '本服务尚未启用剧本助手，请使用已配置的 M1 工作台服务。' : e.message }
   finally { loading.value = false }
-  timer = setInterval(() => { if (selected.value && (messages.value.some(m => isActive(m.task)) || runs.value.some(r => ['queued','planning','experts','reviewing','deciding'].includes(r.status)))) reload().catch(e => { error.value = e.message }) }, 5000)
+  timer = setInterval(() => { if (selected.value && (messages.value.some(m => isActive(m.task)) || runs.value.some(r => ['queued','planning','experts','reviewing','deciding'].includes(r.status)) || revisions.value.some(r => ['queued','planning','writing','reviewing'].includes(r.status)))) reload().catch(e => { error.value = e.message }) }, 5000)
 })
 onUnmounted(() => { alive = false; clearInterval(timer); document.removeEventListener('click', onCitationClick) })
 </script>
@@ -250,4 +263,5 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; line-height
 .composer { border-top: 1px solid var(--border-color, #ddd); padding-top: 18px; } .composer-footer { margin-top: 12px; font-size: 12px; color: var(--text-secondary); }
 .error-text { color: var(--el-color-danger); }
 @media (max-width: 850px) { .assistant-layout { grid-template-columns: 1fr; } .assistant-page { padding: 14px; } .assistant-header { flex-wrap: wrap; } .assistant-header > .el-tag { margin-left: 0; } }
+@media (max-width: 1100px) { .revision-workbench { grid-template-columns: 1fr; } .editor-review { border-left:0; border-top:1px solid var(--el-border-color); padding:12px 0; } } @media (max-width:700px) { .assistant-layout,.revision-diff { grid-template-columns:1fr; } .source-document { overflow-wrap:anywhere; } }
 </style>

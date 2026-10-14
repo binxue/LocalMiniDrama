@@ -1,6 +1,6 @@
 # Current Action
 
-LOCALMINIDRAMA_M5_3_REVISION_REVIEW_WORKBENCH
+LOCALMINIDRAMA_PRODUCT_CORE_CONDITIONAL_ACCEPTANCE
 
 ## M1 Git baseline（2026-10-12）
 
@@ -9,12 +9,12 @@ LOCALMINIDRAMA_M5_3_REVISION_REVIEW_WORKBENCH
 - M1工程收口：真实Producer新任务、正文/事件/tokens、服务重启持久化已验证；实际关闭Codex未执行，不冒充人工步骤。后端80/80、前端10/10测试通过。
 - 同步方式：仅专用开发分支普通push，随后fetch与远端HEAD/文件清单验证；不合并main。实时远端状态以Git为准。
 - 索引恢复：归档旧索引补丁及无活动Git进程的空锁文件；read-tree仅恢复HEAD索引，源码哈希未变。历史UI/证据改动、示例ZIP缺失及临时文件未提交，继续保留。
-- M2已完成对话界面、雨林资料索引、来源哈希核对、消息持久化、刷新恢复和一次真实Producer验收；代码、测试及工程报告已纳入专用开发分支。M3尚未启动。
+- M2已完成对话界面、雨林资料索引、来源哈希核对、消息持久化、刷新恢复和一次真实Producer验收；代码、测试及工程报告已纳入专用开发分支。M3历史真实协作已完成；当前状态以本轮产品验收报告为准。
 - Runtime证据仍在H:/localminidrama-runtime-creative-20261011-source/evidence，未上传原始对话、数据库、配置凭证或日志。其他两个仓库、视频模块与雨林冻结正文未修改。
 
 M1 已实现现有 Managed Agent 单任务服务、隔离持久记录、有界事件读取与明确错误状态。真实 Producer 正文返回与重启恢复已验证；独立Node进程运行于127.0.0.1:5688。证据：H:/localminidrama-runtime-creative-20261011-source/evidence/m1-independent-runtime-20261012。
 
-当前动作：M5.3修订审阅工作台已完成。第三集Revision提供稳定文本Diff块、只看修改/查看全文、原稿候选稿并排阅读、Editor全局意见/待定位标识，以及接受、退回、要求继续修订、暂不决定四类逐块操作。决定写入独立审阅表并保留事件审计，绑定原稿/候选哈希；不改变正文、CONDITIONAL PASS、not_approved或Canon。真实浏览器可读取指定Revision、候选正文、Editor意见和技术详情；5688已重启加载新API。后端88/88、前端构建通过。本轮未调用Agent。
+当前动作：完整产品化任务核心已有作品阅读与审阅流程有条件通过，尚不能宣布全部产品目标完成。已修复Diff配对与全文丢失、审核标签误报、批准版本校验、审阅块校验与原子审计；浏览器验证隔离副本逐项决定/意见、刷新、服务重启和原稿/修改稿导出。当前实际验收地址3014，3013未知旧实例保留，历史5679保留。无新收费调用、无真实批准或Canon写入。唯一主报告docs/LOCALMINIDRAMA_PRODUCT_ACCEPTANCE.md；下一动作是确认3013归属并补齐报告中的未通过项，收费新端到端验证须明确授权。
 
 剧本助手终点为人工批准后的Script Handoff；CONDITIONAL PASS不代表批准。雨林计时、分镜、救鸟实现及样片移交视频模块待办，不阻塞剧本M1。不修改冻结稿、Canon或生产数据库。
 
