@@ -66,3 +66,4 @@ test('restart keeps tasks with cloud sessions recoverable', () => {
   assert.equal(service.getTask(db, 'mat_no_session').task_status, 'interrupted');
   db.close();
 });
+

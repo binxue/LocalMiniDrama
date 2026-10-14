@@ -49,10 +49,11 @@ function ensureTable(db) {
     completed_at TEXT, updated_at TEXT NOT NULL
   )`);
   const columns = new Set(db.prepare('PRAGMA table_info(managed_agent_tasks)').all().map(c => c.name));
-  for (const column of ['model_id', 'session_create_json', 'send_json', 'attempt_id', 'episode_id', 'revision_id', 'source_sha256', 'candidate_sha256', 'context_hash', 'task_mode']) {
+  for (const column of ['model_id', 'session_create_json', 'send_json', 'attempt_id', 'episode_id', 'revision_id', 'candidate_id', 'source_sha256', 'candidate_sha256', 'context_hash', 'task_mode']) {
     if (!columns.has(column)) db.exec(`ALTER TABLE managed_agent_tasks ADD COLUMN ${column} TEXT`);
   }
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_managed_agent_session_unique ON managed_agent_tasks(session_id) WHERE session_id IS NOT NULL");
+  db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_managed_agent_candidate_unique ON managed_agent_tasks(candidate_id) WHERE candidate_id IS NOT NULL");
 }
 
 function row(db, id) {
@@ -150,12 +151,13 @@ async function execute(db, log, taskId) {
   }
 }
 
-function createTask(db, log, { agent_id: agentId, work_id: workId, input, orchestration = false, episode_id: episodeId = null, revision_id: revisionId = null, source_sha256: sourceSha = null, candidate_sha256: candidateSha = null, context_hash: contextHash = null, attempt_id: attemptId = `att_${crypto.randomUUID()}` }) {
+function createTask(db, log, { agent_id: agentId, work_id: workId, input, orchestration = false, episode_id: episodeId = null, revision_id: revisionId = null, candidate_id: candidateId = null, source_sha256: sourceSha = null, candidate_sha256: candidateSha = null, context_hash: contextHash = null, attempt_id: attemptId = `att_${crypto.randomUUID()}` }) {
   ensureTable(db);
   if (!ALLOWED_AGENTS.has(agentId)) throw new Error('agent_id 不在已部署的 LocalMiniDrama Agent 白名单中');
   if (!workId || typeof input !== 'string' || !input.trim()) throw new Error('work_id 和 input 必填');
   if (typeof workId !== 'string' || workId.length > 100 || input.length > 8000) throw new Error('work_id 最长100字符，input 最长8000字符');
   if (/[A-Za-z]:\\/.test(input)) throw new Error('禁止把 Windows 本地路径传入云端任务');
+  if (candidateId) { const prior = db.prepare('SELECT task_id,work_id,agent_id,input_version FROM managed_agent_tasks WHERE candidate_id=?').get(candidateId); if (prior) { if (prior.work_id !== workId || prior.agent_id !== agentId || prior.input_version !== sha(input)) throw new Error('候选任务幂等键与现有输入不一致'); return row(db, prior.task_id); } }
   if (db.prepare('SELECT 1 FROM managed_agent_tasks WHERE attempt_id = ?').get(attemptId)) throw new Error('attempt_id 已存在，禁止重复提交');
   const insert = db.transaction(() => {
     if (db.prepare("SELECT count(*) n FROM managed_agent_tasks WHERE task_status IN ('queued','starting','submitted','running')").get().n) throw new Error('已有进行中的 Agent 任务');
@@ -163,8 +165,8 @@ function createTask(db, log, { agent_id: agentId, work_id: workId, input, orches
     if (!orchestration && chatLimit > 0 && db.prepare("SELECT count(*) n FROM managed_agent_tasks WHERE task_mode = 'chat' AND created_at >= ?").get(new Date(Date.now() - 86400000).toISOString()).n >= chatLimit) throw new Error(`聊天额度已达到配置上限（${chatLimit}/24小时），请等待滚动窗口恢复`);
     const taskId = `mat_${crypto.randomUUID()}`;
     const stamp = now();
-    db.prepare(`INSERT INTO managed_agent_tasks (task_id, work_id, agent_id, task_status, input_version, input_text, attempt_id, episode_id, revision_id, source_sha256, candidate_sha256, context_hash, task_mode, created_at, updated_at) VALUES (?, ?, ?, 'queued', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-      .run(taskId, workId, agentId, sha(input), input, attemptId, episodeId, revisionId, sourceSha, candidateSha, contextHash, orchestration ? 'orchestration' : 'chat', stamp, stamp);
+    db.prepare(`INSERT INTO managed_agent_tasks (task_id, work_id, agent_id, task_status, input_version, input_text, attempt_id, episode_id, revision_id, candidate_id, source_sha256, candidate_sha256, context_hash, task_mode, created_at, updated_at) VALUES (?, ?, ?, 'queued', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(taskId, workId, agentId, sha(input), input, attemptId, episodeId, revisionId, candidateId, sourceSha, candidateSha, contextHash, orchestration ? 'orchestration' : 'chat', stamp, stamp);
     return taskId;
   });
   const taskId = insert();
