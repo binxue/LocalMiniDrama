@@ -25,6 +25,13 @@
 
 ## Current action
 
+## 2026-10-14 — batch recovery state hardening
+
+- Fixed `executeBatch` so an episode candidate in `awaiting_recovery` pauses the batch and item with resumable evidence instead of being converted to permanent `failed` by the outer catch. Completed items remain counted once through the existing conditional update. Added a regression test for the paused batch state.
+- Restarted 5688 with the retained Runtime config at `H:\localminidrama-runtime-creative-20261011-source\evidence\m1-independent-runtime-20261012\config.yaml`; health reports `m4.3-session-isolation-recovery`, process cwd `H:\localminidrama-active\backend-node`, PID `2744`. 3014 returned HTTP 200; 3013 and historical 5679 remained running.
+- Read-only verification after restart: episode 1 candidate `cand_583f67be-273d-47df-afe8-5e0e0e8cd7f6` remains completed with real Writer/Editor output and `not_approved`; episode 2 candidate `cand_6a8f276e-630b-4072-9577-349a3c5f4c58` remains `awaiting_recovery`, Writer `mat_ece67f91-c3ff-4289-9273-ba000ee310ba` / Session `sesn-20261014085621-rcat2` remains incomplete with one unfinished request and no正文. No new Agent call was submitted.
+- Focused Script Assistant tests: 12/12; frontend build passed. Full two-episode real continuity, batch browser interaction, adaptation Writer/Editor acceptance and Chromium console evidence remain open; no claim of product completion is made.
+
 Persistent original/adaptation intake is implemented and API-verified on isolated works `acceptance-intake` and `adapted-intake`; frontend build and Script Assistant route load pass. First isolated work episode 1 completed with real Writer and controlled Editor: candidate `cand_583f67be-273d-47df-afe8-5e0e0e8cd7f6`, candidate SHA `7e424d71a21beee5bc61983f8d97aad5111895364b55f594fa34149035671acd`, Editor `CONDITIONAL PASS`, approval `not_approved`. The first Editor attempt was preserved as incomplete after four tool-seeking requests; the bounded controlled retry completed with one request and five evidence items. The second episode candidate `cand_6a8f276e-630b-4072-9577-349a3c5f4c58` is pinned to episode 1 candidate/SHA but its sole Writer session `sesn-20261014085621-rcat2` remains `incomplete` with one unfinished model request and no正文; read-only recovery confirmed the same state and no retry was submitted. Current code commit `c8d918c` controls both episode Writer and Editor sessions and bounds Editor recovery to one retry; 17 focused backend tests pass. Next action is deterministic batch/restart/UI evidence and lawful adaptation acceptance without touching Rainforest Canon, frozen text, 3013, or historical records.
 
 ## 2026-10-14 — isolated creative evidence

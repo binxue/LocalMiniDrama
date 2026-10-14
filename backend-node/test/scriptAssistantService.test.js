@@ -31,6 +31,22 @@ test('repeated active batch request reuses the existing batch instead of schedul
   assert.equal(db.prepare('SELECT count(*) n FROM script_assistant_batches').get().n, 1);
 });
 
+test('batch schema preserves awaiting recovery as a paused, resumable state', () => {
+  const db = new Database(':memory:'); service.ensureTable(db);
+  const now = new Date().toISOString();
+  db.prepare(`INSERT INTO script_assistant_batches(batch_id,work_id,request,episode_start,episode_end,status,current_episode,total_count,completed_count,created_at,updated_at,error_text) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`)
+    .run('batch-recovery', 'w', '继续写', 2, 3, 'paused', 2, 2, 1, now, now, 'Writer 尚无可验证正文');
+  db.prepare(`INSERT INTO script_assistant_batch_items(batch_id,episode_no,candidate_id,status,error_text,created_at,updated_at) VALUES(?,?,?,?,?,?,?)`)
+    .run('batch-recovery', 2, 'cand-recovery', 'awaiting_recovery', 'Writer 尚无可验证正文', now, now);
+  db.prepare(`INSERT INTO script_assistant_batch_items(batch_id,episode_no,candidate_id,status,created_at,updated_at) VALUES(?,?,?,?,?,?)`)
+    .run('batch-recovery', 3, 'cand-next', 'queued', now, now);
+  const batch = service.batches(db, 'w')[0];
+  assert.equal(batch.status, 'paused');
+  assert.equal(batch.completed_count, 1);
+  assert.equal(batch.items[0].status, 'awaiting_recovery');
+  assert.equal(batch.items[1].status, 'queued');
+});
+
 test('script assistant rejects an unverified source hash', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'localminidrama-assistant-'));
   const script = path.join(dir, 'ep1.md'); fs.writeFileSync(script, 'source');

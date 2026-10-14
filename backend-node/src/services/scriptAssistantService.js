@@ -199,6 +199,14 @@ async function executeBatch(db,log,config,batchId){
     try{
       if(c.status==='queued') await executeEpisodeCandidate(db,log,config,c.candidate_id); else if(c.status==='failed') throw new Error(c.error_text||'分集失败');
       const finished=db.prepare('SELECT status,error_text,candidate_sha256 FROM script_assistant_episode_candidates WHERE candidate_id=?').get(c.candidate_id);
+      if (finished?.status === 'awaiting_recovery') {
+        const stamp = new Date().toISOString();
+        db.transaction(() => {
+          db.prepare("UPDATE script_assistant_batch_items SET status='awaiting_recovery',error_text=?,updated_at=? WHERE batch_id=? AND episode_no=? AND status!='completed'").run(finished.error_text || '分集任务等待原 Session 回查；不会重新提交', stamp, batchId, item.episode_no);
+          db.prepare("UPDATE script_assistant_batches SET status='paused',current_episode=?,error_text=?,updated_at=? WHERE batch_id=?").run(item.episode_no, finished.error_text || '分集任务等待原 Session 回查；不会重新提交', stamp, batchId);
+        })();
+        return;
+      }
       if(finished?.status!=='completed') throw new Error(finished?.error_text||'分集尚未完成有效审核');
       const stamp = new Date().toISOString();
       db.transaction(()=>{const changed=db.prepare("UPDATE script_assistant_batch_items SET status='completed',updated_at=? WHERE batch_id=? AND episode_no=? AND status!='completed'").run(stamp,batchId,item.episode_no);if(changed.changes)db.prepare('UPDATE script_assistant_batches SET completed_count=completed_count+1,updated_at=? WHERE batch_id=?').run(stamp,batchId);})();

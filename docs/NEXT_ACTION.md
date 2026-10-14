@@ -1,5 +1,13 @@
 # Current Action
 
+## 2026-10-14 批次恢复状态修复与运行实例收口
+
+本轮修复 `executeBatch`：分集候选进入 `awaiting_recovery` 时，批次与 batch item 均保持可恢复的 `paused/awaiting_recovery`，不会被外层异常处理误写为永久 `failed`；已完成集数仍按条件更新保持不重复计数。新增回归测试覆盖已完成集保留和未完成集排队状态。
+
+5688 已停止旧实例并使用 `H:\localminidrama-runtime-creative-20261011-source\evidence\m1-independent-runtime-20261012\config.yaml` 在 `H:\localminidrama-active\backend-node` 重启，健康版本 `m4.3-session-isolation-recovery`，PID `2744`；3014 HTTP 200，3013/5679 保留。第二集原 Writer `mat_ece67f91-c3ff-4289-9273-ba000ee310ba` / Session `sesn-20261014085621-rcat2` 仍 `incomplete`，无正文、无终止事件、无 Editor，未创建新收费尝试；第一集真实候选仍 `CONDITIONAL PASS`、`not_approved`。
+
+当前唯一真实创作阻断仍是第二集云端数据面未形成终态。下一步在不重试该未知 Session 的前提下，继续保留第一集成果，补充隔离改编作品的一次有明确目标的真实创作和可复核浏览器操作证据；任何价格未配置的任务只报告真实 Token，不估算金额。
+
 ## 2026-10-14 第二集恢复与批次可靠性收口
 
 已修复原 Session 恢复和批次状态一致性：`incomplete`/`awaiting_recovery` Writer 或 Editor 只读回查原 Session；未知云端终态保持候选和批次暂停，不重发收费任务；批次 item 与 batch 同步暂停，完成计数采用条件更新；批次固定上一集候选 ID/SHA-256，服务重启保留 queued（尚未提交云端）候选。后端全量测试 95/95 通过。
