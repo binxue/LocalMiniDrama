@@ -47,6 +47,23 @@ test('batch schema preserves awaiting recovery as a paused, resumable state', ()
   assert.equal(batch.items[1].status, 'queued');
 });
 
+test('completed candidate clears stale batch error without changing the count', () => {
+  const db = new Database(':memory:'); service.ensureTable(db);
+  const now = new Date().toISOString();
+  db.prepare(`INSERT INTO script_assistant_batches(batch_id,work_id,request,episode_start,episode_end,status,current_episode,total_count,completed_count,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)`)
+    .run('batch-stale-error', 'w', '继续写', 2, 2, 'paused', 2, 1, 1, now, now);
+  db.prepare(`INSERT INTO script_assistant_episode_candidates(candidate_id,work_id,episode_no,title,status,candidate_text,candidate_sha256,created_at) VALUES(?,?,?,?,?,?,?,?)`)
+    .run('cand-done', 'w', 2, '第2集', 'completed', '正文', require('crypto').createHash('sha256').update('正文').digest('hex'), now);
+  db.prepare(`INSERT INTO script_assistant_batch_items(batch_id,episode_no,candidate_id,status,error_text,created_at,updated_at) VALUES(?,?,?,?,?,?,?)`)
+    .run('batch-stale-error', 2, 'cand-done', 'completed', 'Writer 尚无可验证正文', now, now);
+  service.batches(db, 'w');
+  const item = db.prepare('SELECT status,error_text FROM script_assistant_batch_items WHERE batch_id=?').get('batch-stale-error');
+  const batch = db.prepare('SELECT completed_count FROM script_assistant_batches WHERE batch_id=?').get('batch-stale-error');
+  assert.equal(item.status, 'completed');
+  assert.equal(item.error_text, null);
+  assert.equal(batch.completed_count, 1);
+});
+
 test('episode review accepts the Chinese 评定 heading used by a completed Editor', async () => {
   const db = new Database(':memory:'); service.ensureTable(db);
   const text = 'adapted candidate';

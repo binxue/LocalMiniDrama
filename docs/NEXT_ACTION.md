@@ -8,6 +8,8 @@ The batch executor now repairs legacy unsubmitted candidates by binding them to 
 
 After the latest restart, the completed episode 2 batch item is normalized to `completed` with no stale error text. Episode 3 remains `awaiting_recovery` with its single unknown Writer task; no retry is allowed.
 
+Regression coverage now verifies stale completed-item errors are cleared without changing the completion count: Script Assistant `13/13`, full Node suite `100/100`. No new model call was made.
+
 Next action: keep episode-3 unknown state paused, finish deterministic browser/export evidence on the two completed adaptation episodes, and only continue the batch after explicit terminal evidence or a new bounded product decision. Preserve Rainforest Canon, 3013, 5679, Runtime data and all historical tasks.
 
 ## 2026-10-14 改编首集真实验收与五集批次推进
