@@ -4,12 +4,21 @@ const Database = require('better-sqlite3');
 const service = require('../src/services/managedAgentService');
 
 test('episode Writer sessions receive a controlled single-turn system override', () => {
-  const args = service._sessionArgs('agent-20261011131619-47ft8', 'episode', { writerControlled: true });
+  const args = service._sessionArgs('agent-20261011131619-47ft8', 'episode', { controlledEpisodeAgent: true });
   const index = args.indexOf('--agent-overrides');
   assert.ok(index >= 0);
   const override = JSON.parse(args[index + 1]);
   assert.deepEqual(override.Skills, []);
   assert.match(override.System, /不得调用工具/);
+});
+
+test('episode Editor sessions use the same controlled override as Writer', () => {
+  const args = service._sessionArgs('agent-20261011131710-ncebb', 'episode-editor', { controlledEpisodeAgent: true });
+  const index = args.indexOf('--agent-overrides');
+  assert.ok(index >= 0);
+  const override = JSON.parse(args[index + 1]);
+  assert.deepEqual(override.Skills, []);
+  assert.match(override.System, /PASS、CONDITIONAL PASS 或 FAIL/);
 });
 
 test('managed agent tasks persist input version and do not accept unknown agents', () => {
