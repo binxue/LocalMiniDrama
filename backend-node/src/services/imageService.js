@@ -61,6 +61,7 @@ const uploadService = require('./uploadService');
 const storageLayout = require('./storageLayout');
 const aiClient = require('./aiClient');
 const promptI18n = require('./promptI18n');
+const nativeProductionAgent = require('./nativeProductionAgentService');
 
 const LAST_FRAME_TYPES = new Set(['last', 'storyboard_last', 'tail', 'last_frame']);
 
@@ -1374,6 +1375,23 @@ async function processImageGeneration(db, log, imageGenId) {
       });
     }
 
+    // Native production enhancement: the existing image path remains the
+    // producer of the image record and API request. The real Managed Agent
+    // only guides the finalized native prompt immediately before submission.
+    if (row.storyboard_id && process.env.LOCALMINIDRAMA_NATIVE_AGENT_GUIDANCE !== '0') {
+      const storyboardContext = db.prepare(
+        'SELECT title, action, dialogue, location, time, shot_type, movement FROM storyboards WHERE id = ? AND deleted_at IS NULL'
+      ).get(Number(row.storyboard_id)) || {};
+      const nativeRow = { ...row, ...storyboardContext };
+      const guidance = await nativeProductionAgent.preGeneration({
+        db, log, row: nativeRow, prompt: finalPrompt,
+        references: reference_image_urls || [],
+        labels: (reference_context_note || '').split('\n').filter(Boolean),
+        storageRoot: storageLocalPath,
+      });
+      if (guidance?.prompt) finalPrompt = guidance.prompt;
+    }
+
     const result = await imageClient.callImageApi(db, log, {
       prompt: finalPrompt,
       model: row.model,
@@ -1451,6 +1469,24 @@ async function processImageGeneration(db, log, imageGenId) {
     let persistedImageUrl = result.image_url;
     if (localPath) {
       persistedImageUrl = '/static/' + String(localPath).replace(/^\//, '');
+    }
+
+    if (row.storyboard_id && localPath && process.env.LOCALMINIDRAMA_NATIVE_AGENT_GUIDANCE !== '0') {
+      const storyboardContext = db.prepare(
+        'SELECT title, action, dialogue, location, time, shot_type, movement FROM storyboards WHERE id = ? AND deleted_at IS NULL'
+      ).get(Number(row.storyboard_id)) || {};
+      try {
+        await nativeProductionAgent.postGeneration({
+          db, log, row: { ...row, ...storyboardContext }, prompt: finalPrompt,
+          candidatePath: path.join(storageLocalPath, localPath), persistedUrl: persistedImageUrl,
+          storageRoot: storageLocalPath,
+        });
+      } catch (reviewError) {
+        // Preserve a valid native candidate when post-review infrastructure is
+        // unavailable; the evidence is still recorded by the adapter when the
+        // remote Agent has produced a response.
+        log.warn('[原生制作] Agent 质检失败，保留图片候选', { id: imageGenId, error: reviewError.message });
+      }
     }
 
     // ── Step 6: 写库 & 任务完成 ──────────────────────────────────────
