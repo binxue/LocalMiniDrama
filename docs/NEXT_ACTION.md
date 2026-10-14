@@ -10,6 +10,8 @@ After the latest restart, the completed episode 2 batch item is normalized to `c
 
 Regression coverage now verifies stale completed-item errors are cleared without changing the completion count: Script Assistant `13/13`, full Node suite `100/100`. No new model call was made.
 
+New real recovery evidence: episode 3 Writer `mat_34147ae7-d250-42df-b87d-034ef5e4d203` eventually produced正文; its existing Editor `mat_d3a24352-1e9d-4204-8678-390bf86a3377` returned `CONDITIONAL PASS`. Candidate SHA is `838cde55c38bca5a9b7ec097bc75c10f1f7307052c2e70dfc6a7e220d25d2cbf`, approval remains `not_approved`, and continuity is pinned to episode 2 SHA. Batch recovery counted episode 3 and reached `2/4`; episode 4 has one Writer attempt `mat_32491ff1-20bf-43ee-8196-1f08d5794e2d` with `user.message` but no verifiable正文, so it is paused in `awaiting_recovery`. Do not retry episode 4 without terminal evidence.
+
 Next action: keep episode-3 unknown state paused, finish deterministic browser/export evidence on the two completed adaptation episodes, and only continue the batch after explicit terminal evidence or a new bounded product decision. Preserve Rainforest Canon, 3013, 5679, Runtime data and all historical tasks.
 
 ## 2026-10-14 改编首集真实验收与五集批次推进

@@ -5,14 +5,14 @@ This is the single continuing plan for the product goal. Status is evidence-base
 | ID | User-visible goal | Status | Next evidence |
 |---|---|---|---|
 | G1 | Create an original work and first episode | partial | Persisted work/source registration, real 3014 flow, review and export |
-| G2 | Adapt a lawful test novel | partial | `adapted-intake` has source provenance and a real reviewed episode 1; adaptation batch episode 2 is paused on an incomplete Writer Session |
-| G3 | Continue next episode and ranges | partial | Second real episode, pinned continuity, range batch evidence; deterministic routing now ready |
+| G2 | Adapt a lawful test novel | partial | `adapted-intake` now has three real reviewed candidate episodes with source provenance; episode 4 is paused on a Writer Session with no verifiable正文 |
+| G3 | Continue next episode and ranges | partial | Real episodes 2–3 with pinned continuity and Editor results; range batch reached 2/4 before episode 4 recovery pause |
 | G4 | Preserve continuity across episodes | implemented/tested | Real multi-episode content and producer quality review |
-| G5 | Automatically review Writer output | partial | Real second-episode Editor result; bounded repair evidence |
+| G5 | Automatically review Writer output | partial | Real episode 2 and 3 Editor results; episode 4 remains recovery-only |
 | G6 | Natural-language revision | partial | Existing revision chain is real; connect next/range/revise UX without technical forms |
 | G7 | Long-running reliable tasks | partial | SQLite recovery, pause/resume, explicit terminal retry, browser restart proof |
 | G8 | Ordinary-user 3014 experience | partial | Work creation, episode progress, reading, review and export in Chromium; progress controls now exposed |
-| G9 | Real isolated five-episode acceptance | partial | Real adapted episode 1 passed Writer→Editor; real range batch 2—5 was created and paused safely at episode 2 incomplete Writer, episodes 3—5 remain queued |
+| G9 | Real isolated five-episode acceptance | partial | Real adapted episodes 1–3 passed Writer→Editor; range batch 2—5 is paused at episode 4 with episode 5 queued |
 
 ## Ordered work
 
