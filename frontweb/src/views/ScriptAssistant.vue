@@ -11,6 +11,7 @@
       <p>选择作品，阅读剧本或修改版本；直接告诉 AI 创作助手你希望改善什么。团队协作会创建独立草稿，原稿保持不变。</p>
       <el-button @click="mode='chat'">开始对话</el-button>
       <el-button link @click="mode='team'">查看高级审阅</el-button>
+      <el-button link @click="showIntake = true">登记原创 / 小说改编</el-button>
       <p class="muted">直接告诉助手你想创作、修改或审核什么；后台会按需安排专业协作。</p>
     </section>
     <div class="assistant-layout" v-loading="loading">
@@ -115,6 +116,18 @@
         </form>
       </main>
     </div>
+    <el-dialog v-model="showIntake" title="登记一个创作作品" width="min(620px, 94vw)">
+      <p class="muted">登记只保存作品设定和合法测试原文，不会调用模型或修改已有作品。</p>
+      <el-form label-position="top">
+        <el-form-item label="作品 ID"><el-input v-model="intake.work_id" placeholder="例如: lighthouse-story" /></el-form-item>
+        <el-form-item label="作品标题"><el-input v-model="intake.title" /></el-form-item>
+        <el-form-item label="创作类型"><el-radio-group v-model="intake.kind"><el-radio-button label="original">原创</el-radio-button><el-radio-button label="adaptation">小说改编</el-radio-button></el-radio-group></el-form-item>
+        <el-form-item label="故事设定"><el-input v-model="intake.premise" type="textarea" :rows="4" maxlength="12000" show-word-limit /></el-form-item>
+        <el-form-item v-if="intake.kind === 'adaptation'" label="合法测试原文"><el-input v-model="intake.source_text" type="textarea" :rows="6" maxlength="50000" show-word-limit /></el-form-item>
+        <el-form-item v-if="intake.kind === 'adaptation'" label="原文名称"><el-input v-model="intake.source_label" placeholder="例如: lawful-fixture.txt" /></el-form-item>
+      </el-form>
+      <template #footer><el-button @click="showIntake = false">取消</el-button><el-button type="primary" :loading="intakeSending" @click="submitIntake">保存并打开作品</el-button></template>
+    </el-dialog>
     <el-dialog v-model="showSource" :title="sourceView?.title || '作品原文件'" width="min(850px, 94vw)">
       <p class="muted">{{ sourceView?.path }}<br>SHA256：{{ sourceView?.sha256 }}</p>
       <el-button :disabled="!sourceView?.available" @click="exportText(sourceView.title,sourceView.raw_text || sourceView.text)">导出当前剧本草稿</el-button>
@@ -132,13 +145,14 @@ import { ElMessageBox } from 'element-plus'
 import { revisionDiff } from '@/utils/revisionDiff'
 import { useRouter, useRoute } from 'vue-router'
 import { ArrowLeft, ChatDotRound } from '@element-plus/icons-vue'
-import { getAssistantWorks, getAssistantContext, getAssistantIntent, getAssistantMessages, sendAssistantMessage, refreshAssistantMessage, getAssistantSource, getAssistantRuns, createAssistantRun, getAssistantRevisions, createAssistantRevision, approveAssistantRevision, refreshAssistantRevision, recoverAssistantEditor, getReviewDecisions, saveReviewDecision, getAssistantCandidates, getAssistantBatches, createAssistantEpisode, createAssistantBatch, pauseAssistantBatch, resumeAssistantBatch, recoverAssistantEpisode } from '@/api/scriptAssistant'
+import { getAssistantWorks, registerAssistantWork, getAssistantContext, getAssistantIntent, getAssistantMessages, sendAssistantMessage, refreshAssistantMessage, getAssistantSource, getAssistantRuns, createAssistantRun, getAssistantRevisions, createAssistantRevision, approveAssistantRevision, refreshAssistantRevision, recoverAssistantEditor, getReviewDecisions, saveReviewDecision, getAssistantCandidates, getAssistantBatches, createAssistantEpisode, createAssistantBatch, pauseAssistantBatch, resumeAssistantBatch, recoverAssistantEpisode } from '@/api/scriptAssistant'
 
 const router = useRouter(), route = useRoute()
 const works = ref([]), selected = ref(''), context = ref(null), messages = ref([]), draft = ref(''), budget = ref({})
 const loading = ref(false), sending = ref(false), error = ref(''), showSource = ref(false), sourceView = ref(null), citationNotice = ref('')
 const mode = ref('chat'), runRequest = ref(''), runs = ref([]), runSending = ref(false)
 const revisions = ref([]), revisionSending = ref(false), revisionTarget = ref('ep3'), revisionGoal = ref(''), episodeCandidates = ref([]), batches = ref([])
+const showIntake = ref(false), intakeSending = ref(false), intake = ref({ work_id: '', title: '', kind: 'original', premise: '', source_text: '', source_label: '' })
 const revisionSource = ref({}), decisions = ref({})
 const diffMode = ref({}), reviewNotes = ref({})
 const lastIntentNotice = computed(() => {
@@ -160,6 +174,19 @@ const candidateStatusLabel = state => ({ queued: '等待创作', writing: '正�
 async function pauseBatch(batch) { try { await pauseAssistantBatch(batch.batch_id); await reload() } catch (e) { error.value = e.message } }
 async function resumeBatch(batch) { try { await resumeAssistantBatch(batch.batch_id); await reload() } catch (e) { error.value = e.message } }
 async function recoverEpisode(candidate) { try { await recoverAssistantEpisode(candidate.candidate_id); await reload() } catch (e) { error.value = e.response?.data?.error?.message || e.message } }
+async function submitIntake() {
+  if (intakeSending.value) return
+  intakeSending.value = true; error.value = ''
+  try {
+    const payload = { ...intake.value }
+    const data = await registerAssistantWork(payload)
+    showIntake.value = false
+    const refreshed = await getAssistantWorks(); works.value = refreshed.works; budget.value = refreshed.budget
+    selected.value = data.id || payload.work_id
+    intake.value = { work_id: '', title: '', kind: 'original', premise: '', source_text: '', source_label: '' }
+    await changeWork()
+  } catch (e) { error.value = e.response?.data?.error?.message || e.message } finally { intakeSending.value = false }
+}
 async function reloadMessages() {
   const id = selected.value, token = generation
   const data = await getAssistantMessages(id)

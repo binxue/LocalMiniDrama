@@ -164,6 +164,7 @@ function setupRouter(cfg, db, log) {
   // ---------- character-library ----------
   if (assistant) {
     r.get('/script-assistant/works', assistant.works);
+    r.post('/script-assistant/works', assistant.registerWork);
     r.get('/script-assistant/works/:work_id/context', assistant.context);
     r.get('/script-assistant/works/:work_id/intent', assistant.intent);
     r.get('/script-assistant/works/:work_id/sources/:source_id', assistant.source);

@@ -20,9 +20,9 @@
 
 - Second episode Task `mat_177d7139-fca6-4b3c-a83c-75682a586060`, Session `sesn-20261014043634-864i3`: `incomplete`, no `agent.message`, no正文, no Editor; candidate remains `awaiting_recovery`.
 - Real two-episode continuity, five-episode flow, original/adaptation intake, and complete Chromium acceptance are not passed.
-- The current 5688 process must be restarted after this source change before browser execution can observe the updated intent routing; no Agent call is needed for that restart.
+- 5688 was restarted after the source change; current PID is `4784`, health build remains `m4.3-session-isolation-recovery`, and explicit range routing is live. No Agent call was needed for that restart.
 - Model price is unconfigured. New calls must record token usage; unknown cost must remain explicit.
 
 ## Current action
 
-Implement and test persistent original/adaptation work intake and the smallest natural-language routing gaps that do not call the blocked second-episode Session. Then update this ledger with tests and browser evidence. Do not touch Rainforest Canon, frozen text, 3013, or historical records.
+Persistent original/adaptation intake is implemented and API-verified on isolated works `acceptance-intake` and `adapted-intake`; frontend build and Script Assistant route load pass. Perform the remaining 3014 browser interaction evidence on an isolated registered work. Do not touch Rainforest Canon, frozen text, 3013, or historical records.

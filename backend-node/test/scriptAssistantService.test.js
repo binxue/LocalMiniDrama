@@ -57,6 +57,16 @@ test('new episode candidate and batch tables are isolated from revisions', () =>
   assert.equal(db.prepare('SELECT count(*) n FROM script_assistant_revisions').get().n, 0);
 });
 
+test('registered original and adaptation works persist source hashes without Agent calls', () => {
+  const db = new Database(':memory:'); service.ensureTable(db);
+  const original = service.registerWork(db, { work_id: 'original-lamp', title: '灯下约定', kind: 'original', premise: '女主在旧车站寻找失踪哥哥。' });
+  assert.equal(original.title, '灯下约定');
+  assert.equal(service.works({ script_assistant: {} }, db).find(w => w.id === 'original-lamp').title, '灯下约定');
+  const adaptation = service.registerWork(db, { work_id: 'adapted-lamp', title: '合法测试改编', kind: 'adaptation', premise: '改编短篇的悬疑主线。', source_text: '第一章：雨夜有人敲门。', source_label: 'lawful-fixture.txt' });
+  assert.equal(adaptation.sources.find(s => s.kind === 'source').available, true);
+  assert.throws(() => service.registerWork(db, { work_id: 'bad-adapt', title: '缺原文', kind: 'adaptation', premise: '设定' }), /原文/);
+});
+
 test('new episode continuity context only reads the latest completed candidate', () => {
   const db = new Database(':memory:'); service.ensureTable(db);
   const now = new Date().toISOString();

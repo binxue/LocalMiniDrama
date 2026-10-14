@@ -1,6 +1,7 @@
 import request from '@/utils/request'
 const work = id => `/script-assistant/works/${encodeURIComponent(id)}`
 export const getAssistantWorks = () => request.get('/script-assistant/works')
+export const registerAssistantWork = payload => request.post('/script-assistant/works', payload)
 export const getAssistantContext = id => request.get(`${work(id)}/context`)
 export const getAssistantIntent = (id, text) => request.get(`${work(id)}/intent`, { params: { text } })
 export const getAssistantMessages = id => request.get(`${work(id)}/messages`)

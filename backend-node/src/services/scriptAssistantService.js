@@ -17,6 +17,11 @@ function ensureTable(db) {
     context_json TEXT NOT NULL, created_at TEXT NOT NULL,
     UNIQUE(work_id, client_message_id), FOREIGN KEY(task_id) REFERENCES managed_agent_tasks(task_id)
   )`);
+  db.exec(`CREATE TABLE IF NOT EXISTS script_assistant_work_intakes (
+    work_id TEXT PRIMARY KEY, title TEXT NOT NULL, intake_kind TEXT NOT NULL,
+    premise TEXT NOT NULL, source_text TEXT, source_label TEXT, source_sha256 TEXT,
+    created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+  )`);
   db.exec(`CREATE TABLE IF NOT EXISTS script_assistant_runs (
     run_id TEXT PRIMARY KEY, work_id TEXT NOT NULL, request TEXT NOT NULL, status TEXT NOT NULL,
     plan_task_id TEXT, expert_task_ids_json TEXT NOT NULL DEFAULT '[]', editor_task_id TEXT,
@@ -83,7 +88,7 @@ function saveReviewDecision(db, revisionId, blockId, action, note = '', expected
 async function executeRevision(db, log, config, id) {
   const r = db.prepare('SELECT * FROM script_assistant_revisions WHERE revision_id=?').get(id); if (!r || r.status !== 'queued') return;
   try {
-    const work = loadWork(config, r.work_id); const source = work.sources.find(s => s.id === r.source_id); if (!source?.available) throw new Error('原稿资料不可用');
+    const work = loadWork(config, r.work_id, db); const source = work.sources.find(s => s.id === r.source_id); if (!source?.available) throw new Error('原稿资料不可用');
     if (source.text.length > 4800) throw new Error('原稿超出本次完整修订输入范围；未调用模型，不能截断原稿后生成整版替代');
     const prior = runs(db, r.work_id).find(x => x.status === 'completed'); const review = prior?.result?.editor_review || '请独立检查连续性和人物关系问题';
     const bounded = (v,n) => String(v||'').slice(0,n);
@@ -104,7 +109,7 @@ async function executeRevision(db, log, config, id) {
     db.prepare('UPDATE script_assistant_revisions SET status=?, candidate_text=?, candidate_sha256=?, editor_review=?, completed_at=? WHERE revision_id=?').run('completed',wt.output_text,hash(wt.output_text),et.output_text,new Date().toISOString(),id);
   } catch(e) { db.prepare('UPDATE script_assistant_revisions SET status=?, error_text=?, completed_at=? WHERE revision_id=?').run('failed',e.message,new Date().toISOString(),id); log.error('revision failed',{revision_id:id,error:e.message}); }
 }
-function createRevision(db, log, config, workId, sourceId, request = '') { ensureTable(db); if (typeof request !== 'string' || request.length > 1200) throw new Error('修改目标最多1200字符'); if (revisions(db,workId).some(r => ['queued','planning','writing','reviewing'].includes(r.status))) throw new Error('已有进行中的修改任务，请等待或回查'); const work=loadWork(config,workId); const s=work.sources.find(x=>x.id===sourceId); if(!s?.available || s.kind !== 'script') throw new Error('原稿不可用或不是剧本正文'); if(s.text.length > 4800) throw new Error('完整原稿超出本次修订范围，未调用模型'); const id=`rev_${crypto.randomUUID()}`; db.prepare('INSERT INTO script_assistant_revisions(revision_id,work_id,source_id,source_sha256,status,created_at,revision_request) VALUES(?,?,?,?,?,?,?)').run(id,workId,sourceId,s.sha256,'queued',new Date().toISOString(),request); setImmediate(()=>executeRevision(db,log,config,id)); return db.prepare('SELECT * FROM script_assistant_revisions WHERE revision_id=?').get(id); }
+function createRevision(db, log, config, workId, sourceId, request = '') { ensureTable(db); if (typeof request !== 'string' || request.length > 1200) throw new Error('修改目标最多1200字符'); if (revisions(db,workId).some(r => ['queued','planning','writing','reviewing'].includes(r.status))) throw new Error('已有进行中的修改任务，请等待或回查'); const work=loadWork(config,workId,db); const s=work.sources.find(x=>x.id===sourceId); if(!s?.available || s.kind !== 'script') throw new Error('原稿不可用或不是剧本正文'); if(s.text.length > 4800) throw new Error('完整原稿超出本次修订范围，未调用模型'); const id=`rev_${crypto.randomUUID()}`; db.prepare('INSERT INTO script_assistant_revisions(revision_id,work_id,source_id,source_sha256,status,created_at,revision_request) VALUES(?,?,?,?,?,?,?)').run(id,workId,sourceId,s.sha256,'queued',new Date().toISOString(),request); setImmediate(()=>executeRevision(db,log,config,id)); return db.prepare('SELECT * FROM script_assistant_revisions WHERE revision_id=?').get(id); }
 
 function reviewVerdict(text) {
   const heading = String(text || '').split('\n').slice(0, 4).join('\n')
@@ -141,7 +146,7 @@ function continuityContext(db, candidate) {
 async function executeEpisodeCandidate(db, log, config, candidateId) {
   const c = db.prepare('SELECT * FROM script_assistant_episode_candidates WHERE candidate_id=?').get(candidateId); if (!c || c.status !== 'queued') return;
   try {
-    const work = loadWork(config, c.work_id); const sources = work.sources.filter(s => s.available && ['core', 'continuity', 'script', 'character'].includes(s.kind)); const prior = sources.slice(-6).map(s => `${s.title} (${s.kind}):\n${s.text}`).join('\n');
+    const work = loadWork(config, c.work_id, db); const sources = work.sources.filter(s => s.available && ['core', 'continuity', 'script', 'character'].includes(s.kind)); const prior = sources.slice(-6).map(s => `${s.title} (${s.kind}):\n${s.text}`).join('\n');
     const previous = continuityContext(db, c);
     const input = `你是Story Writer。创作《${work.title}》第${c.episode_no}集独立候选剧本。不要改写既有集，不写Canon。必须输出完整可读正文，保持人物、道具、事件和悬念连续。\n用户目标：${c.request || '按照当前故事继续创作'}\n已核验前文资料：\n${prior.slice(-6000)}\n本批次上一集候选（临时事实，非Canon）：\n${previous.slice(-5000)}\n请只返回第${c.episode_no}集正文。`;
     db.prepare('UPDATE script_assistant_episode_candidates SET context_hash=? WHERE candidate_id=? AND status=?').run(hash(input), candidateId, 'queued');
@@ -241,7 +246,7 @@ function runView(db, id) { return db.prepare('SELECT * FROM script_assistant_run
 
 async function executeRun(db, log, config, runId) {
   const run = runView(db, runId); if (!run || run.status !== 'queued') return;
-  const work = loadWork(config, run.work_id);
+  const work = loadWork(config, run.work_id, db);
   const source = buildInput(work, messages(db, run.work_id), run.request).input;
   const bounded = (value, limit) => String(value || '').slice(0, limit);
   try {
@@ -278,24 +283,38 @@ async function executeRun(db, log, config, runId) {
 
 function createRun(db, log, config, workId, request) {
   if (typeof request !== 'string' || !request.trim() || request.length > 1200) throw new Error('编排任务需为1–1200字符');
-  const work = loadWork(config, workId); if (work.sources.some(s => !s.available)) throw new Error('作品资料缺失，不能启动编排');
+  const work = loadWork(config, workId, db); if (work.sources.some(s => !s.available)) throw new Error('作品资料缺失，不能启动编排');
   if (runs(db, workId).some(r => ['queued','planning','experts','reviewing','deciding'].includes(r.status))) throw new Error('本作品已有进行中的编排任务');
   const runId = `mar_${crypto.randomUUID()}`; db.prepare('INSERT INTO script_assistant_runs(run_id,work_id,request,status,created_at) VALUES(?,?,?,?,?)').run(runId, workId, request.trim(), 'queued', new Date().toISOString());
   setImmediate(() => executeRun(db, log, config, runId)); return runView(db, runId);
 }
 
-function works(config) {
+function works(config, db) {
   const file = config.script_assistant?.manifest_path;
-  if (!file) return [];
-  const data = JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, ''));
-  if (!Array.isArray(data.works)) throw new Error('作品资料索引格式无效');
-  return data.works;
+  let configured = [];
+  if (file) {
+    const data = JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, ''));
+    if (!Array.isArray(data.works)) throw new Error('作品资料索引格式无效');
+    configured = data.works;
+  }
+  if (!db) return configured;
+  const registered = db.prepare('SELECT work_id,title,intake_kind,premise,source_text,source_label,source_sha256 FROM script_assistant_work_intakes ORDER BY created_at').all();
+  return [...configured, ...registered.filter(row => !configured.some(w => w.id === row.work_id)).map(row => ({ id: row.work_id, title: row.title, intake_kind: row.intake_kind, sources: [
+    { id: `${row.work_id}-core`, title: '作品设定', kind: 'core', text: row.premise, sha256: hash(row.premise), available: true },
+    ...(row.source_text ? [{ id: `${row.work_id}-source`, title: row.source_label || '改编原文', kind: 'source', text: row.source_text, sha256: row.source_sha256, available: true }] : [])
+  ] }))];
 }
 
-function loadWork(config, workId) {
-  const work = works(config).find(w => w.id === workId);
+function loadWork(config, workId, db) {
+  const work = works(config, db).find(w => w.id === workId);
   if (!work) throw new Error('作品未关联资料，请在服务端配置来源索引');
   const sources = work.sources.map(source => {
+    if (source.text != null && source.sha256) {
+      const bytes = Buffer.from(String(source.text));
+      const sha256 = hash(bytes);
+      if (sha256 !== source.sha256.toLowerCase()) return { ...source, available: false, error: '登记资料哈希不一致', text: '', chars: 0 };
+      return { ...source, sha256, available: true, text: String(source.text), chars: String(source.text).length };
+    }
     try {
       const bytes = fs.readFileSync(source.path);
       const sha256 = hash(bytes);
@@ -314,6 +333,22 @@ function loadWork(config, workId) {
     }
   });
   return { id: work.id, title: work.title, sources };
+}
+
+function registerWork(db, payload = {}) {
+  ensureTable(db);
+  const workId = String(payload.work_id || '').trim();
+  const title = String(payload.title || '').trim();
+  const premise = String(payload.premise || '').trim();
+  const kind = payload.kind || 'original';
+  const sourceText = payload.source_text == null ? null : String(payload.source_text);
+  if (!/^[A-Za-z][A-Za-z0-9_-]{2,80}$/.test(workId) || !title || !premise) throw new Error('作品 ID、标题和故事设定必填');
+  if (!['original', 'adaptation'].includes(kind)) throw new Error('作品类型无效');
+  if (kind === 'adaptation' && !sourceText?.trim()) throw new Error('小说改编必须提供合法测试原文');
+  if (premise.length > 12000 || (sourceText && sourceText.length > 50000)) throw new Error('作品资料超过输入上限');
+  const now = new Date().toISOString();
+  db.prepare(`INSERT INTO script_assistant_work_intakes(work_id,title,intake_kind,premise,source_text,source_label,source_sha256,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(work_id) DO UPDATE SET title=excluded.title,intake_kind=excluded.intake_kind,premise=excluded.premise,source_text=excluded.source_text,source_label=excluded.source_label,source_sha256=excluded.source_sha256,updated_at=excluded.updated_at`).run(workId, title, kind, premise, sourceText, payload.source_label ? String(payload.source_label).trim() : null, sourceText ? hash(Buffer.from(sourceText)) : null, now, now);
+  return loadWork({}, workId, db);
 }
 
 function summary(work) {
@@ -436,7 +471,7 @@ function createMessage(db, log, config, workId, payload) {
   const { message, client_message_id: key } = payload || {};
   if (typeof message !== 'string' || !message.trim() || message.length > 1200) throw new Error('消息需为1–1200字符');
   if (typeof key !== 'string' || !/^[\w-]{16,80}$/.test(key)) throw new Error('缺少有效的消息提交标识');
-  const work = loadWork(config, workId);
+  const work = loadWork(config, workId, db);
   const existing = messages(db, workId).find(m => m.client_message_id === key);
   if (existing) {
     if (existing.content !== message.trim()) throw new Error('同一消息标识不能对应不同正文');
@@ -466,4 +501,4 @@ function budget(db) {
   return { chat: { used: chatUsed, limit: chatLimit, remaining: chatLimit > 0 ? Math.max(0, chatLimit - chatUsed) : null }, orchestration: { used: orchestrationUsed, limit: orchestrationLimit, remaining: orchestrationLimit > 0 ? Math.max(0, orchestrationLimit - orchestrationUsed) : null }, in_flight: db.prepare("SELECT count(*) n FROM managed_agent_tasks WHERE task_status IN ('queued','starting','submitted','running')").get().n };
 }
 
-module.exports = { ensureTable, works, loadWork, summary, messages, buildInput, classifyCreativeRequest, createMessage, budget, runs, createRun, revisions, episodeCandidates, batches, createEpisodeCandidate, retryEpisodeCandidate, createBatch, pauseBatch, resumeBatch, approveEpisodeCandidate, reviewDecisions, saveReviewDecision, createRevision, approveRevision, refreshRevision, createEditorRecovery, recoverEpisodeCandidate, PRODUCER, _latestEpisodeContext: latestEpisodeContext, _continuityContext: continuityContext };
+module.exports = { ensureTable, works, loadWork, registerWork, summary, messages, buildInput, classifyCreativeRequest, createMessage, budget, runs, createRun, revisions, episodeCandidates, batches, createEpisodeCandidate, retryEpisodeCandidate, createBatch, pauseBatch, resumeBatch, approveEpisodeCandidate, reviewDecisions, saveReviewDecision, createRevision, approveRevision, refreshRevision, createEditorRecovery, recoverEpisodeCandidate, PRODUCER, _latestEpisodeContext: latestEpisodeContext, _continuityContext: continuityContext };

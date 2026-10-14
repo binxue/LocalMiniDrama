@@ -6,9 +6,11 @@
 
 第二集原 Writer Task `mat_177d7139-fca6-4b3c-a83c-75682a586060` / Session `sesn-20261014043634-864i3` 只读恢复仍为 `incomplete`，无 `agent.message`、正文或 Editor；候选 `cand_c56a9d18-3edc-4ecb-bc76-932673c9ca62` 保持 `awaiting_recovery`，不得重复提交。第一集 `cand_f97b6eb3-b6bb-4564-9c2e-9fce640ee3a3` 保持真实正文、Editor `CONDITIONAL PASS`、`not_approved`。
 
-5688 已安全切换到最新代码：当前 PID `27404`、Runtime 配置为 `m1-independent-runtime-20261012`、健康版本 `m4.3-session-isolation-recovery`；3014 返回 200，3013/5679 保留。新增 retry 仅在原任务明确终止且无其他活动候选时允许一次新候选；第二集当前 `incomplete` 实测被拒绝，仍保持恢复态。
+5688 已安全切换到最新代码：当前 PID `4784`、Runtime 配置为 `m1-independent-runtime-20261012`、健康版本 `m4.3-session-isolation-recovery`；3014 返回 200，3013/5679 保留。新增 retry 仅在原任务明确终止且无其他活动候选时允许一次新候选；第二集当前 `incomplete` 实测被拒绝，仍保持恢复态。
 
 长期执行文件已建立：`PRODUCT_GOAL.md`、`MASTER_EXECUTION_PLAN.md`、`EXECUTION_LEDGER.md`。3014 分集进度现在提供暂停、继续、原任务回查和候选草稿导出；明确范围与下一集自然语言请求已进入可执行候选/批次路由。带“共 N 集”规划时“写全集”会创建剩余批次，当前隔离作品无总集数声明，仍要求澄清。下一步优先实现持久化原创/合法小说改编作品登记入口，再做隔离作品真实浏览器验收。
+
+本轮已完成持久化作品登记入口：`POST /api/v1/script-assistant/works` 支持原创与合法测试小说改编，作品设定和改编原文写入现有 SQLite，读取时校验 SHA-256；3014 Script Assistant 已加入最小登记弹窗并自动打开新作品。5688 当前 PID 4784，使用 `m1-independent-runtime-20261012` 配置，健康版本 `m4.3-session-isolation-recovery`；已通过 API 登记隔离原创 `acceptance-intake` 和改编 `adapted-intake`，未调用 Agent。后续动作是使用 3014 对登记作品做浏览器读取与刷新验收，并继续保持第二集未知 Session 只读恢复、不得重发。
 
 真实连续两集、批次暂停/恢复和 3014 两集阅读仍未通过，原因是第二集官方数据面没有形成终态正文；本轮新增真实调用 0、Token 0、价格未配置。下一步应等待/按授权窗口再次只读回查该 Session；仅在云端真实形成正文后创建一次必要 Editor，继续隔离作品验收，不启动《雨林》新集。
 

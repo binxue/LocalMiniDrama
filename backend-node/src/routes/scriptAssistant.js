@@ -16,19 +16,20 @@ module.exports = function scriptAssistant(db, log, config) {
     catch (err) { response.badRequest(res, err.message); }
   };
   return {
-    works: wrap(() => ({ works: service.works(config).map(w => ({ id: w.id, title: w.title })), budget: service.budget(db) })),
-    context: wrap(req => service.summary(service.loadWork(config, req.params.work_id))),
-    intent: wrap(req => { const work=service.loadWork(config,req.params.work_id); return { intent: service.classifyCreativeRequest(req.query?.text || '', work.sources.filter(s=>['script','continuity','core'].includes(s.kind))) }; }),
+    works: wrap(() => ({ works: service.works(config, db).map(w => ({ id: w.id, title: w.title })), budget: service.budget(db) })),
+    registerWork: wrap(req => service.registerWork(db, req.body)),
+    context: wrap(req => service.summary(service.loadWork(config, req.params.work_id, db))),
+    intent: wrap(req => { const work=service.loadWork(config,req.params.work_id,db); return { intent: service.classifyCreativeRequest(req.query?.text || '', work.sources.filter(s=>['script','continuity','core'].includes(s.kind))) }; }),
     source: wrap(req => {
-      const source = service.loadWork(config, req.params.work_id).sources.find(s => s.id === req.params.source_id);
+      const source = service.loadWork(config, req.params.work_id, db).sources.find(s => s.id === req.params.source_id);
       if (!source) throw new Error('资料未关联');
       return source;
     }),
     messages: wrap(req => {
-      service.loadWork(config, req.params.work_id);
+      service.loadWork(config, req.params.work_id, db);
       return { messages: service.messages(db, req.params.work_id), budget: service.budget(db) };
     }),
-    runs: wrap(req => { service.loadWork(config, req.params.work_id); return { runs: service.runs(db, req.params.work_id), budget: service.budget(db) }; }),
+    runs: wrap(req => { service.loadWork(config, req.params.work_id, db); return { runs: service.runs(db, req.params.work_id), budget: service.budget(db) }; }),
     createRun: wrap(req => service.createRun(db, log, config, req.params.work_id, req.body?.request)),
     revisions: wrap(req => ({ revisions: service.revisions(db, req.params.work_id) })),
     candidates: wrap(req => ({ candidates: service.episodeCandidates(db, req.params.work_id) })),
@@ -44,7 +45,7 @@ module.exports = function scriptAssistant(db, log, config) {
     saveReviewDecision: wrap(req => {
       const r = db.prepare('SELECT * FROM script_assistant_revisions WHERE revision_id=?').get(req.params.revision_id);
       if (!r) throw new Error('修改版本不存在');
-      const s = service.loadWork(config, r.work_id).sources.find(x => x.id === r.source_id);
+      const s = service.loadWork(config, r.work_id, db).sources.find(x => x.id === r.source_id);
       if (!s?.available || s.sha256 !== r.source_sha256) throw new Error('原稿已变更或不可用，不能提交审阅');
       const { diffLines } = require('diff');
       const parts = diffLines(s.text, r.candidate_text || '');
