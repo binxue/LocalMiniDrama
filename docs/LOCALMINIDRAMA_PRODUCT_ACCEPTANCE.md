@@ -59,6 +59,19 @@
 
 ## 自然语言产品化增量（2026-10-14）
 
+### 新集创作链路诊断（2026-10-14）
+
+本轮继续实现独立候选稿与连续创作批次，并对隔离作品 `acceptance-lighthouse` 做了有界真实验证。首轮两个候选在 Writer 提交前因 `latestEpisodeContext` SQL 占位符缺少参数失败；已修复并新增回归测试。随后新的真实 Writer Task 已创建，但云端最终为 `incomplete`，事件停在 `span.model_request_start`，没有 `agent.message`，系统因此没有保存候选正文、没有创建 Editor Task，也没有将候选标记 completed。该失败证据保留，不能视为真实新集创作通过。
+
+修复内容包括：新集 Prompt 注入已核验的 core/continuity/script/character 资料；上一集上下文只读取 completed 候选；相同批次请求复用活动批次；批次执行增加状态门闩和进程内锁，降低刷新/并发重复收费。后端全量测试为 92/92 通过，前端现有构建未改动。
+
+本轮真实业务调用证据：
+
+- 业务候选 Writer：Task `mat_cf409ca4-aef1-493e-9d5b-d4e2b6a55375`，Session `sesn-20261014033249-fvy2m`，最终 `incomplete`，输入 6,639、输出 387、缓存读取 5,944，1 个未完成请求；无 Editor 调用。
+- 异常调试 Task：`mat_3f1f7bc2-d72c-4626-a043-8d89724eacf5` / Session `sesn-20261014032546-otwqt`，2 次请求，输入 13,810、输出 740、缓存读取 11,888。内容仅为连接测试，不计入创作验收。
+
+因此本轮尚未取得真实新集候选稿、连续两集、批次暂停/恢复或浏览器业务验收证据；没有修改《雨林》正文、Canon、批准状态或 3013。模型价格未配置，不能计算金额。
+
 已将“优化第N集”从普通聊天入口接入现有 Revision 链：服务端先做确定性意图与作品集数校验，再创建已有 Producer→Writer→Editor 修订任务；缺少可核验原稿时不调用模型。前端默认展示作品对话和最近创作成果，Agent/Revision 细节放入高级审阅。
 
 本轮新增 `script_assistant_episode_candidates`、`script_assistant_batches` 和 `script_assistant_batch_items`，新集候选正文、哈希、Writer/Editor 任务、审核结论和批准状态与原有 Revision 分离；批次逐集执行，保存当前集和已完成数，支持暂停/恢复与服务重启后的可恢复状态，已完成集跳过以避免重复收费。新增接口用于新集候选、批次查询、创建、暂停和恢复。由于当前 Runtime 只有《雨林》既有资料，没有隔离测试作品，本轮没有启动《雨林》第四集，也未声称通过真实新集验收。

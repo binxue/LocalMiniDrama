@@ -21,6 +21,16 @@ test('script assistant builds a source-traceable bounded input and separates app
   assert.equal(service.summary(work).scripts[0].canon, 'not_established');
 });
 
+test('repeated active batch request reuses the existing batch instead of scheduling duplicate work', () => {
+  const db = new Database(':memory:'); service.ensureTable(db);
+  const now = new Date().toISOString();
+  db.prepare(`INSERT INTO script_assistant_batches(batch_id,work_id,request,episode_start,episode_end,status,current_episode,total_count,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)`)
+    .run('batch-existing', 'w', '写第4到5集', 4, 5, 'running', 4, 2, now, now);
+  const result = service.createBatch(db, { error() {} }, {}, 'w', '写第4到5集', 4, 5);
+  assert.equal(result.batch_id, 'batch-existing');
+  assert.equal(db.prepare('SELECT count(*) n FROM script_assistant_batches').get().n, 1);
+});
+
 test('script assistant rejects an unverified source hash', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'localminidrama-assistant-'));
   const script = path.join(dir, 'ep1.md'); fs.writeFileSync(script, 'source');
@@ -43,6 +53,30 @@ test('new episode candidate and batch tables are isolated from revisions', () =>
   assert.ok(db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='script_assistant_episode_candidates'").get());
   assert.ok(db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='script_assistant_batches'").get());
   assert.equal(db.prepare('SELECT count(*) n FROM script_assistant_revisions').get().n, 0);
+});
+
+test('new episode continuity context only reads the latest completed candidate', () => {
+  const db = new Database(':memory:'); service.ensureTable(db);
+  const now = new Date().toISOString();
+  db.prepare('INSERT INTO script_assistant_episode_candidates(candidate_id,work_id,episode_no,title,status,candidate_text,created_at) VALUES(?,?,?,?,?,?,?)')
+    .run('cand-completed', 'w', 1, '第1集', 'completed', '已完成正文', now);
+  assert.equal(service._latestEpisodeContext(db, 'w', 1), '已完成正文');
+  assert.equal(service._latestEpisodeContext(db, 'w', 2), '');
+});
+
+test('new episode prompt includes available story bible and episode plan sources', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'localminidrama-episode-context-'));
+  const bible = path.join(dir, 'bible.md'); const plan = path.join(dir, 'plan.md');
+  fs.writeFileSync(bible, '女主林岚，守灯人。'); fs.writeFileSync(plan, '第一集：铜钥匙出现。');
+  const manifest = { works: [{ id: 'w', title: '灯塔邮局', sources: [
+    { id: 'bible', title: '故事设定', kind: 'core', path: bible, sha256: require('crypto').createHash('sha256').update(fs.readFileSync(bible)).digest('hex') },
+    { id: 'plan', title: '分集规划', kind: 'continuity', path: plan, sha256: require('crypto').createHash('sha256').update(fs.readFileSync(plan)).digest('hex') },
+  ] }] };
+  const manifestPath = path.join(dir, 'sources.json'); fs.writeFileSync(manifestPath, JSON.stringify(manifest));
+  const work = service.loadWork({ script_assistant: { manifest_path: manifestPath } }, 'w');
+  const selected = work.sources.filter(s => s.available && ['core', 'continuity', 'script', 'character'].includes(s.kind));
+  const context = selected.map(s => `${s.title} (${s.kind}):\n${s.text}`).join('\n');
+  assert.match(context, /女主林岚/); assert.match(context, /铜钥匙出现/);
 });
 
 test('revision review decisions persist without changing approval state', () => {

@@ -7,6 +7,7 @@ const EXPERTS = new Set(['agent-20261011131619-47ft8', 'agent-20261011131626-3w9
 const EDITOR = 'agent-20261011131710-ncebb';
 const hash = value => crypto.createHash('sha256').update(value).digest('hex');
 const ACTIVE = new Set(['queued', 'starting', 'submitted', 'running']);
+const ACTIVE_BATCH_EXECUTIONS = new Set();
 
 function ensureTable(db) {
   managed.ensureTable(db);
@@ -122,13 +123,13 @@ function episodeCandidates(db, workId) { ensureTable(db); return db.prepare('SEL
 function approveEpisodeCandidate(db,id,actor='user',expected={}){const c=db.prepare('SELECT * FROM script_assistant_episode_candidates WHERE candidate_id=?').get(id);if(!c||c.status!=='completed')throw new Error('只能确认已完成候选稿');if(expected.candidate_sha256!==c.candidate_sha256||hash(c.candidate_text||'')!==c.candidate_sha256)throw new Error('候选版本已变化，请刷新后重试');const e=managed.getTask(db,c.editor_task_id);if(!e||e.agent_id!==EDITOR||e.work_id!==c.work_id||e.candidate_sha256!==c.candidate_sha256||!['PASS','CONDITIONAL PASS'].includes(reviewVerdict(e.output_text)))throw new Error('没有匹配此候选哈希的有效Editor审核');db.prepare("UPDATE script_assistant_episode_candidates SET approval_status='approved_pending_canon' WHERE candidate_id=?").run(id);return db.prepare('SELECT * FROM script_assistant_episode_candidates WHERE candidate_id=?').get(id);}
 function batches(db, workId) { ensureTable(db); return db.prepare('SELECT * FROM script_assistant_batches WHERE work_id=? ORDER BY created_at DESC').all(workId).map(b => ({ ...b, items: db.prepare('SELECT * FROM script_assistant_batch_items WHERE batch_id=? ORDER BY episode_no').all(b.batch_id) })); }
 function latestEpisodeContext(db, workId, episodeNo) {
-  const row = db.prepare('SELECT * FROM script_assistant_episode_candidates WHERE work_id=? AND episode_no=? AND status=? ORDER BY created_at DESC LIMIT 1').get(workId, episodeNo);
+  const row = db.prepare('SELECT * FROM script_assistant_episode_candidates WHERE work_id=? AND episode_no=? AND status=? ORDER BY created_at DESC LIMIT 1').get(workId, episodeNo, 'completed');
   return row?.candidate_text || '';
 }
 async function executeEpisodeCandidate(db, log, config, candidateId) {
   const c = db.prepare('SELECT * FROM script_assistant_episode_candidates WHERE candidate_id=?').get(candidateId); if (!c || c.status !== 'queued') return;
   try {
-    const work = loadWork(config, c.work_id); const scripts = work.sources.filter(s => s.available); const prior = scripts.filter(s => s.kind === 'script').slice(-3).map(s => `${s.title}:\n${s.text}`).join('\n');
+    const work = loadWork(config, c.work_id); const sources = work.sources.filter(s => s.available && ['core', 'continuity', 'script', 'character'].includes(s.kind)); const prior = sources.slice(-6).map(s => `${s.title} (${s.kind}):\n${s.text}`).join('\n');
     const previous = latestEpisodeContext(db, c.work_id, c.episode_no - 1);
     const input = `你是Story Writer。创作《${work.title}》第${c.episode_no}集独立候选剧本。不要改写既有集，不写Canon。必须输出完整可读正文，保持人物、道具、事件和悬念连续。\n用户目标：${c.request || '按照当前故事继续创作'}\n已核验前文资料：\n${prior.slice(-6000)}\n本批次上一集候选（临时事实，非Canon）：\n${previous.slice(-5000)}\n请只返回第${c.episode_no}集正文。`;
     const writer = managed.createTask(db, log, { agent_id: 'agent-20261011131619-47ft8', work_id: c.work_id, input, orchestration: true, episode_id: `ep${c.episode_no}`, candidate_id: c.candidate_id, context_hash: hash(input) });
@@ -146,10 +147,18 @@ function createEpisodeCandidate(db, log, config, workId, episodeNo, request='') 
 }
 function createBatch(db, log, config, workId, request, start, end) {
   start=Number(start); end=Number(end); if(!Number.isInteger(start)||!Number.isInteger(end)||start<1||end<start||end-start>4) throw new Error('连续创作范围必须为1–5集'); ensureTable(db); const now=new Date().toISOString(); const id=`batch_${crypto.randomUUID()}`;
+  const duplicate=db.prepare("SELECT * FROM script_assistant_batches WHERE work_id=? AND request=? AND episode_start=? AND episode_end=? AND status IN ('queued','running','pause_requested','paused') ORDER BY created_at DESC LIMIT 1").get(workId,String(request||''),start,end);
+  if(duplicate) return batches(db,workId).find(x=>x.batch_id===duplicate.batch_id);
   db.transaction(()=>{db.prepare('INSERT INTO script_assistant_batches(batch_id,work_id,request,episode_start,episode_end,status,current_episode,total_count,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)').run(id,workId,String(request||''),start,end,'queued',start,end-start+1,now,now); const insItem=db.prepare('INSERT INTO script_assistant_batch_items(batch_id,episode_no,candidate_id,status,created_at,updated_at) VALUES(?,?,?,?,?,?)'); const insCandidate=db.prepare('INSERT INTO script_assistant_episode_candidates(candidate_id,work_id,episode_no,title,status,request,created_at) VALUES(?,?,?,?,?,?,?)'); for(let n=start;n<=end;n++){const cid=`cand_${crypto.randomUUID()}`;insCandidate.run(cid,workId,n,`第${n}集`,'queued',String(request||'').slice(0,1200),now);insItem.run(id,n,cid,'queued',now,now);}})(); setImmediate(()=>executeBatch(db,log,config,id)); return batches(db,workId).find(x=>x.batch_id===id);
 }
 async function executeBatch(db,log,config,batchId){
-  const b=db.prepare('SELECT * FROM script_assistant_batches WHERE batch_id=?').get(batchId); if(!b)return;
+  if(ACTIVE_BATCH_EXECUTIONS.has(batchId)) return;
+  const b=db.prepare('SELECT * FROM script_assistant_batches WHERE batch_id=?').get(batchId); if(!b||!['queued','running'].includes(b.status))return;
+  if(b.status==='running' && b.current_episode != null) return;
+  const claimed=db.prepare("UPDATE script_assistant_batches SET status='running',updated_at=? WHERE batch_id=? AND status='queued'").run(new Date().toISOString(),batchId);
+  if(!claimed.changes && b.status!=='running') return;
+  ACTIVE_BATCH_EXECUTIONS.add(batchId);
+  try {
   for(const item of db.prepare('SELECT * FROM script_assistant_batch_items WHERE batch_id=? ORDER BY episode_no').all(batchId)){
     const c=db.prepare('SELECT * FROM script_assistant_episode_candidates WHERE candidate_id=?').get(item.candidate_id);
     if(!c){db.prepare("UPDATE script_assistant_batches SET status='failed',error_text='分集候选记录缺失' WHERE batch_id=?").run(batchId);return;}
@@ -167,6 +176,7 @@ async function executeBatch(db,log,config,batchId){
     }catch(e){db.prepare("UPDATE script_assistant_batch_items SET status='failed',error_text=?,updated_at=? WHERE batch_id=? AND episode_no=?").run(e.message,new Date().toISOString(),batchId,item.episode_no);db.prepare("UPDATE script_assistant_batches SET status='failed',error_text=?,updated_at=? WHERE batch_id=?").run(e.message,new Date().toISOString(),batchId);return;}
   }
   db.prepare("UPDATE script_assistant_batches SET status='completed',updated_at=? WHERE batch_id=?").run(new Date().toISOString(),batchId);
+  } finally { ACTIVE_BATCH_EXECUTIONS.delete(batchId); }
 }
 async function recoverEpisodeCandidate(db,log,config,candidateId){
   let c=db.prepare('SELECT * FROM script_assistant_episode_candidates WHERE candidate_id=?').get(candidateId);if(!c)throw new Error('候选不存在');
@@ -424,4 +434,4 @@ function budget(db) {
   return { chat: { used: chatUsed, limit: chatLimit, remaining: chatLimit > 0 ? Math.max(0, chatLimit - chatUsed) : null }, orchestration: { used: orchestrationUsed, limit: orchestrationLimit, remaining: orchestrationLimit > 0 ? Math.max(0, orchestrationLimit - orchestrationUsed) : null }, in_flight: db.prepare("SELECT count(*) n FROM managed_agent_tasks WHERE task_status IN ('queued','starting','submitted','running')").get().n };
 }
 
-module.exports = { ensureTable, works, loadWork, summary, messages, buildInput, classifyCreativeRequest, createMessage, budget, runs, createRun, revisions, episodeCandidates, batches, createEpisodeCandidate, createBatch, pauseBatch, resumeBatch, approveEpisodeCandidate, reviewDecisions, saveReviewDecision, createRevision, approveRevision, refreshRevision, createEditorRecovery, PRODUCER };
+module.exports = { ensureTable, works, loadWork, summary, messages, buildInput, classifyCreativeRequest, createMessage, budget, runs, createRun, revisions, episodeCandidates, batches, createEpisodeCandidate, createBatch, pauseBatch, resumeBatch, approveEpisodeCandidate, reviewDecisions, saveReviewDecision, createRevision, approveRevision, refreshRevision, createEditorRecovery, PRODUCER, _latestEpisodeContext: latestEpisodeContext };
