@@ -5,7 +5,7 @@
       <el-tag>{{ labels[run?.status] || '可开始' }}</el-tag>
     </div>
     <p>摄影指导分析 → 优化首帧提示词 → 候选图 → 真实 Agent 审片 → 最佳候选</p>
-    <p class="production-meta">Seedream 5.0 Pro · 1440 × 2560 · 9:16 · 场景 / 手机 / 茶杯三张批准参考</p>
+    <p class="production-meta">Seedream 5.0 Pro · 1440 × 2560 · 9:16 · 当前镜头参考资产</p>
     <div class="production-controls">
       <el-select v-model="strategy" :disabled="busy" aria-label="候选策略">
         <el-option label="生成新候选" value="generate" />
@@ -19,7 +19,7 @@
       <el-button v-if="run?.status === 'NEEDS_REVISION' && !busy" type="warning" :loading="starting" @click="reviseFromReview">按真实审片意见修正候选</el-button>
       <el-button v-if="canRecoverTransport" type="warning" :loading="starting" @click="startTransportRecovery">使用修正分析发起独立新图片请求</el-button>
     </div>
-    <p class="production-meta">静态总预算 ¥10；视频需另行授权。未知任务 23 / 24 / 25 不重试。</p>
+    <p class="production-meta">静态总预算 ¥{{ budgetLimit }}；视频需另行授权。未知任务 23–29 不重试。</p>
     <el-alert v-if="quarantineCount" type="warning" :closable="false"
       :title="`${quarantineCount} 条历史无真实事件证据的评分已排除验收，原始证据保留`" />
     <el-alert v-if="error" :title="error" type="error" :closable="false" />
@@ -109,7 +109,7 @@ const canRecoverTransport = computed(() => !busy.value && !hasUnknown.value && r
 const quarantineCount = computed(() => (state.value.quarantined_checks || 0) + (state.value.unverified_checks || 0))
 const budgetLimit = computed(() => Number(state.value.budget_limit_cny || 100))
 const budgetWarning = computed(() => Number(state.value.budget_warning_cny || 80))
-const reserved = computed(() => state.value.runs.reduce((sum, item) => sum + (item.costs?.reservations || []).reduce((n, cost) => n + cost.reserved_cny, 0), 0))
+const reserved = computed(() => Number(state.value.budget?.reserved_cny ?? state.value.runs.reduce((sum, item) => sum + (item.costs?.reservations || []).reduce((n, cost) => n + Number(cost.reserved_cny || 0), 0), 0)))
 const estimated = computed(() => state.value.runs.reduce((sum, item) => sum
   + (item.executions || []).reduce((n, exec) => n + (exec.estimated_cost_cny || 0), 0)
   + (item.candidates || []).filter(candidate => candidate.acquisition === 'GENERATED_BY_WORKBENCH').length * 0.6, 0))

@@ -1010,7 +1010,7 @@
               <el-icon><Delete /></el-icon>
             </el-button>
           </div>
-          <div :id="'sb-' + sb.id" class="storyboard-row">
+          <div :id="'sb-' + sb.id" class="storyboard-row" @click="activeProductionStoryboardId = sb.id">
             <!-- 左：分镜脚本 -->
             <div class="sb-panel sb-script">
               <div class="sb-script-row sb-script-selects">
@@ -1589,7 +1589,7 @@
               </div>
             </div>
           </div>
-          <StaticProductionPanel v-if="Number(sb.id) === 3 && Number(dramaId) === 2" @updated="loadDrama" />
+          <StaticProductionPanel v-if="Number(dramaId) === 2 && activeProductionStoryboardId === sb.id" :storyboard-id="sb.id" :shot-title="sb.title || ('镜头 ' + sb.storyboard_number)" @updated="loadDrama" />
           </template>
         </template>
         <!-- 分镜生成中提示条 -->
@@ -2847,6 +2847,7 @@ const characters = computed(() => store.characters)
 const scenes = computed(() => store.scenes)
 const props = computed(() => store.props)
 const storyboards = computed(() => store.storyboards)
+const activeProductionStoryboardId = ref(null)
 const currentEpisode = computed(() => store.currentEpisode)
 const currentEpisodeId = computed(() => store.currentEpisode?.id ?? null)
 const videoProgress = computed(() => store.videoProgress)
