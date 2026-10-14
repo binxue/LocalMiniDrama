@@ -16,6 +16,9 @@ function postJSONNonStream(url, headers, body, timeoutMs = 120000) {
     const reqHeaders = {
       'Content-Type': 'application/json',
       'Content-Length': Buffer.byteLength(bodyStr),
+      // Ark 图片请求经过本机隧道/网卡时，避免中间层复用半关闭连接导致
+      // 在上传完成后约 10 秒被对端重置。每次生成使用独立短连接。
+      Connection: 'close',
       ...headers,
     };
     const options = {
@@ -78,6 +81,7 @@ function postJSONWithTimeout(url, headers, body, timeoutMs = 600000) {
     const reqHeaders = {
       'Content-Type': 'application/json',
       'Content-Length': Buffer.byteLength(bodyStr),
+      Connection: 'close',
       ...headers,
     };
     const options = {
@@ -88,7 +92,11 @@ function postJSONWithTimeout(url, headers, body, timeoutMs = 600000) {
       headers: reqHeaders,
       // 避免 Windows/Electron 优先连不可达的 IPv6（Cloudflare）导致 ETIMEDOUT
       family: 4,
-      ...(localAddress ? { localAddress, agent: false, rejectUnauthorized: true } : {}),
+      // 图片生成是长耗时请求，禁止 Node/代理复用连接；显式 TLS 选项保持
+      // 与历史成功的物理网卡传输一致，同时不改变全局网络路由。
+      agent: false,
+      rejectUnauthorized: true,
+      ...(localAddress ? { localAddress } : {}),
     };
 
     const req = mod.request(options, (res) => {
@@ -148,6 +156,7 @@ function postJSONStream(url, headers, body, silenceTimeoutMs = 60000, onProgress
     const reqHeaders = {
       'Content-Type': 'application/json',
       'Content-Length': Buffer.byteLength(bodyStr),
+      Connection: 'close',
       ...headers,
     };
     const options = {
