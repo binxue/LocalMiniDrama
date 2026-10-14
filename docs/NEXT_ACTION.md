@@ -6,6 +6,7 @@
 - 批次从固定 5 集改为默认最多 50 集，可通过 `LOCALMINIDRAMA_MAX_BATCH_EPISODES` 调整。仍逐集落盘、按本批次前集 SHA 绑定连续性，不并行提交依赖前集结局的写作。
 - 自动化：Node 102/102、前端 build 通过；没有为验证此改动调用模型。5688 已在确认无活动收费任务后安全重启为 PID `31544`，工作目录为 `H:\localminidrama-active\backend-node`；3014 PID `5392` 保留。
 - 当前限制：没有实测新策划链的 Token/速度改善；现有 `adapted-intake` 第 4 集 Editor 仍属待恢复任务，不重发 Writer/Editor。下一步是通过 3014 刷新后做不触发模型的批次/策划快照状态验收，再决定是否进行一次有明确目标的真实批次调用。
+- 本轮真实小规模验收使用既有隔离作品 `acceptance-lighthouse` 第1集，Producer Task `mat_87968c7e-610e-48a6-b02a-80d12b95a6b1` / Session `sesn-20261014130906-2ouj7`；约 205 秒后仍停在 `span.model_request_start`，正文与 usage 均为 0，费用状态为价格未配置。未创建专家、Writer 或 Editor 重试任务；原任务保留为可恢复未知状态。
 
 ## Latest recovery evidence — 2026-10-14
 

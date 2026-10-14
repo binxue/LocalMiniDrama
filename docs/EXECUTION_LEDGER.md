@@ -6,6 +6,8 @@
 - Story Writer 读取批次策划快照、本集相关资料和明确绑定的前集候选；Independent Editor 输入包含策划及专业成品检查清单。Producer/Writer/Editor 均约束单轮文本任务，禁止工具、Skill、文件和网络探查。
 - 批次范围默认上限从 5 集调整为可配置 50 集，仍保持逐集保存、前集 SHA 连续性绑定、未知任务暂停恢复和候选不自动批准。恢复批次时先恢复 Producer 策划 Session，不会绕过策划直接提交 Writer。
 - 回归验证：Node 101/101，前端 `npm run build` 通过；本轮未新增收费模型调用。当前真实创作阻断和成本未配置状态保持原记录，不宣称速度或成本改善。
+- 后续接入了已有关系/互动/故事专家白名单：Producer 计划可选择标签；本地编排器在受控并发上限内提交最多两名专家，回收全部结果后再组合策划快照。每集 Writer 从策划文本按集号提取目标、节拍、场次、冲突与钩子段落。既有单集候选与批次共用该输入路径。
+- 真实小规模验收：`acceptance-lighthouse` 第1集仅提交 Producer `mat_87968c7e-610e-48a6-b02a-80d12b95a6b1` / Session `sesn-20261014130906-2ouj7`，约205秒后仍为 `span.model_request_start`、无正文/usage；没有重复提交或伪造专家/Writer/Editor 成果。价格未配置，金额不宣称。
 
 ## 2026-10-14 — baseline handoff
 
