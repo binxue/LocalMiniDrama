@@ -51,7 +51,7 @@
       <section v-if="episodeCandidates.length || batches.length" class="creation-progress">
         <h3>分集创作进度</h3>
         <article v-for="batch in batches.slice(0, 3)" :key="batch.batch_id" class="progress-row"><div><strong>第 {{ batch.episode_start }}—{{ batch.episode_end }} 集 · {{ batchStatusLabel(batch.status) }}</strong><p class="muted">已完成 {{ batch.completed_count }}/{{ batch.total_count }} · 当前第 {{ batch.current_episode || '等待' }} 集</p><p v-if="batch.error_text" class="error-text">{{ batch.error_text }}</p></div><div class="progress-actions"><el-button v-if="['queued','running','pause_requested'].includes(batch.status)" size="small" @click="pauseBatch(batch)">暂停</el-button><el-button v-if="['paused','failed'].includes(batch.status)" size="small" type="primary" @click="resumeBatch(batch)">继续</el-button></div></article>
-        <article v-for="candidate in episodeCandidates.slice(0, 5)" :key="candidate.candidate_id" class="progress-row"><div><strong>第 {{ candidate.episode_no }} 集 · {{ candidateStatusLabel(candidate.status) }}</strong><p class="muted">审核：{{ editorLabel(candidate.editor_review) }} · {{ candidate.approval_status === 'not_approved' ? '尚未确认' : '已确认，待发布' }}</p><p v-if="candidate.error_text" class="error-text">{{ candidate.error_text }}</p></div><div class="progress-actions"><el-button v-if="candidate.candidate_text" size="small" @click="openEpisodeCandidate(candidate)">阅读剧本</el-button><el-button v-if="candidate.candidate_text" size="small" @click="exportText(`第${candidate.episode_no}集 · 候选稿`,candidate.candidate_text)">导出草稿</el-button><el-button v-if="candidate.status==='awaiting_recovery'" size="small" @click="recoverEpisode(candidate)">回查原任务</el-button></div></article>
+        <article v-for="candidate in episodeCandidates.slice(0, 5)" :key="candidate.candidate_id" class="progress-row"><div><strong>第 {{ candidate.episode_no }} 集 · {{ candidateStatusLabel(candidate.status) }}</strong><p class="muted">审核：{{ editorLabel(candidate.editor_review) }} · {{ candidate.approval_status === 'not_approved' ? '尚未确认' : '已确认，待发布' }}</p><p v-if="candidate.error_text" class="error-text">{{ candidate.error_text }}</p></div><div class="progress-actions"><el-button v-if="candidate.candidate_text" size="small" @click="openEpisodeCandidate(candidate)">阅读剧本与审核</el-button><el-button v-if="candidate.candidate_text" size="small" @click="exportText(`第${candidate.episode_no}集 · 候选稿`,candidate.candidate_text)">导出草稿</el-button><el-button v-if="candidate.status==='awaiting_recovery'" size="small" @click="recoverEpisode(candidate)">回查原任务</el-button></div></article>
       </section>
         <p v-if="lastIntentNotice" class="intent-notice">{{ lastIntentNotice }}</p>
         <details v-if="mode === 'team'" open class="advanced-tools">
@@ -131,6 +131,7 @@
     <el-dialog v-model="showSource" :title="sourceView?.title || '作品原文件'" width="min(850px, 94vw)">
       <p class="muted">{{ sourceView?.path }}<br>SHA256：{{ sourceView?.sha256 }}</p>
       <el-button :disabled="!sourceView?.available" @click="exportText(sourceView.title,sourceView.raw_text || sourceView.text)">导出当前剧本草稿</el-button>
+      <template v-if="sourceView?.editor_review"><el-divider /><h3>Independent Editor 审核意见</h3><div class="markdown-body" v-html="renderReply(sourceView.editor_review, null)"></div><p class="muted">审核结论不等于人工批准：当前版本仍需明确确认。</p></template>
       <el-alert v-if="citationNotice" :title="citationNotice" type="warning" :closable="false" />
       <pre class="source-document">{{ sourceView?.available ? sourceView.text : sourceView?.error }}</pre>
     </el-dialog>
@@ -234,7 +235,7 @@ async function startRun() {
   try { await createAssistantRun(selected.value, runRequest.value.trim()); runRequest.value = ''; await reload() } catch (e) { error.value = e.message } finally { runSending.value = false }
 }
 async function openRevision(id) { mode.value = 'team'; await reload(); requestAnimationFrame(() => document.querySelector(`[data-revision="${CSS.escape(id)}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })) }
-function openEpisodeCandidate(candidate) { sourceView.value = { title: `第${candidate.episode_no}集候选稿`, text: candidate.candidate_text, available: true, sha256: candidate.candidate_sha256 }; showSource.value = true }
+function openEpisodeCandidate(candidate) { sourceView.value = { title: `第${candidate.episode_no}集候选稿`, text: candidate.candidate_text, available: true, sha256: candidate.candidate_sha256, editor_review: candidate.editor_review }; showSource.value = true }
 async function send() {
   if (!canSend.value) return
   const text = draft.value.trim()
@@ -250,7 +251,7 @@ async function send() {
       draft.value = ''; mode.value = 'chat'; await reload(); return
     }
     if (route.intent?.intent === 'next_episode') {
-      const nums = context.value?.scripts?.map(s => Number((s.id.match(/(?:ep|episode)[_-]?(\d+)/i)||[])[1])).filter(Number.isFinite) || []
+      const nums = [...(context.value?.scripts || []).map(s => Number((s.id.match(/(?:ep|episode)[_-]?(\d+)/i)||[])[1])), ...(episodeCandidates.value || []).map(c => Number(c.episode_no))].filter(Number.isFinite)
       const next = Math.max(0, ...nums) + 1
       await createAssistantEpisode(selected.value, next, text); draft.value = ''; await reload(); return
     }
