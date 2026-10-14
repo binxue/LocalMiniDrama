@@ -23,6 +23,13 @@
     <el-alert v-if="quarantineCount" type="warning" :closable="false"
       :title="`${quarantineCount} 条历史无真实事件证据的评分已排除验收，原始证据保留`" />
     <el-alert v-if="error" :title="error" type="error" :closable="false" />
+    <el-alert v-if="groupPlan" type="info" :closable="false" title="本场镜头方案待制作人组审">
+      <template #default>
+        <span>包含：{{ groupShotIds.join('、') }}；批准方案不会自动发图或生成视频。</span>
+        <el-button v-if="groupPlan.status !== 'APPROVED'" size="small" type="primary" @click="approveGroup">批准本组方案</el-button>
+        <el-tag v-else type="success" size="small">本组方案已批准</el-tag>
+      </template>
+    </el-alert>
     <template v-if="run">
       <p class="production-progress" aria-live="polite">{{ run.message || run.stage }}</p>
       <p v-if="run.pending_image_generation_id && busy" class="production-meta">正在等待独立图片任务 #{{ run.pending_image_generation_id }}；不会自动重发。</p>
@@ -107,6 +114,8 @@ const canRecoverTransport = computed(() => !busy.value && !hasUnknown.value && r
   && run.value?.pending_image_generation_id && run.value?.generation_error && !run.value?.transmission_recovery_of
   && run.value?.executions.some(item => item.stage === 'analysis-2' && item.execution_status === 'COMPLETED'))
 const quarantineCount = computed(() => (state.value.quarantined_checks || 0) + (state.value.unverified_checks || 0))
+const groupPlan = computed(() => Object.values(state.value.production_plan_groups || {}).find(group => group.shots?.[String(props.storyboardId)]))
+const groupShotIds = computed(() => Object.keys(groupPlan.value?.shots || {}).map(id => `storyboard ${id}`))
 const budgetLimit = computed(() => Number(state.value.budget_limit_cny || 100))
 const budgetWarning = computed(() => Number(state.value.budget_warning_cny || 80))
 const reserved = computed(() => Number(state.value.budget?.reserved_cny ?? state.value.runs.reduce((sum, item) => sum + (item.costs?.reservations || []).reduce((n, cost) => n + Number(cost.reserved_cny || 0), 0), 0)))
@@ -140,6 +149,11 @@ async function start() {
     await request.post(`/storyboards/${props.storyboardId}/static-production`, { request_id: crypto.randomUUID(), candidate_strategy: strategy.value })
     await refresh()
   } catch (e) { error.value = e.message } finally { starting.value = false }
+}
+async function approveGroup() {
+  if (!groupPlan.value || groupPlan.value.status === 'APPROVED') return
+  try { await request.post(`/production-plan-groups/${groupPlan.value.group_id}/decision`, { decision: 'APPROVE', storyboard_ids: Object.keys(groupPlan.value.shots).map(Number), producer: 'producer' }); await refresh(); ElMessage.success('本组方案已批准，未启动收费生成') }
+  catch (e) { error.value = e.message }
 }
 async function decide(candidate, decision) {
   try {

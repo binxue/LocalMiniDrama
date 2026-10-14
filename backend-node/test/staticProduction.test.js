@@ -65,9 +65,9 @@ test('missing optimized prompt and invented visual success are not accepted', ()
 });
 
 test('generation precheck rejects cross-shot context and requires binding key', () => {
-  assert.throws(() => validateAnalysis({ approved_shot_key: 's01_01A', analysis: 'A镜动作起点', optimized_prompt: 'x'.repeat(50) }, { shotKey: 's01_01B' }), /PRECHECK_CONTEXT_MISMATCH/);
+  assert.throws(() => validateAnalysis({ approved_shot_key: 's01_01B', analysis: 's01_01B includes A镜动作起点与右手推动手机', optimized_prompt: 'x'.repeat(50) }, { shotKey: 's01_01B' }), /PRECHECK_CONTEXT_MISMATCH/);
   assert.throws(() => validateAnalysis({ analysis: 'B镜黎夏在早市', optimized_prompt: 'x'.repeat(50) }, { shotKey: 's01_01B', characterNames: ['黎夏'] }), /PRECHECK_CONTEXT_MISMATCH/);
-  assert.doesNotThrow(() => validateAnalysis({ approved_shot_key: 's01_01B', analysis: 's01_01B 黎夏在早市', optimized_prompt: 's01_01B 黎夏 ' + 'x'.repeat(40) }, { shotKey: 's01_01B', characterNames: ['黎夏'] }));
+  assert.doesNotThrow(() => validateAnalysis({ approved_shot_key: 's01_01B', analysis: 's01_01B 黎夏保留A镜结束位置的手机作为连续性锚点', optimized_prompt: 's01_01B 黎夏 ' + 'x'.repeat(40) }, { shotKey: 's01_01B', characterNames: ['黎夏'] }));
 });
 test('formal storyboard belongs to drama through episode relation, without duplicate drama_id column', () => {
   const db = new Database(':memory:');

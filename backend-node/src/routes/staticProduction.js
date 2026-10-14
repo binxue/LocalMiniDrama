@@ -9,6 +9,10 @@ module.exports = (db, cfg, log) => ({
     try { response.success(res, production.status(db, Number(req.params.id))); }
     catch (error) { response.internalError(res, error.message); }
   },
+  recordGroupDecision(req, res) {
+    try { response.success(res, production.recordGroupPlanDecision(db, req.params.groupId, req.body || {})); }
+    catch (error) { response.badRequest(res, error.message); }
+  },
   resume(req, res) {
     try { response.success(res, production.resume(db, cfg, log, req.params.runId, req.body || {})); }
     catch (error) { response.badRequest(res, error.message); }

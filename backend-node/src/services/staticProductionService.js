@@ -103,7 +103,7 @@ function status(db, storyboardId = null) {
     if (!runs.length) return { storyboard_id: Number(storyboardId), status: 'NOT_STARTED', model: MODEL,
       size: '1440x2560', budget_limit_cny: BUDGET_LIMIT_CNY, budget_warning_cny: BUDGET_WARNING_CNY, runs: [], quarantined_checks: (desc.quarantined_quality_checks || []).length,
       unverified_checks: (desc.quality_checks || []).filter(check => !check.evidence?.result_event_id).length,
-      budget: budgetSummary(db),
+      budget: budgetSummary(db), production_plan_groups: desc.production_plan || {},
       historical_unknown_tasks: [23, 24, 25, 26, 27], video_authorized: false };
   }
   const desc = storyboardId ? readDescription(db, storyboardId) : {};
@@ -129,12 +129,20 @@ function status(db, storyboardId = null) {
   }
   return {
     storyboard_id: storyboardId, model: MODEL, size: '1440x2560', budget_limit_cny: BUDGET_LIMIT_CNY, budget_warning_cny: BUDGET_WARNING_CNY,
-    runs, budget: budgetSummary(db),
+    runs, budget: budgetSummary(db), production_plan_groups: desc.production_plan || {},
     quarantined_checks: (desc.quarantined_quality_checks || []).length,
     unverified_checks: (desc.quality_checks || []).filter(check => !check.evidence?.result_event_id).length,
     historical_unknown_tasks: [23, 24, 25, 26, 27],
     video_authorized: false,
   };
+}
+function recordGroupPlanDecision(db, groupId, body = {}) {
+  if (body.decision !== 'APPROVE' || !Array.isArray(body.storyboard_ids) || !body.storyboard_ids.length) throw new Error('需要选择并批准一个完整镜头组');
+  const ids = [...new Set(body.storyboard_ids.map(Number))];
+  const stamp = new Date().toISOString();
+  const plans = ids.map(id => { const desc = readDescription(db, id); const group = desc.production_plan?.[groupId]; if (!group || !group.shots?.[String(id)] || group.status === 'APPROVED') throw new Error('镜头组方案不存在、缺项或已处理：storyboard_id=' + id); return { id, desc, group }; });
+  for (const item of plans) { const shot = item.group.shots[String(item.id)]; shot.status = 'APPROVED'; shot.approval = { decision:'APPROVE', decided_at:stamp, producer:String(body.producer || 'producer'), group_id:groupId, storyboard_id:item.id, agent_execution_id:shot.proposal_evidence?.agent_execution_id || null }; item.group.status='APPROVED'; item.desc.production_plan[groupId]=item.group; db.prepare('UPDATE storyboards SET description=?,updated_at=? WHERE id=?').run(JSON.stringify(item.desc),stamp,item.id); }
+  return { group_id:groupId, decision:'APPROVE', storyboard_ids:ids, decided_at:stamp, generation_started:false, video_started:false };
 }
 function validateAnalysis(result, expected = null) {
   if (typeof result.optimized_prompt !== 'string' || result.optimized_prompt.trim().length < 40
@@ -143,7 +151,7 @@ function validateAnalysis(result, expected = null) {
     const key = String(expected.shotKey || '').trim();
     const haystack = `${result.approved_shot_key || ''}\n${result.analysis}\n${result.optimized_prompt}`;
     if (result.approved_shot_key !== key || !key || !haystack.includes(key)) throw new Error('PRECHECK_CONTEXT_MISMATCH: Agent 未绑定当前分镜合同');
-    if (key !== 's01_01A' && /A镜|A 镜|s01_01A|手机右侧尚未推送|A镜动作起点/i.test(haystack)) throw new Error('PRECHECK_CONTEXT_MISMATCH: Agent 混入其它镜头动作');
+    if (key !== 's01_01A' && /s01_01A|右手.{0,24}(推手机|推动手机)|手机.{0,24}(尚未推送|刚接触手机边缘)|桌面.{0,20}动作起点|空桌.{0,16}(手机|地图)/i.test(haystack)) throw new Error('PRECHECK_CONTEXT_MISMATCH: Agent 混入其它镜头动作');
     const required = (expected.characterNames || []).filter(Boolean);
     if (required.length && !required.some(name => haystack.includes(name))) throw new Error('PRECHECK_CONTEXT_MISMATCH: 缺少当前镜头人物绑定');
   }
@@ -506,4 +514,4 @@ async function queryBilling(client, run, evidenceName) {
   run.costs.billing_checked_at = new Date().toISOString();
   return run.costs;
 }
-module.exports = { start, status, resume, checkBilling, quarantine, validateAnalysis, validateReview, context, execute, reserve, approvedStoryboard, assertNewCorrectivePrompt, validateTransmissionRecovery };
+module.exports = { start, status, resume, checkBilling, quarantine, validateAnalysis, validateReview, context, execute, reserve, approvedStoryboard, assertNewCorrectivePrompt, validateTransmissionRecovery, recordGroupPlanDecision };
