@@ -1,7 +1,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const Database = require('better-sqlite3');
-const { quarantine, reserve, validateReview, validateAnalysis, approvedStoryboard, status, assertNewCorrectivePrompt, resume, context } = require('../src/services/staticProductionService');
+const { quarantine, reserve, validateReview, validateAnalysis, approvedStoryboard, status, assertNewCorrectivePrompt, resume, context, recordGroupPlanDecision, productionPlanGroups } = require('../src/services/staticProductionService');
 const { hash } = require('../src/services/managedAgentReviewEvidence');
 const { validateTransmissionRecovery } = require('../src/services/staticProductionService');
 test('post-fix independent request requires real completed correction, preserves source and prevents duplicate submission', () => {
@@ -116,5 +116,21 @@ test('resume locates B run by storyboard and never reads A run as fallback', () 
       static_production_runs: [{ run_id: 'run-b', storyboard_id: 4, executions: [], candidates: [], costs: { reservations: [] } }],
     }));
     assert.throws(() => resume(db, {}, {}, 'missing-run'), /制作任务不存在/);
+  } finally { db.close(); }
+});
+test('scene group plans aggregate across storyboards and reject partial approval', () => {
+  const db = new Database(':memory:');
+  try {
+    db.exec('CREATE TABLE storyboards (id INTEGER, description TEXT, updated_at TEXT, episode_id INTEGER, title TEXT, characters TEXT, location TEXT, polished_prompt TEXT, image_prompt TEXT, deleted_at TEXT);');
+    const plan = id => ({ production_plan: { 'scene-test': { group_id: 'scene-test', status: 'PENDING_PRODUCER_APPROVAL', shots: { [id]: { storyboard_id: id, status: 'PENDING_PRODUCER_APPROVAL', proposal_evidence: { agent_execution_id: 'exec-test' } } } } } });
+    db.prepare('INSERT INTO storyboards (id, episode_id, description) VALUES (?, ?, ?), (?, ?, ?), (?, ?, ?)')
+      .run(5, 2, JSON.stringify(plan(5)), 6, 2, JSON.stringify(plan(6)), 7, 3, JSON.stringify(plan(7)));
+    assert.deepEqual(Object.keys(productionPlanGroups(db)).sort(), ['scene-test']);
+    assert.deepEqual(Object.keys(productionPlanGroups(db, {}, 5)['scene-test'].shots).sort(), ['5', '6']);
+    assert.throws(() => recordGroupPlanDecision(db, 'scene-test', { decision: 'APPROVE', storyboard_ids: [5], producer: 'producer' }), /完整批准/);
+    const result = recordGroupPlanDecision(db, 'scene-test', { decision: 'APPROVE', storyboard_ids: [5, 6], producer: 'producer' });
+    assert.deepEqual(result.storyboard_ids, [5, 6]);
+    assert.equal(productionPlanGroups(db, {}, 5)['scene-test'].status, 'APPROVED');
+    assert.equal(JSON.parse(db.prepare('SELECT description FROM storyboards WHERE id=7').get().description).production_plan['scene-test'].shots['7'].status, 'PENDING_PRODUCER_APPROVAL');
   } finally { db.close(); }
 });

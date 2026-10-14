@@ -69,6 +69,30 @@ function findRun(db, runId) {
   }
   return null;
 }
+function productionPlanGroups(db, ownGroups = {}, storyboardId = null) {
+  const groups = {};
+  const scope = storyboardId == null ? null : db.prepare('SELECT episode_id FROM storyboards WHERE id = ?').get(Number(storyboardId));
+  for (const [groupId, group] of Object.entries(ownGroups || {})) {
+    groups[groupId] = { ...group, shots: { ...(group.shots || {}) } };
+  }
+  for (const row of db.prepare('SELECT id, episode_id, description FROM storyboards').all()) {
+    if (scope && Number(row.episode_id) !== Number(scope.episode_id)) continue;
+    let description;
+    try { description = JSON.parse(row.description || '{}'); } catch (_) { continue; }
+    for (const [groupId, group] of Object.entries(description.production_plan || {})) {
+      const shot = group?.shots?.[String(row.id)];
+      if (!shot) continue;
+      if (!groups[groupId]) groups[groupId] = { ...group, shots: {} };
+      groups[groupId].shots[String(row.id)] = shot;
+    }
+  }
+  for (const group of Object.values(groups)) {
+    const shots = Object.values(group.shots || {});
+    group.status = shots.length && shots.every(shot => shot.status === 'APPROVED')
+      ? 'APPROVED' : 'PENDING_PRODUCER_APPROVAL';
+  }
+  return groups;
+}
 function persist(db, run) {
   const storyboardId = Number(run.storyboard_id || 3);
   const desc = readDescription(db, storyboardId);
@@ -103,7 +127,7 @@ function status(db, storyboardId = null) {
     if (!runs.length) return { storyboard_id: Number(storyboardId), status: 'NOT_STARTED', model: MODEL,
       size: '1440x2560', budget_limit_cny: BUDGET_LIMIT_CNY, budget_warning_cny: BUDGET_WARNING_CNY, runs: [], quarantined_checks: (desc.quarantined_quality_checks || []).length,
       unverified_checks: (desc.quality_checks || []).filter(check => !check.evidence?.result_event_id).length,
-      budget: budgetSummary(db), production_plan_groups: desc.production_plan || {},
+      budget: budgetSummary(db), production_plan_groups: productionPlanGroups(db, desc.production_plan || {}, Number(storyboardId)),
       historical_unknown_tasks: [23, 24, 25, 26, 27], video_authorized: false };
   }
   const desc = storyboardId ? readDescription(db, storyboardId) : {};
@@ -129,7 +153,7 @@ function status(db, storyboardId = null) {
   }
   return {
     storyboard_id: storyboardId, model: MODEL, size: '1440x2560', budget_limit_cny: BUDGET_LIMIT_CNY, budget_warning_cny: BUDGET_WARNING_CNY,
-    runs, budget: budgetSummary(db), production_plan_groups: desc.production_plan || {},
+    runs, budget: budgetSummary(db), production_plan_groups: productionPlanGroups(db, desc.production_plan || {}, storyboardId == null ? null : Number(storyboardId)),
     quarantined_checks: (desc.quarantined_quality_checks || []).length,
     unverified_checks: (desc.quality_checks || []).filter(check => !check.evidence?.result_event_id).length,
     historical_unknown_tasks: [23, 24, 25, 26, 27],
@@ -138,10 +162,35 @@ function status(db, storyboardId = null) {
 }
 function recordGroupPlanDecision(db, groupId, body = {}) {
   if (body.decision !== 'APPROVE' || !Array.isArray(body.storyboard_ids) || !body.storyboard_ids.length) throw new Error('需要选择并批准一个完整镜头组');
-  const ids = [...new Set(body.storyboard_ids.map(Number))];
+  const requestedIds = [...new Set(body.storyboard_ids.map(Number))].sort((a, b) => a - b);
+  const anchor = db.prepare('SELECT episode_id FROM storyboards WHERE id = ?').get(requestedIds[0]);
+  if (!anchor) throw new Error('镜头组分镜不存在：storyboard_id=' + requestedIds[0]);
+  const rows = db.prepare('SELECT id, episode_id, description FROM storyboards').all();
+  const plans = [];
+  for (const row of rows) {
+    if (Number(row.episode_id) !== Number(anchor.episode_id)) continue;
+    let desc;
+    try { desc = JSON.parse(row.description || '{}'); } catch (_) { continue; }
+    const group = desc.production_plan?.[groupId];
+    const shot = group?.shots?.[String(row.id)];
+    if (shot) plans.push({ id: Number(row.id), desc, group, shot });
+  }
+  const ids = plans.map(item => item.id).sort((a, b) => a - b);
+  if (!ids.length || ids.length !== requestedIds.length || ids.some((id, index) => id !== requestedIds[index])) {
+    throw new Error('镜头组必须完整批准；分镜列表与实际方案组成员不一致');
+  }
+  if (plans.some(item => item.shot.status !== 'PENDING_PRODUCER_APPROVAL')) throw new Error('镜头组方案缺失、已处理或状态不一致');
   const stamp = new Date().toISOString();
-  const plans = ids.map(id => { const desc = readDescription(db, id); const group = desc.production_plan?.[groupId]; if (!group || !group.shots?.[String(id)] || group.status === 'APPROVED') throw new Error('镜头组方案不存在、缺项或已处理：storyboard_id=' + id); return { id, desc, group }; });
-  for (const item of plans) { const shot = item.group.shots[String(item.id)]; shot.status = 'APPROVED'; shot.approval = { decision:'APPROVE', decided_at:stamp, producer:String(body.producer || 'producer'), group_id:groupId, storyboard_id:item.id, agent_execution_id:shot.proposal_evidence?.agent_execution_id || null }; item.group.status='APPROVED'; item.desc.production_plan[groupId]=item.group; db.prepare('UPDATE storyboards SET description=?,updated_at=? WHERE id=?').run(JSON.stringify(item.desc),stamp,item.id); }
+  const commit = db.transaction(() => {
+    for (const item of plans) {
+      item.shot.status = 'APPROVED';
+      item.shot.approval = { decision:'APPROVE', decided_at:stamp, producer:String(body.producer || 'producer'), group_id:groupId, storyboard_id:item.id, agent_execution_id:item.shot.proposal_evidence?.agent_execution_id || null };
+      item.group.status = 'APPROVED';
+      item.desc.production_plan[groupId] = item.group;
+      db.prepare('UPDATE storyboards SET description=?,updated_at=? WHERE id=?').run(JSON.stringify(item.desc),stamp,item.id);
+    }
+  });
+  commit.immediate();
   return { group_id:groupId, decision:'APPROVE', storyboard_ids:ids, decided_at:stamp, generation_started:false, video_started:false };
 }
 function validateAnalysis(result, expected = null) {
@@ -514,4 +563,4 @@ async function queryBilling(client, run, evidenceName) {
   run.costs.billing_checked_at = new Date().toISOString();
   return run.costs;
 }
-module.exports = { start, status, resume, checkBilling, quarantine, validateAnalysis, validateReview, context, execute, reserve, approvedStoryboard, assertNewCorrectivePrompt, validateTransmissionRecovery, recordGroupPlanDecision };
+module.exports = { start, status, resume, checkBilling, quarantine, validateAnalysis, validateReview, context, execute, reserve, approvedStoryboard, assertNewCorrectivePrompt, validateTransmissionRecovery, recordGroupPlanDecision, productionPlanGroups };

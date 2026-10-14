@@ -25,7 +25,14 @@
     <el-alert v-if="error" :title="error" type="error" :closable="false" />
     <el-alert v-if="groupPlan" type="info" :closable="false" title="本场镜头方案待制作人组审">
       <template #default>
-        <span>包含：{{ groupShotIds.join('、') }}；批准方案不会自动发图或生成视频。</span>
+        <div class="group-shot-summary" v-for="shot in groupShots" :key="shot.storyboard_id">
+          <strong>{{ shot.shot_key }} · 分镜 {{ shot.storyboard_id }}</strong>
+          <span>{{ shot.proposal?.narrative_goal }}</span>
+          <small v-if="shot.proposal?.asset_references?.missing_assets?.length || shot.proposal?.prompt_precheck?.risk_flags?.length">
+            待核实：{{ [...(shot.proposal?.asset_references?.missing_assets || []), ...(shot.proposal?.prompt_precheck?.risk_flags || [])].slice(0, 3).join('；') }}
+          </small>
+        </div>
+        <span>完整组：{{ groupShotIds.join('、') }}；批准方案不会自动发图或生成视频。</span>
         <el-button v-if="groupPlan.status !== 'APPROVED'" size="small" type="primary" @click="approveGroup">批准本组方案</el-button>
         <el-tag v-else type="success" size="small">本组方案已批准</el-tag>
       </template>
@@ -115,7 +122,8 @@ const canRecoverTransport = computed(() => !busy.value && !hasUnknown.value && r
   && run.value?.executions.some(item => item.stage === 'analysis-2' && item.execution_status === 'COMPLETED'))
 const quarantineCount = computed(() => (state.value.quarantined_checks || 0) + (state.value.unverified_checks || 0))
 const groupPlan = computed(() => Object.values(state.value.production_plan_groups || {}).find(group => group.shots?.[String(props.storyboardId)]))
-const groupShotIds = computed(() => Object.keys(groupPlan.value?.shots || {}).map(id => `storyboard ${id}`))
+const groupShots = computed(() => Object.values(groupPlan.value?.shots || {}).sort((a, b) => Number(a.storyboard_id) - Number(b.storyboard_id)))
+const groupShotIds = computed(() => groupShots.value.map(shot => `${shot.shot_key || 'storyboard ' + shot.storyboard_id}`))
 const budgetLimit = computed(() => Number(state.value.budget_limit_cny || 100))
 const budgetWarning = computed(() => Number(state.value.budget_warning_cny || 80))
 const reserved = computed(() => Number(state.value.budget?.reserved_cny ?? state.value.runs.reduce((sum, item) => sum + (item.costs?.reservations || []).reduce((n, cost) => n + Number(cost.reserved_cny || 0), 0), 0)))
@@ -222,6 +230,8 @@ onBeforeUnmount(() => clearInterval(timer))
 .production-candidates { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 16px; }
 .production-candidate { width: min(100%, 350px); display: flex; flex-direction: column; gap: 8px; padding: 14px; border: 1px solid var(--el-border-color); border-radius: 8px; }
 .production-candidate .el-image { width: 100%; height: 330px; }
+.group-shot-summary { display: flex; flex-direction: column; gap: 4px; margin: 8px 0; }
+.group-shot-summary small { color: var(--el-color-warning-dark-2); }
 .production-execution { display: flex; flex-direction: column; gap: 4px; font-size: 12px; padding: 12px 0; overflow-wrap: anywhere; }
 summary { cursor: pointer; padding: 12px 0; }
 pre { white-space: pre-wrap; overflow-wrap: anywhere; font-family: inherit; font-size: 13px; }
