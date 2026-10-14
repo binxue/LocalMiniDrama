@@ -62,7 +62,7 @@ async function executeRevision(db, log, config, id) {
     if (source.text.length > 4800) throw new Error('原稿超出本次完整修订输入范围；未调用模型，不能截断原稿后生成整版替代');
     const prior = runs(db, r.work_id).find(x => x.status === 'completed'); const review = prior?.result?.editor_review || '请独立检查连续性和人物关系问题';
     const bounded = (v,n) => String(v||'').slice(0,n);
-    const producerInput = `你是Producer。对指定原稿安排局部返修，不改变人物设定与已确认事实。只输出可交给编剧的具体修改任务、保留项和独立审核标准，不写正文。用户目标：${r.revision_request || '依据已有审核意见提出必要的局部修订'}\n原稿：\n${source.text}\n已有审核依据（最多1800字符，超过部分未提供）：\n${bounded(review,1800)}`;
+    const producerInput = `你是Producer。对指定原稿安排局部返修，不改变人物设定与已确认事实。只输出可交给编剧的具体修改任务、保留项和独立审核标准，不写正文。\n严格执行单轮文本回复：不要加载Skill，不要调用工具、文件系统、网络或其他Agent，不要进行额外研究；直接在本次回复中给出计划，控制在800字以内。\n用户目标：${r.revision_request || '依据已有审核意见提出必要的局部修订'}\n原稿：\n${source.text}\n已有审核依据（最多1800字符，超过部分未提供）：\n${bounded(review,1800)}`;
     const producer = managed.createTask(db, log, { agent_id: PRODUCER, work_id: r.work_id, input: producerInput, orchestration: true, episode_id:r.source_id, revision_id:id, source_sha256:source.sha256, context_hash:hash(producerInput) });
     db.prepare('UPDATE script_assistant_revisions SET status=?,producer_task_id=? WHERE revision_id=?').run('planning',producer.task_id,id);
     const pt = await waitTask(db, producer.task_id);

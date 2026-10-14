@@ -14,7 +14,7 @@ LOCALMINIDRAMA_PRODUCT_CORE_CONDITIONAL_ACCEPTANCE
 
 M1 已实现现有 Managed Agent 单任务服务、隔离持久记录、有界事件读取与明确错误状态。真实 Producer 正文返回与重启恢复已验证；独立Node进程运行于127.0.0.1:5688。证据：H:/localminidrama-runtime-creative-20261011-source/evidence/m1-independent-runtime-20261012。
 
-当前动作：完整产品化任务核心已有作品阅读与审阅流程有条件通过，尚不能宣布全部产品目标完成。已修复Diff配对与全文丢失、审核标签误报、批准版本校验、审阅块校验与原子审计；浏览器验证隔离副本逐项决定/意见、刷新、服务重启和原稿/修改稿导出。当前实际验收地址3014，3013为视听旧实例并保留，历史5679保留。2026-10-14 已在3014完成一次真实Producer对话验收：Session `sesn-20261014004423-lvumy`，Task `mat_c40824f6-c38d-495b-b68e-c9f0bbcedfcb`，输入11436、输出2120 tokens，刷新后结果恢复，模型价格未配置。随后一次授权的第三集定向修订在Producer阶段进入不完整终态（`mat_2a2ba24b-7ab3-47fd-a4a5-a0d81547dffa` / `sesn-20261014004736-gx7cb`，`span.model_request_start`，无正文），已停止后续Writer/Editor调用，未修改原稿、Canon或批准状态。下一动作是保留该失败证据并继续离线产品验收；如需完整Producer→Writer→Editor真实链，需针对云端不完整终态单独诊断，不自动重试。
+当前动作：完整产品化任务核心已有作品阅读与审阅流程有条件通过，尚不能宣布全部产品目标完成。已修复Diff配对与全文丢失、审核标签误报、批准版本校验、审阅块校验与原子审计；浏览器验证隔离副本逐项决定/意见、刷新、服务重启和原稿/修改稿导出。当前实际验收地址3014，3013为视听旧实例并保留，历史5679保留。2026-10-14 首次真实Producer对话已成功并持久化；其后一次返修Producer因工具/Skill规划停在不完整终态。现已将返修Producer约束为单轮、禁止工具和额外研究，隔离复测已完整通过 Producer→Writer→Independent Editor：Revision `rev_1d958c5b-d737-40fa-979b-005d1a3836ba`，候选 SHA256 `d2185cd1c7b78d1b8ce06de06042d14daf7f03c04943468a29015a57c3ed560b`，Editor `CONDITIONAL PASS`，批准状态 `not_approved`。复测合计输入27512、输出19966、缓存读取5944 tokens，价格未配置；浏览器刷新后候选、Diff和五项意见可见。当前剩余动作是安全顾问、时长与跨集连续性等制作前条件，以及原创/小说改编通用入口仍未完成；不自动批准、不写Canon、不进入视频生产。
 
 剧本助手终点为人工批准后的Script Handoff；CONDITIONAL PASS不代表批准。雨林计时、分镜、救鸟实现及样片移交视频模块待办，不阻塞剧本M1。不修改冻结稿、Canon或生产数据库。
 

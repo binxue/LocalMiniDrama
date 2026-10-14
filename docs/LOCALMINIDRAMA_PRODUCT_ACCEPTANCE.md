@@ -9,6 +9,9 @@
 - 3014 前端与 5688 后端按 Runtime 配置重新启动后，浏览器实际显示《雨林》三集资料、审核状态、来源引用和历史对话。
 - 新增一次真实 Producer 对话验收：Task `mat_c40824f6-c38d-495b-b68e-c9f0bbcedfcb`，Session `sesn-20261014004423-lvumy`，输入 11,436、输出 2,120 tokens；回复明确区分候选稿、CONDITIONAL PASS、人工批准和 Canon，页面刷新后仍可恢复。当前模型价格未配置，费用只显示真实 Token，不计算金额。
 - 按用户授权启动一次第三集局部修订链，Revision `rev_a79d5714-136b-4d5a-8444-aee72d446a84`。Producer Task `mat_2a2ba24b-7ab3-47fd-a4a5-a0d81547dffa` / Session `sesn-20261014004736-gx7cb` 最终为不完整（`span.model_request_start`，正文消息为 0），因此没有调用 Story Writer 或 Independent Editor，没有生成候选稿，也没有修改原稿、Canon 或批准状态。该证据保留为真实外部执行阻断，系统没有盲目重试。
+- 针对上述证据，返修 Producer 输入增加了单轮文本约束：禁止加载 Skill、工具、文件系统、网络或其他 Agent，直接输出有限长度的返修任务。修复后隔离复测 Revision `rev_1d958c5b-d737-40fa-979b-005d1a3836ba` 完成了真实 Producer → Story Writer → Independent Editor 链：Producer `mat_389f00a8-5df0-4bf1-abed-2aba2e8571c6` / Session `sesn-20261014010141-5qv9o`，Writer `mat_317323bf-f473-4b95-8d6f-51c35aca6b1f` / Session `sesn-20261014010318-c3ab8`，Editor `mat_d7efe44f-8583-4a3e-be11-b442a95e4aeb` / Session `sesn-20261014010809-d8051`。候选 SHA256 为 `d2185cd1c7b78d1b8ce06de06042d14daf7f03c04943468a29015a57c3ed560b`，原稿 SHA256 未变，Revision 保持 `not_approved`。
+- 该复测实际用量：Producer 输入 8,416 / 输出 2,557 / 缓存读取 5,944；Writer 输入 8,933 / 输出 11,108；Editor 输入 10,163 / 输出 8,301；各 1 次模型请求，合计输入 27,512、输出 19,966、缓存读取 5,944 tokens。当前模型价格仍未核实，费用状态为价格未配置。
+- Editor 真实结论为 `CONDITIONAL PASS`：候选保留木盒、周姨/老周、塌方退路、四路径差异和集尾钩子；仍要求安全顾问书面确认、锁定共用/独占镜头边界，并修正毛巾与换手的关系动作。浏览器 3014 刷新后可查看候选、Diff、Editor 五项意见和未批准状态；未写入 Canon，未启动视频模块。
 
 ## 第一轮问题与修复
 
