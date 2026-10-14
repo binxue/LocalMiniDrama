@@ -74,7 +74,7 @@ function update(db, id, fields) {
 async function createSession(agentId, title, options = {}) {
   const args = ['agent', 'session', 'create', '--agent-id', agentId, '--environment-id', process.env.ARK_AGENT_ENVIRONMENT_ID || 'env-20261011083635-eeeu2', '--title', title];
   if (options.controlledEpisodeAgent) args.push('--agent-overrides', JSON.stringify({
-    System: '你只执行当前用户给出的单轮剧本任务。不得调用工具、读取或写入文件、搜索网络、加载资料或研究项目；所有必要上下文已经在用户消息中提供。Writer 只返回完整剧本正文；Editor 只返回 PASS、CONDITIONAL PASS 或 FAIL 及最多5条证据和建议。不要解释执行过程，不要创作任务之外的内容。',
+    System: '你只执行当前用户给出的单轮剧本任务。不得调用工具、读取或写入文件、搜索网络、加载Skill、研究项目或调用其他Agent；所有必要上下文已经在用户消息中提供。Producer 只返回可执行策划，不写正文；Writer 只返回完整剧本正文；Editor 只返回 PASS、CONDITIONAL PASS 或 FAIL 及最多5条证据和建议。不要解释执行过程，不要创作任务之外的内容。',
     Skills: [],
   }));
   args.push('--format', 'json');
@@ -133,7 +133,7 @@ async function execute(db, log, taskId) {
   if (!task || task.task_status !== 'queued') return;
   try {
     update(db, taskId, { task_status: 'starting' });
-    const controlledEpisodeAgent = task.episode_id != null && ['agent-20261011131619-47ft8', 'agent-20261011131710-ncebb'].includes(task.agent_id);
+    const controlledEpisodeAgent = (task.episode_id != null && ['agent-20261011131619-47ft8', 'agent-20261011131710-ncebb'].includes(task.agent_id)) || (task.episode_id?.startsWith('batch-plan:') && task.agent_id === 'agent-20261011131513-17rey');
     const session = await createSession(task.agent_id, `LocalMiniDrama ${task.work_id} ${taskId}`, { controlledEpisodeAgent });
     const sessionId = session.id;
     update(db, taskId, { session_id: sessionId, model_id: session.model || null, session_create_json: JSON.stringify(session.raw), task_status: 'submitted' });
@@ -215,4 +215,4 @@ function recoverOnStartup(db, log) {
   return result.changes;
 }
 
-module.exports = { ensureTable, createTask, getTask, listTasks, refreshTask, recoverOnStartup, ALLOWED_AGENTS, extract, _sessionArgs: (agentId, title, options = {}) => { const args = ['agent', 'session', 'create', '--agent-id', agentId, '--environment-id', process.env.ARK_AGENT_ENVIRONMENT_ID || 'env-20261011083635-eeeu2', '--title', title]; if (options.controlledEpisodeAgent) args.push('--agent-overrides', JSON.stringify({ System: '你只执行当前用户给出的单轮剧本任务。不得调用工具、读取或写入文件、搜索网络、加载资料或研究项目；所有必要上下文已经在用户消息中提供。Writer 只返回完整剧本正文；Editor 只返回 PASS、CONDITIONAL PASS 或 FAIL 及最多5条证据和建议。不要解释执行过程，不要创作任务之外的内容。', Skills: [] })); return args; } };
+module.exports = { ensureTable, createTask, getTask, listTasks, refreshTask, recoverOnStartup, ALLOWED_AGENTS, extract, _sessionArgs: (agentId, title, options = {}) => { const args = ['agent', 'session', 'create', '--agent-id', agentId, '--environment-id', process.env.ARK_AGENT_ENVIRONMENT_ID || 'env-20261011083635-eeeu2', '--title', title]; if (options.controlledEpisodeAgent) args.push('--agent-overrides', JSON.stringify({ System: '你只执行当前用户给出的单轮剧本任务。不得调用工具、读取或写入文件、搜索网络、加载Skill、研究项目或调用其他Agent；所有必要上下文已经在用户消息中提供。Producer 只返回可执行策划，不写正文；Writer 只返回完整剧本正文；Editor 只返回 PASS、CONDITIONAL PASS 或 FAIL 及最多5条证据和建议。不要解释执行过程，不要创作任务之外的内容。', Skills: [] })); return args; } };

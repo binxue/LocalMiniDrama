@@ -31,6 +31,11 @@ test('repeated active batch request reuses the existing batch instead of schedul
   assert.equal(db.prepare('SELECT count(*) n FROM script_assistant_batches').get().n, 1);
 });
 
+test('batch range validates more than the legacy five episode limit without scheduling work', () => {
+  assert.deepEqual(service._validateBatchRange(4, 10), { start: 4, end: 10, total: 7 });
+  assert.throws(() => service._validateBatchRange(1, 51), /1–50集/);
+});
+
 test('batch schema preserves awaiting recovery as a paused, resumable state', () => {
   const db = new Database(':memory:'); service.ensureTable(db);
   const now = new Date().toISOString();
@@ -104,6 +109,9 @@ test('new episode candidate and batch tables are isolated from revisions', () =>
   assert.ok(db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='script_assistant_episode_candidates'").get());
   assert.ok(db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='script_assistant_batches'").get());
   assert.equal(db.prepare('SELECT count(*) n FROM script_assistant_revisions').get().n, 0);
+  const columns = db.prepare('PRAGMA table_info(script_assistant_batches)').all().map(c => c.name);
+  assert.ok(columns.includes('planning_status'));
+  assert.ok(columns.includes('planning_output'));
 });
 
 test('registered original and adaptation works persist source hashes without Agent calls', () => {

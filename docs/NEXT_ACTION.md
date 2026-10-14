@@ -1,5 +1,12 @@
 # Current Action
 
+## 2026-10-14 专业Agent协同创作集成（当前阶段）
+
+- 新集批次现先由 Producer 生成一次可执行的范围策划快照，或复用现有 plan/outline/beat 资料；未知策划 Session 保持暂停并只回查原任务。Writer 与 Editor 输入均包含策划依据；Editor 评定标准覆盖剧情逻辑、人物动机、冲突节奏、反转钩子、规划落实、连续性、格式、时长与可拍性。
+- 批次从固定 5 集改为默认最多 50 集，可通过 `LOCALMINIDRAMA_MAX_BATCH_EPISODES` 调整。仍逐集落盘、按本批次前集 SHA 绑定连续性，不并行提交依赖前集结局的写作。
+- 自动化：Node 102/102、前端 build 通过；没有为验证此改动调用模型。5688 已在确认无活动收费任务后安全重启为 PID `31544`，工作目录为 `H:\localminidrama-active\backend-node`；3014 PID `5392` 保留。
+- 当前限制：没有实测新策划链的 Token/速度改善；现有 `adapted-intake` 第 4 集 Editor 仍属待恢复任务，不重发 Writer/Editor。下一步是通过 3014 刷新后做不触发模型的批次/策划快照状态验收，再决定是否进行一次有明确目标的真实批次调用。
+
 ## Latest recovery evidence — 2026-10-14
 
 5688 is running the active code on PID `26780` with the existing Runtime/SQLite (`m4.3-session-isolation-recovery`, health `ok`). The adaptation batch `batch_95d4741c-7912-4a5e-82ac-f1cb115e2104` now has real completed episodes 1 and 2; episode 2 candidate `cand_b03b58e0-af3a-40c8-85dd-fca648bb41f5` has Writer and Editor results, 4,730 characters, pinned episode-1 SHA, and `not_approved`. A single repaired resume attempt submitted episode-3 Writer `mat_34147ae7-d250-42df-b87d-034ef5e4d203`; the cloud task remains without正文 at `span.model_request_start`, so episode 3 is `awaiting_recovery`, the batch is paused, and episodes 4–5 remain queued. Do not retry this unknown Session.

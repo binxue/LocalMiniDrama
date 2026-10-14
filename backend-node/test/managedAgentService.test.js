@@ -21,6 +21,14 @@ test('episode Editor sessions use the same controlled override as Writer', () =>
   assert.match(override.System, /PASS、CONDITIONAL PASS 或 FAIL/);
 });
 
+test('batch Producer planning sessions receive a controlled single-turn override', () => {
+  const args = service._sessionArgs('agent-20261011131513-17rey', 'batch-plan', { controlledEpisodeAgent: true });
+  const index = args.indexOf('--agent-overrides');
+  const override = JSON.parse(args[index + 1]);
+  assert.deepEqual(override.Skills, []);
+  assert.match(override.System, /Producer 只返回可执行策划/);
+});
+
 test('managed agent tasks persist input version and do not accept unknown agents', () => {
   const db = new Database(':memory:');
   service.ensureTable(db);

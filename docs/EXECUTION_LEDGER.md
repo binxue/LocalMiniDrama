@@ -1,5 +1,12 @@
 # LocalMiniDrama Execution Ledger
 
+## 2026-10-14 — Producer planning snapshot integration
+
+- 新集批次新增 `planning_status`、`planning_task_id`、`planning_output`、`planning_hash`、`planning_completed_at` 字段，兼容旧 SQLite；有 plan/outline/beat 资料时直接形成可追溯本地快照，否则只提交一次受控 Producer 策划任务。
+- Story Writer 读取批次策划快照、本集相关资料和明确绑定的前集候选；Independent Editor 输入包含策划及专业成品检查清单。Producer/Writer/Editor 均约束单轮文本任务，禁止工具、Skill、文件和网络探查。
+- 批次范围默认上限从 5 集调整为可配置 50 集，仍保持逐集保存、前集 SHA 连续性绑定、未知任务暂停恢复和候选不自动批准。恢复批次时先恢复 Producer 策划 Session，不会绕过策划直接提交 Writer。
+- 回归验证：Node 101/101，前端 `npm run build` 通过；本轮未新增收费模型调用。当前真实创作阻断和成本未配置状态保持原记录，不宣称速度或成本改善。
+
 ## 2026-10-14 — baseline handoff
 
 - Repository: `binxue/LocalMiniDrama`; branch: `codex/localminidrama-quality`.
