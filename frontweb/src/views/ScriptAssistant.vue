@@ -9,9 +9,9 @@
     <section class="product-start">
       <h2>继续创作已有作品</h2>
       <p>选择作品，阅读剧本或修改版本；直接告诉 AI 创作助手你希望改善什么。团队协作会创建独立草稿，原稿保持不变。</p>
-      <el-button @click="mode='chat'">讨论创作目标</el-button>
-      <el-button @click="mode='team'">查看修改与审核</el-button>
-      <p class="muted">原创与小说改编：现有作品管理中可准备资料；当前 AI 助手仅支持服务端已关联作品，不提供空的创建入口。</p>
+      <el-button @click="mode='chat'">开始对话</el-button>
+      <el-button link @click="mode='team'">查看高级审阅</el-button>
+      <p class="muted">直接告诉助手你想创作、修改或审核什么；后台会按需安排专业协作。</p>
     </section>
     <div class="assistant-layout" v-loading="loading">
       <aside class="context-panel">
@@ -40,11 +40,10 @@
           <el-button size="small" @click="reload" :disabled="loading">刷新记录</el-button>
         </div>
         <p class="conversation-note">讨论与建议不会改写剧本。分镜、视频生成及制作验收由视频模块负责。</p>
-        <el-radio-group v-model="mode" size="small" class="mode-switch">
-          <el-radio-button label="chat">普通问答</el-radio-button>
-          <el-radio-button label="team">AI 团队协作</el-radio-button>
-        </el-radio-group>
-        <section v-if="mode === 'team'" class="orchestration-panel">
+        <p v-if="lastIntentNotice" class="intent-notice">{{ lastIntentNotice }}</p>
+        <details v-if="mode === 'team'" open class="advanced-tools">
+        <summary>高级创作与审阅工具</summary>
+        <section class="orchestration-panel">
           <h3>AI 团队协作</h3>
           <p class="muted">主编分析需求后按需组织编剧、人物关系或互动专家，并交给独立审核。结果是草稿，等待你的最终确认。</p>
           <el-input v-model="runRequest" type="textarea" :rows="3" :maxlength="1200" placeholder="例如：检查《雨林》第三集的连续性和人物关系，必要时提出局部修改建议，交给独立 Editor 审核，不要写第四集。" />
@@ -58,11 +57,12 @@
             <p class="muted">草稿 · 尚未最终确认</p>
           </details>
         </section>
-        <section v-if="mode === 'team'" class="orchestration-panel">
+        <section class="orchestration-panel">
           <h3>阅读和审阅修改版本</h3><p class="muted">查看现有修改稿与独立审核意见。逐项决定不会批准整集，继续修订只记录你的要求。</p>
           <el-select v-model="revisionTarget" aria-label="选择要修改的剧本"><el-option v-for="s in context?.scripts" :key="s.id" :label="s.title" :value="s.id" /></el-select><el-input v-model="revisionGoal" type="textarea" :maxlength="1200" placeholder="说明你希望改善的情节、人物或节奏，以及必须保持不变的内容" /><el-button type="warning" :loading="revisionSending" @click="startRevision">让主编安排独立修改稿</el-button>
           <article v-for="revision in revisions" :key="revision.revision_id" :data-revision="revision.revision_id" class="run-card"><header class="revision-heading"><strong>{{ revision.revision_id.startsWith('acceptance_test_') ? '验收测试副本（不代表真实审阅） · ' : '' }}{{ revision.source_id === 'ep3' ? '第三集 · 修改版本' : revision.source_id }} · {{ statusLabel(revision.status) }}</strong><span>Editor：{{ editorLabel(revision.editor_review) }} · 最终确认：{{ revision.approval_status === 'not_approved' ? '尚未最终确认' : '已确认，待发布' }}</span></header><div v-if="revision.candidate_text" class="diff-toolbar"><el-radio-group v-model="diffMode[revision.revision_id]" size="small"><el-radio-button label="changes">只看修改</el-radio-button><el-radio-button label="all">查看全文</el-radio-button></el-radio-group><el-button size="small" @click="exportText((revisionSource[revision.revision_id]?.title || revision.source_id) + ' · 独立修改稿',revision.candidate_text)">导出修改稿（草稿）</el-button><span>{{ diffBlocks(revision).filter(b => b.type !== 'unchanged').length }} 处修改 · {{ decisions[revision.revision_id]?.length || 0 }} 项审阅决定</span></div><div class="revision-workbench"><div v-if="revision.candidate_text" class="diff-blocks"><section v-for="block in visibleDiffBlocks(revision)" :key="block.id" class="diff-block" :class="block.type"><div class="block-label">{{ block.type === 'added' ? '新增' : block.type === 'removed' ? '删除' : block.type === 'unchanged' ? '未修改' : '修改' }} · 原稿第 {{ block.oldLine }} 行 / 修改稿第 {{ block.newLine }} 行</div><div class="revision-diff"><pre class="source-document"><span v-for="(part,i) in block.oldParts" :key="i" :class="{ 'diff-removed-text': part.removed }">{{ part.value }}</span></pre><pre class="source-document"><span v-for="(part,i) in block.newParts" :key="i" :class="{ 'diff-added-text': part.added }">{{ part.value }}</span></pre></div><el-input v-if="block.type !== 'unchanged'" v-model="reviewNotes[block.id]" type="textarea" :maxlength="2000" placeholder="填写你的修改意见（可选）" /><div v-if="block.type !== 'unchanged'" class="review-actions"><el-button size="small" @click="decideRevision(revision,block,'accept')">接受修改</el-button><el-button size="small" @click="decideRevision(revision,block,'reject')">退回修改</el-button><el-button size="small" @click="decideRevision(revision,block,'revise')">要求继续修订</el-button><el-button size="small" @click="decideRevision(revision,block,'undecided')">暂不决定</el-button><span>{{ decisionLabel(decisions[revision.revision_id],block.id) }}</span></div></section></div><div v-else class="revision-diff"><pre class="source-document">{{ revisionSource[revision.revision_id]?.text || '原稿加载中…' }}</pre><pre class="source-document">{{ revision.candidate_text || '候选稿尚未生成' }}</pre></div><aside v-if="revision.editor_review" class="editor-review"><h4>Independent Editor · 全局意见 / 待定位</h4><div class="markdown-body" v-html="renderReply(revision.editor_review, null)"></div></aside></div><details class="trace"><summary>技术详情</summary><p>Revision：{{ revision.revision_id }}<br>原稿 SHA256：{{ revision.source_sha256 }}<br>候选 SHA256：{{ revision.candidate_sha256 || '等待生成' }}<br>Writer Task：{{ revision.writer_task_id || '无' }} · Editor Task：{{ revision.editor_task_id || '无' }}</p></details><el-button v-if="['failed','awaiting_recovery','awaiting_next_authorization'].includes(revision.status) && (revision.editor_task_id || revision.writer_task_id || revision.producer_task_id)" size="small" @click="recoverRevision(revision.revision_id)">恢复原任务状态（不重发）</el-button><el-button v-if="revision.status === 'completed' && revision.approval_status === 'not_approved' && ['审核通过','审核有条件通过，仍需修改或确认'].includes(editorLabel(revision.editor_review))" type="primary" size="small" @click="approveRevision(revision.revision_id)">确认完整修改版本</el-button></article>
         </section>
+        </details>
         <div v-if="!messages.length" class="empty-chat">
           <el-icon :size="32"><ChatDotRound /></el-icon>
           <h3>从已有作品开始聊</h3>
@@ -96,10 +96,10 @@
         </article>
         <form class="composer" @submit.prevent="send">
           <el-input v-model="draft" type="textarea" :rows="3" :maxlength="1200" show-word-limit placeholder="向 Producer 提问，例如：前三集现在是什么状态？" aria-label="给 Producer 的消息" />
-          <div class="composer-footer"><span>聊天额度：{{ budget.chat?.limit ? `${budget.chat.remaining} / ${budget.chat.limit}` : '不限' }} · 编排额度：{{ budget.orchestration?.limit ? `${budget.orchestration.remaining} / ${budget.orchestration.limit}` : '不限' }} · 不自动重试</span>
+          <div class="composer-footer"><span>作品对话 · 发送前会显示费用配置状态 · 不自动重试</span>
             <el-button native-type="submit" type="primary" :loading="sending" :disabled="!canSend">发送给创作助手</el-button></div>
           <p class="muted">发送前费用预估：价格未配置；将显示真实 Token 用量，无法可靠估算金额。</p>
-          <p v-if="budget.chat?.limit && budget.chat.remaining === 0" class="muted">聊天额度已达到配置上限，请等待24小时滚动窗口恢复。</p>
+          <p v-if="lastIntentNotice" class="muted">{{ lastIntentNotice }}</p>
         </form>
       </main>
     </div>
@@ -129,6 +129,14 @@ const mode = ref('chat'), runRequest = ref(''), runs = ref([]), runSending = ref
 const revisions = ref([]), revisionSending = ref(false), revisionTarget = ref('ep3'), revisionGoal = ref('')
 const revisionSource = ref({}), decisions = ref({})
 const diffMode = ref({}), reviewNotes = ref({})
+const lastIntentNotice = computed(() => {
+  const intent = messages.value.at(-1)?.context?.request_intent
+  if (!intent || intent.status === 'ready' && intent.intent === 'chat') return ''
+  if (intent.status === 'clarification_required') return intent.reason || '这个创作请求需要先确认范围。'
+  if (intent.intent === 'revise_episode') return `已识别为第${intent.episode || '指定'}集修改请求；可在高级审阅中启动候选版本。`
+  if (intent.intent === 'review') return '已识别为审核请求；助手会基于当前作品资料给出可追溯建议。'
+  return ''
+})
 const prompts = ['我们前三集剧本现在是什么状态？', '第一集和第三集之间，有哪些需要注意的连续性问题？', '你建议先修改前三集，还是开始第四集？说明依据。']
 let timer, requestKey = null, submittedText = null, generation = 0, alive = true
 const isActive = task => ['queued', 'starting', 'submitted', 'running'].includes(task?.task_status)

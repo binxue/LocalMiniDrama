@@ -288,6 +288,23 @@ function buildInput(work, history, question) {
   return { input, context };
 }
 
+// Classifies user intent without a model call. This is routing metadata only;
+// it never claims that a requested episode or revision has been produced.
+function classifyCreativeRequest(text, scripts = []) {
+  const q = String(text || '').trim();
+  const chineseNumber = value => ({一:1,二:2,两:2,三:3,四:4,五:5,六:6,七:7,八:8,九:9,十:10}[value] || null);
+  const episode = q.match(/第\s*(\d+|[一二两三四五六七八九十]+)\s*集/);
+  const episodeNumber = episode ? (Number(episode[1]) || chineseNumber(episode[1])) : null;
+  const range = q.match(/第\s*(\d+)\s*(?:到|至|-|—)\s*第?\s*(\d+)\s*集/);
+  if (!q) return { intent: 'chat', status: 'ready' };
+  if (/全集|全剧|全部集数/.test(q)) return { intent: 'create_all', status: 'clarification_required', reason: '需要先确认总集数和分集规划' };
+  if (range) return { intent: 'create_episode_range', status: 'clarification_required', episode_start: Number(range[1]), episode_end: Number(range[2]), reason: '批量创作调度尚未配置为可持续任务' };
+  if (/下一集|后面一集|接着写/.test(q)) return { intent: 'next_episode', status: 'clarification_required', reason: '需要确认下一集是否已有分集规划' };
+  if (/审核|审查|评审/.test(q)) return { intent: 'review', status: 'ready', episode: episodeNumber };
+  if (/优化|修改|加强|润色|返修/.test(q)) return { intent: 'revise_episode', status: 'ready', episode: episodeNumber, available_scripts: scripts.filter(s => s.available).map(s => s.id) };
+  return { intent: 'chat', status: 'ready' };
+}
+
 function createMessage(db, log, config, workId, payload) {
   ensureTable(db);
   const { message, client_message_id: key } = payload || {};
@@ -304,6 +321,7 @@ function createMessage(db, log, config, workId, payload) {
   const history = messages(db, workId);
   if (history.some(m => ACTIVE.has(m.task?.task_status))) throw new Error('本作品已有进行中的消息，请等待或查询原任务');
   const { input, context } = buildInput(work, history, message.trim());
+  context.request_intent = classifyCreativeRequest(message.trim(), work.sources.filter(s => s.kind === 'script'));
   db.transaction(() => {
     const task = managed.createTask(db, log, { work_id: workId, agent_id: PRODUCER, input });
     db.prepare('INSERT INTO script_assistant_messages (work_id,client_message_id,content,task_id,context_json,created_at) VALUES (?,?,?,?,?,?)')
@@ -322,4 +340,4 @@ function budget(db) {
   return { chat: { used: chatUsed, limit: chatLimit, remaining: chatLimit > 0 ? Math.max(0, chatLimit - chatUsed) : null }, orchestration: { used: orchestrationUsed, limit: orchestrationLimit, remaining: orchestrationLimit > 0 ? Math.max(0, orchestrationLimit - orchestrationUsed) : null }, in_flight: db.prepare("SELECT count(*) n FROM managed_agent_tasks WHERE task_status IN ('queued','starting','submitted','running')").get().n };
 }
 
-module.exports = { ensureTable, works, loadWork, summary, messages, buildInput, createMessage, budget, runs, createRun, revisions, reviewDecisions, saveReviewDecision, createRevision, approveRevision, refreshRevision, createEditorRecovery, PRODUCER };
+module.exports = { ensureTable, works, loadWork, summary, messages, buildInput, classifyCreativeRequest, createMessage, budget, runs, createRun, revisions, reviewDecisions, saveReviewDecision, createRevision, approveRevision, refreshRevision, createEditorRecovery, PRODUCER };
