@@ -5,6 +5,7 @@ const taskService = require('./taskService');
 const imageService = require('./imageService');
 const { hash } = require('./managedAgentReviewEvidence');
 const { ManagedAgentWorkbenchClient } = require('./managedAgentWorkbenchClient');
+const { imageEstimate } = require('./modelPricingCatalog');
 const running = new Set();
 const PLAN_HASH = '7155cf62c528833f32fe0d3832027aacae6a86066bfddd7304d9c4a80bcc34a6';
 const MODEL = 'doubao-seedream-5-0-pro-260628';
@@ -176,9 +177,16 @@ function budgetSummary(db) {
   });
   const reservations = runs.flatMap(run => run.costs?.reservations || []);
   const reserved = reservations.reduce((sum, item) => sum + Number(item.reserved_cny || 0), 0);
-  const estimated = runs.flatMap(run => run.executions || []).reduce((sum, item) => sum + Number(item.estimated_cost_cny || 0), 0);
+  const estimated = runs.flatMap(run => [
+    ...(run.executions || []).filter(item => item.pricing_status === 'ESTIMATED').map(item => item.estimated_cost_cny),
+    ...(run.costs?.records || []).filter(item => item.pricing_status === 'ESTIMATED').map(item => item.estimated_cost_cny),
+  ]).reduce((sum, item) => sum + Number(item || 0), 0);
+  const unknown = runs.flatMap(run => [
+    ...(run.executions || []).filter(item => item.estimated_cost_cny != null && item.pricing_status !== 'ESTIMATED'),
+    ...(run.costs?.records || []).filter(item => item.pricing_status === 'UNKNOWN'),
+  ]).length;
   return { limit_cny: BUDGET_LIMIT_CNY, warning_cny: BUDGET_WARNING_CNY, reserved_cny: reserved,
-    estimated_cny: estimated, available_cny: Math.max(0, BUDGET_LIMIT_CNY - reserved), warning: reserved >= BUDGET_WARNING_CNY };
+    estimated_cny: estimated, unknown_count: unknown, available_cny: Math.max(0, BUDGET_LIMIT_CNY - reserved), warning: reserved >= BUDGET_WARNING_CNY };
 }
 function assertNewCorrectivePrompt(run, prompt, round) {
   const originalPrompt = run.executions.find(item => item.stage === 'analysis-1')?.result?.optimized_prompt;
@@ -288,15 +296,23 @@ async function execute(db, cfg, log, run, dependencies = {}) {
         generation_status: 'completed', generated_prompt: candidate.prompt,
         analysis_execution_id: analysis.execution.execution_id };
       if (!previousCandidate) run.candidates.push(entry);
+      run.costs.records = run.costs.records || [];
+      if (!run.costs.records.some(item => item.kind === 'seedream_image' && item.media_id === candidate.id)) {
+        const priced = imageEstimate({ model: candidate.model || MODEL, size: candidate.size || '1440x2560', referenceCount: initial.shot.references?.length || 0 });
+        run.costs.records.push({ kind: 'seedream_image', media_id: candidate.id, storyboard_id: run.storyboard_id,
+          provider: candidate.provider || 'volcengine', model: candidate.model || MODEL, created_at: candidate.created_at || new Date().toISOString(),
+          usage: priced.usage || null, pricing_version: priced.pricing_version, pricing_status: priced.pricing_status,
+          estimated_cost_cny: priced.estimated_cost_cny, unknown_reason: priced.unknown_reason || null,
+          evidence: { run_id: run.run_id, image_generation_id: candidate.id, media_sha256: entry.media_sha256 } });
+      }
       run.pending_image_generation_id = null;
       persist(db, run);
       update('review-' + round, '真实视觉检查 Agent 审核当前媒体版本', 50 + (round - 1) * 40);
       const reviewed = await agentStage('review-' + round, { ...AGENTS.review, environmentId: ENVIRONMENT_ID, stage: 'review-' + round,
         images: [file, ...initial.files], input: {
-          instructions: '你是专业影视视觉检查员。审核第一张实际候选首帧；后面三张按顺序为批准的场景、手机、茶杯参考。'
-            + '禁止工具调用、媒体生成或伪造可见事实。不得把视频动作或声音未发生当作静态图失败。'
-            + '首帧是动作起点，右手接触手机边缘尚未推送；手机右侧、中央偏左留空；茶杯在远侧右角漏雨处，半满、无柄直筒琥珀玻璃杯。'
-            + '不出现人脸身体、黎夏、第二只手或第二部手机，保持冷雨清晨写实POV。'
+          instructions: '你是专业影视视觉检查员。审核第一张实际候选首帧；后续图片严格按 approved_shot.references 顺序作为本镜参考。'
+            + '禁止工具调用、媒体生成或伪造可见事实。依据当前镜头批准方案、角色、场景、道具和动作核对实际画面。'
+            + '不要套用其他镜头的动作、参考合同或审核结论；不得把视频动作或声音未发生当作静态图失败。'
             + '依据实际图片指出专业缺陷及修正建议，不得因批准方案已通过而默认图片通过。APPROVE仅为制作建议。'
             + '返回 JSON: {execution_id,input_hash,verdict:APPROVE|REVISE|BLOCKED,score:0到100,observations:{},recommendations:[]}。不超过1200汉字。',
           context: { approved_shot: initial.shot, first_last_frames: initial.desc.first_last_frames,

@@ -5,6 +5,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { spawn } = require('node:child_process');
 const { hash } = require('./managedAgentReviewEvidence');
+const { tokenEstimate, unknown: unknownPrice } = require('./modelPricingCatalog');
 
 function parseAgentJson(text) {
   let raw = String(text || '').trim();
@@ -156,9 +157,13 @@ class ManagedAgentWorkbenchClient {
         output_tokens: total.output_tokens + (Number(value.output_tokens) || 0),
         cache_read_input_tokens: total.cache_read_input_tokens + (Number(value.cache_read_input_tokens) || 0),
       }), { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0 });
-      // Conservative usage estimate against current evolving catalog; never a settled bill.
-      execution.estimated_cost_cny = usage.length
-        ? execution.token_usage.input_tokens * 0.006 / 1000 + execution.token_usage.output_tokens * 0.03 / 1000 : null;
+      // The Agent definition currently exposes an endpoint ID, not a billable
+      // foundation model. Keep usage evidence, but do not invent a price.
+      const priced = unknownPrice(execution.model, 'AGENT_FOUNDATION_MODEL_UNRESOLVED');
+      execution.estimated_cost_cny = priced.estimated_cost_cny;
+      execution.pricing_status = priced.pricing_status;
+      execution.pricing_version = priced.pricing_version;
+      execution.pricing_unknown_reason = priced.unknown_reason;
       execution.remote_completed = true;
       persist();
       const result = parseAgentJson((message.content || []).filter(item => item.type === 'text').map(item => item.text).join(''));
