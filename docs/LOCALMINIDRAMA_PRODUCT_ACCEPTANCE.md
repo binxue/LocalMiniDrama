@@ -4,6 +4,12 @@
 
 核心已有作品流程有条件通过，完整产品目标尚未全部通过。基线 `fe08f2eea808710f8df6a362bbb783fa3243207a`，分支 `codex/localminidrama-quality`，启动时本地与远端一致。历史 UI、成本记录、ZIP 缺失及临时文件保留。最新提交以本报告所在提交及 git log 为准，避免文档自身哈希循环。
 
+### 2026-10-14 真实产品化回归补充
+
+- 3014 前端与 5688 后端按 Runtime 配置重新启动后，浏览器实际显示《雨林》三集资料、审核状态、来源引用和历史对话。
+- 新增一次真实 Producer 对话验收：Task `mat_c40824f6-c38d-495b-b68e-c9f0bbcedfcb`，Session `sesn-20261014004423-lvumy`，输入 11,436、输出 2,120 tokens；回复明确区分候选稿、CONDITIONAL PASS、人工批准和 Canon，页面刷新后仍可恢复。当前模型价格未配置，费用只显示真实 Token，不计算金额。
+- 按用户授权启动一次第三集局部修订链，Revision `rev_a79d5714-136b-4d5a-8444-aee72d446a84`。Producer Task `mat_2a2ba24b-7ab3-47fd-a4a5-a0d81547dffa` / Session `sesn-20261014004736-gx7cb` 最终为不完整（`span.model_request_start`，正文消息为 0），因此没有调用 Story Writer 或 Independent Editor，没有生成候选稿，也没有修改原稿、Canon 或批准状态。该证据保留为真实外部执行阻断，系统没有盲目重试。
+
 ## 第一轮问题与修复
 
 - 独立只读工程审查发现批准入口未核对真实 Editor 结论及候选哈希；正在补后端验证。
