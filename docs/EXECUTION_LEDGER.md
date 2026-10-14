@@ -85,3 +85,12 @@ Persistent original/adaptation intake is implemented and API-verified on isolate
 - Episode 1 first Editor task `mat_dad1d721-8171-44b8-8a98-9dc832496712`: incomplete, four requests, 39,398 input / 9,699 output / 27,048 cache-read tokens, one unfinished request; events show tool exploration and no final message. Preserved as failed evidence.
 - Episode 1 controlled Editor retry `mat_4f9d24ba-6632-4157-9dc0-cd9bbaed365a`: completed `CONDITIONAL PASS`, one request, 7,597 input / 6,162 output / 3,896 cache-read tokens. Price remains unconfigured; no amount is claimed.
 - Episode 2 Writer task `mat_ece67f91-c3ff-4289-9273-ba000ee310ba`: incomplete, one unfinished request, no output or terminal event. Recovery endpoint returned `Writer云端任务未完成`; no new task was created.
+
+
+## 2026-10-15 雨林仅故事内核测试：真实第一集已交付
+
+Producer + Relationship + Interactive + Story结构设计 → Writer → Editor，共6次真实请求。仅故事内核SHA d7e17e433dde4414c0d2b41c17d4ed11a100a266da2904158603885efbb4f05a，Writer输入逐字allowlist匹配。策划13,675字符，正文4,979字符，Editor CONDITIONAL PASS，not_approved。旧剧情未加载，未生成第二集，未改Canon。
+
+批次batch_30df930d-a129-4b18-a65f-e19619fe0eea；候选cand_f9680c40-ad8b-4b53-9322-29dc5bc72514。3014隔离视图可查看并导出专业策划、全文和评定；下载逐字核验、刷新和浏览器Console验证完成。云端链23分06.6秒；本地恢复确认含服务中断延迟，另记。输入62,789/输出61,346/缓存26,448，价格未配置，金额未知。完整证据与局限见RAINFOREST_KERNEL_TEST_ACCEPTANCE.md。
+
+当前唯一下一动作：交由用户阅读本次新测试版与五项真实Editor意见；只有用户要求时定向修改。不要自动续写第二集或批准正式稿。此次完成单集内容生产，不宣称全剧并行产品已完成。

@@ -6,6 +6,25 @@ const path = require('node:path');
 const Database = require('better-sqlite3');
 const service = require('../src/services/scriptAssistantService');
 
+test('kernel-only test never opens the historical manifest or links previous candidates', () => {
+  const managed = require('../src/services/managedAgentService');
+  const original = managed.createTask;
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kernel-only-'));
+  const kernel = path.join(dir, 'kernel.md'); fs.writeFileSync(kernel, '唯一内核：第一人称互动冒险，阿棠。');
+  const db = new Database(':memory:'); service.ensureTable(db);
+  let input;
+  managed.createTask = (_db, _log, args) => { input = args.input; return { task_id: 'isolated-plan' }; };
+  try {
+    const b = service.createKernelTest(db, { error() {} }, { script_assistant: { manifest_path: '/must-not-open-history.json' } }, 'rainforest', kernel);
+    db.prepare("UPDATE script_assistant_batches SET status='paused' WHERE batch_id=?").run(b.batch_id);
+    const view = service.kernelTestView(db, b.batch_id);
+    assert.equal(view.source.text, '唯一内核：第一人称互动冒险，阿棠。');
+    assert.match(input, /唯一故事输入/);
+    assert.equal(view.candidates[0].continuity_source_candidate_id, null);
+    assert.equal(view.candidates.length, 1);
+  } finally { managed.createTask = original; }
+});
+
 test('script assistant builds a source-traceable bounded input and separates approval state', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'localminidrama-assistant-'));
   const script = path.join(dir, 'ep1.md');
@@ -95,6 +114,11 @@ test('episode review accepts the Chinese 评定 heading used by a completed Edit
   const recovered = await service.recoverEpisodeCandidate(db, {}, {}, 'adapted-candidate');
   assert.equal(recovered.status, 'completed');
   assert.match(recovered.editor_review, /CONDITIONAL PASS/);
+  db.prepare('UPDATE managed_agent_tasks SET output_text=? WHERE task_id=?').run('**CONDITIONAL PASS**\n\n五项具体问题', 'editor-adapted');
+  db.prepare("UPDATE script_assistant_episode_candidates SET status='reviewing',editor_review=NULL WHERE candidate_id='adapted-candidate'").run();
+  const standalone = await service.recoverEpisodeCandidate(db, {}, {}, 'adapted-candidate');
+  assert.equal(standalone.status, 'completed');
+  assert.equal(standalone.approval_status, 'not_approved');
 });
 
 test('script assistant rejects an unverified source hash', () => {

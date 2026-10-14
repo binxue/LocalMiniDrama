@@ -35,6 +35,8 @@ module.exports = function scriptAssistant(db, log, config) {
     candidates: wrap(req => ({ candidates: service.episodeCandidates(db, req.params.work_id) })),
     batches: wrap(req => ({ batches: service.batches(db, req.params.work_id) })),
     createEpisode: wrap(req => service.createEpisodeCandidate(db, log, config, req.params.work_id, req.body?.episode_no, req.body?.request)),
+    createKernelTest: wrap(req => { const supplied=String(req.body?.kernel_path||'').replaceAll('\\','/'); if(supplied!=='H:/互动剧/雨林/故事内核_v1.md')throw new Error('本轮只允许指定雨林故事内核文件'); return service.createKernelTest(db,log,config,req.params.work_id,supplied); }),
+    kernelTest: wrap(req => service.kernelTestView(db,req.params.batch_id)),
     createBatch: wrap(req => service.createBatch(db, log, config, req.params.work_id, req.body?.request, req.body?.episode_start, req.body?.episode_end)),
     approveEpisode: wrap(req => service.approveEpisodeCandidate(db, req.params.candidate_id, req.body?.actor || 'user', req.body)),
     recoverEpisode: wrap(async req => { const candidate = await service.recoverEpisodeCandidate(db, log, config, req.params.candidate_id); if (candidate.status !== 'completed') db.prepare("UPDATE script_assistant_episode_candidates SET status='awaiting_recovery',error_text='已有云端任务仍未形成可验证终态；请继续回查，禁止重发' WHERE candidate_id=?").run(req.params.candidate_id); return db.prepare('SELECT * FROM script_assistant_episode_candidates WHERE candidate_id=?').get(req.params.candidate_id); }),

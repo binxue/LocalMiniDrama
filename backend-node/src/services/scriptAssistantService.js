@@ -65,7 +65,7 @@ function ensureTable(db) {
     error_text TEXT
   )`);
   const batchColumns = new Set(db.prepare('PRAGMA table_info(script_assistant_batches)').all().map(c => c.name));
-  for (const [column, type] of [['planning_status', 'TEXT'], ['planning_task_id', 'TEXT'], ['planning_output', 'TEXT'], ['planning_hash', 'TEXT'], ['planning_completed_at', 'TEXT'], ['planning_expert_task_ids_json', "TEXT NOT NULL DEFAULT '[]'"], ['planning_expert_outputs_json', "TEXT NOT NULL DEFAULT '[]'"]]) {
+  for (const [column, type] of [['planning_status', 'TEXT'], ['planning_task_id', 'TEXT'], ['planning_output', 'TEXT'], ['planning_hash', 'TEXT'], ['planning_completed_at', 'TEXT'], ['planning_expert_task_ids_json', "TEXT NOT NULL DEFAULT '[]'"], ['planning_expert_outputs_json', "TEXT NOT NULL DEFAULT '[]'"], ['input_scope_json', 'TEXT']]) {
     if (!batchColumns.has(column)) db.exec(`ALTER TABLE script_assistant_batches ADD COLUMN ${column} ${type}`);
   }
   db.exec(`CREATE TABLE IF NOT EXISTS script_assistant_batch_items (
@@ -122,7 +122,8 @@ function createRevision(db, log, config, workId, sourceId, request = '') { ensur
 function reviewVerdict(text) {
   const heading = String(text || '').split('\n').slice(0, 4).join('\n')
   const match = heading.match(/(?:结论|裁定|判定|评定|Verdict)[^\n:：]*[:：]\s*(?:\*\*)?(CONDITIONAL PASS|PASS|FAIL)\b/i)
-  return match ? match[1].toUpperCase() : 'UNKNOWN'
+  const standalone = heading.match(/^\s*(?:#{1,6}\s+)?(?:\*\*)?(CONDITIONAL PASS|PASS|FAIL)(?:\*\*)?\s*$/im)
+  return (match || standalone) ? (match || standalone)[1].toUpperCase() : 'UNKNOWN'
 }
 function approveRevision(db, id, actor='user', expected={}) {
   const r=db.prepare('SELECT * FROM script_assistant_revisions WHERE revision_id=?').get(id)
@@ -164,12 +165,13 @@ function episodePlanning(planning, episodeNo) {
 async function executeEpisodeCandidate(db, log, config, candidateId) {
   const c = db.prepare('SELECT * FROM script_assistant_episode_candidates WHERE candidate_id=?').get(candidateId); if (!c || c.status !== 'queued') return;
   try {
-    const work = loadWork(config, c.work_id, db); const sources = work.sources.filter(s => s.available && ['core', 'continuity', 'script', 'character', 'plan', 'outline', 'beat'].includes(s.kind)); const prior = sources.slice(-6).map(s => `${s.title} (${s.kind}):\n${s.text}`).join('\n');
-    const previous = continuityContext(db, c);
-    const batch = db.prepare('SELECT planning_output,planning_hash,planning_status FROM script_assistant_batches b JOIN script_assistant_batch_items i ON i.batch_id=b.batch_id WHERE i.candidate_id=?').get(candidateId);
+    const batch = db.prepare('SELECT b.* FROM script_assistant_batches b JOIN script_assistant_batch_items i ON i.batch_id=b.batch_id WHERE i.candidate_id=?').get(candidateId);
+    const scope=batch?.input_scope_json ? JSON.parse(batch.input_scope_json) : null;
+    const work = scope ? {id:c.work_id,title:scope.title,sources:[scope.source]} : loadWork(config, c.work_id, db); const sources = work.sources.filter(s => s.available && ['core', 'continuity', 'script', 'character', 'plan', 'outline', 'beat'].includes(s.kind)); const prior = sources.slice(-6).map(s => `${s.title} (${s.kind}):\n${s.text}`).join('\n');
+    const previous = scope ? '' : continuityContext(db, c);
     if(batch && batch.planning_status!=='completed') throw new Error('专业策划尚未完成，不能跳过策划提交Writer');
-    const planning = episodePlanning(batch?.planning_output || sources.filter(s => s.available && ['plan', 'outline', 'beat', 'continuity'].includes(s.kind)).map(s => `${s.title}:\n${s.text}`).join('\n').slice(0, 2600), c.episode_no) || '尚无集中策划，请依据已核验作品资料形成本集可执行节拍。';
-    const input = `你是Story Writer。只做一次受控文本写作，不加载Skill，不调用工具、文件系统、网络或其他Agent。创作《${work.title}》第${c.episode_no}集独立候选剧本。不要改写既有集，不写Canon。必须输出完整可读正文，落实本集目标、节拍、场次、人物动机、冲突、反转和集尾钩子，保持人物、道具、事件和悬念连续。\n用户目标：${c.request || '按照当前故事继续创作'}\n全剧策划快照${batch?.planning_hash ? `（SHA256=${batch.planning_hash}）` : ''}：\n${planning}\n已核验前文资料：\n${prior.slice(-3200)}\n本批次上一集候选（临时事实，非Canon）：\n${previous.slice(-3600)}\n请只返回第${c.episode_no}集正文，不要解释过程。`;
+    const planning = scope ? batch.planning_output : episodePlanning(batch?.planning_output || sources.filter(s => s.available && ['plan', 'outline', 'beat', 'continuity'].includes(s.kind)).map(s => `${s.title}:\n${s.text}`).join('\n').slice(0, 2600), c.episode_no) || '尚无集中策划，请依据已核验作品资料形成本集可执行节拍。';
+    const input = `你是Story Writer。只做一次受控文本写作，不加载Skill，不调用工具、文件系统、网络或其他Agent。创作《${work.title}》第${c.episode_no}集独立候选剧本。不要改写既有集，不写Canon。必须输出完整可读正文，落实本集目标、节拍、场次、人物动机、冲突、反转和集尾钩子，保持人物、道具、事件和悬念连续。\n用户目标：${c.request || '按照当前故事继续创作'}\n全剧策划快照${batch?.planning_hash ? `（SHA256=${batch.planning_hash}）` : ''}：\n${planning}\n已核验前文资料：\n${scope ? prior : prior.slice(-3200)}\n本批次上一集候选（临时事实，非Canon）：\n${previous.slice(-3600)}\n请只返回第${c.episode_no}集正文，不要解释过程。`;
     db.prepare('UPDATE script_assistant_episode_candidates SET context_hash=? WHERE candidate_id=? AND status=?').run(hash(input), candidateId, 'queued');
     const writer = managed.createTask(db, log, { agent_id: 'agent-20261011131619-47ft8', work_id: c.work_id, input, orchestration: true, episode_id: `ep${c.episode_no}`, candidate_id: c.candidate_id, context_hash: hash(input) });
     db.prepare('UPDATE script_assistant_episode_candidates SET status=?,writer_task_id=? WHERE candidate_id=?').run('writing', writer.task_id, candidateId); const wt = await waitTask(db, writer.task_id); if (wt.task_status !== 'completed' || !wt.output_text) { if (['incomplete', 'awaiting_recovery', 'running', 'submitted'].includes(wt.task_status)) { db.prepare("UPDATE script_assistant_episode_candidates SET status='awaiting_recovery',error_text=?,completed_at=NULL WHERE candidate_id=?").run(`Writer 尚无可验证正文，任务可恢复：${wt.error_text || wt.task_status}`, candidateId); return; } throw new Error('Story Writer 未返回完整新集正文'); }
@@ -197,13 +199,14 @@ function retryEpisodeCandidate(db, log, config, candidateId) {
   db.prepare("UPDATE script_assistant_episode_candidates SET status='failed',error_text='原 Writer 已明确终止；保留为历史尝试' WHERE candidate_id=? AND status='awaiting_recovery'").run(candidateId);
   return createEpisodeCandidate(db, log, config, c.work_id, c.episode_no, c.request);
 }
-function createBatch(db, log, config, workId, request, start, end) {
+function createBatch(db, log, config, workId, request, start, end, scope = null) {
   ({start,end}=validateBatchRange(start,end)); ensureTable(db); const now=new Date().toISOString(); const id=`batch_${crypto.randomUUID()}`;
   const duplicate=db.prepare("SELECT * FROM script_assistant_batches WHERE work_id=? AND request=? AND episode_start=? AND episode_end=? AND status IN ('queued','running','pause_requested','paused') ORDER BY created_at DESC LIMIT 1").get(workId,String(request||''),start,end);
-  if(duplicate) return batches(db,workId).find(x=>x.batch_id===duplicate.batch_id);
-  const work=loadWork(config,workId,db);
-  db.transaction(()=>{db.prepare("INSERT INTO script_assistant_batches(batch_id,work_id,request,episode_start,episode_end,status,current_episode,total_count,planning_status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)").run(id,workId,String(request||''),start,end,'queued',start,end-start+1,'pending',now,now); const insItem=db.prepare('INSERT INTO script_assistant_batch_items(batch_id,episode_no,candidate_id,status,created_at,updated_at) VALUES(?,?,?,?,?,?)'); const insCandidate=db.prepare('INSERT INTO script_assistant_episode_candidates(candidate_id,work_id,episode_no,title,status,request,continuity_source_candidate_id,continuity_source_sha256,created_at) VALUES(?,?,?,?,?,?,?,?,?)'); const prior=db.prepare('SELECT candidate_id,candidate_sha256 FROM script_assistant_episode_candidates WHERE work_id=? AND episode_no=? AND status=? ORDER BY created_at DESC LIMIT 1').get(workId,start-1,'completed'); let previousId=prior?.candidate_id||null; let previousSha=prior?.candidate_sha256||null; for(let n=start;n<=end;n++){const cid=`cand_${crypto.randomUUID()}`;insCandidate.run(cid,workId,n,`第${n}集`,'queued',String(request||'').slice(0,1200),previousId,previousSha,now);insItem.run(id,n,cid,'queued',now,now);previousId=cid;previousSha=null;}})();
-  const cached = db.prepare("SELECT * FROM script_assistant_batches WHERE work_id=? AND episode_start=? AND episode_end=? AND planning_status='completed' AND planning_task_id IS NOT NULL ORDER BY created_at DESC LIMIT 1").get(workId,start,end);
+  if(duplicate) return scope ? kernelTestView(db,duplicate.batch_id).batches[0] : batches(db,workId).find(x=>x.batch_id===duplicate.batch_id);
+  const work=scope ? {id:workId,title:scope.title,sources:[scope.source]} : loadWork(config,workId,db);
+  db.transaction(()=>{db.prepare("INSERT INTO script_assistant_batches(batch_id,work_id,request,episode_start,episode_end,status,current_episode,total_count,planning_status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)").run(id,workId,String(request||''),start,end,'queued',start,end-start+1,'pending',now,now); const insItem=db.prepare('INSERT INTO script_assistant_batch_items(batch_id,episode_no,candidate_id,status,created_at,updated_at) VALUES(?,?,?,?,?,?)'); const insCandidate=db.prepare('INSERT INTO script_assistant_episode_candidates(candidate_id,work_id,episode_no,title,status,request,continuity_source_candidate_id,continuity_source_sha256,created_at) VALUES(?,?,?,?,?,?,?,?,?)'); const prior=scope ? null : db.prepare('SELECT candidate_id,candidate_sha256 FROM script_assistant_episode_candidates WHERE work_id=? AND episode_no=? AND status=? ORDER BY created_at DESC LIMIT 1').get(workId,start-1,'completed'); let previousId=prior?.candidate_id||null; let previousSha=prior?.candidate_sha256||null; for(let n=start;n<=end;n++){const cid=`cand_${crypto.randomUUID()}`;insCandidate.run(cid,workId,n,`第${n}集`,'queued',String(request||'').slice(0,1200),previousId,previousSha,now);insItem.run(id,n,cid,'queued',now,now);previousId=cid;previousSha=null;}})();
+  if(scope) db.prepare('UPDATE script_assistant_batches SET input_scope_json=? WHERE batch_id=?').run(JSON.stringify(scope),id);
+  const cached = !scope && db.prepare("SELECT * FROM script_assistant_batches WHERE work_id=? AND episode_start=? AND episode_end=? AND planning_status='completed' AND planning_task_id IS NOT NULL ORDER BY created_at DESC LIMIT 1").get(workId,start,end);
   if(cached){
     const ids=JSON.parse(cached.planning_expert_task_ids_json||'[]');
     const tasks=[managed.getTask(db,cached.planning_task_id),...ids.map(t=>managed.getTask(db,t))];
@@ -219,10 +222,25 @@ function createBatch(db, log, config, workId, request, start, end) {
     db.prepare("UPDATE script_assistant_batches SET planning_status='completed',planning_output=?,planning_hash=?,planning_completed_at=?,updated_at=? WHERE batch_id=?").run(output,hash(output),now,now,id);
   } else {
     const planSources=work.sources.filter(s=>s.available&&['core','character','continuity'].includes(s.kind)).map(s=>`${s.title} (${s.kind}):\n${s.text}`).join('\n').slice(0,5200);
-    const planInput=`你是Producer，负责一次性为《${work.title}》第${start}-${end}集批量创作建立可执行策划快照。只输出给Story Writer使用的故事设定、人物目标与关系、分集目标、每集节拍与场次、冲突、反转、集尾钩子、连续性约束、格式与时长要求。请在计划末尾明确选择需要补充的专家标签（relationship、interactive、story，可多选），供本地编排器调用；没有必要时写“无需专家”。不要写正文，不调用工具、文件系统、网络或其他Agent，不加载Skill，不修改Canon。用户要求：${String(request||'按现有规划创作').slice(0,1200)}\n已核验资料：\n${planSources||'暂无集中规划，请基于作品资料形成保守、可执行的范围规划。'}`;
+    const isolation=scope ? '本轮唯一故事输入为下面的故事内核，禁止读取旧分集、旧正文、旧审核或历史Session。先给出全剧方向和候选总集数（未确认），再给第一集完整可执行节拍、2至3个选择点、短分支、汇合状态、90秒单次观看路径与硬钩子。人物必须以此内核阿棠为准。只创作第一集，绝不续写第二集。全文控制5000汉字以内。\n' : '';
+    const planInput=`${isolation}你是Producer，负责一次性为《${work.title}》第${start}-${end}集批量创作建立可执行策划快照。只输出给Story Writer使用的故事设定、人物目标与关系、分集目标、每集节拍与场次、冲突、反转、集尾钩子、连续性约束、格式与时长要求。请在计划末尾明确选择需要补充的专家标签（relationship、interactive、story，可多选），供本地编排器调用；没有必要时写“无需专家”。不要写正文，不调用工具、文件系统、网络或其他Agent，不加载Skill，不修改Canon。用户要求：${String(request||'按现有规划创作').slice(0,1200)}\n已核验资料：\n${planSources||'暂无集中规划，请基于作品资料形成保守、可执行的范围规划。'}`;
     try { const planTask=managed.createTask(db,log,{agent_id:PRODUCER,work_id:workId,input:planInput,orchestration:true,episode_id:`batch-plan:${id}`,context_hash:hash(planInput)}); db.prepare("UPDATE script_assistant_batches SET planning_task_id=?,planning_status='running',updated_at=? WHERE batch_id=?").run(planTask.task_id,new Date().toISOString(),id); } catch(e) { db.prepare("UPDATE script_assistant_batches SET planning_status='failed',status='failed',error_text=?,updated_at=? WHERE batch_id=?").run(e.message,new Date().toISOString(),id); }
   }
-  setImmediate(()=>executeBatch(db,log,config,id)); return batches(db,workId).find(x => x.batch_id===id);
+  setImmediate(()=>executeBatch(db,log,config,id)); return scope ? kernelTestView(db,id).batches[0] : batches(db,workId).find(x => x.batch_id===id);
+}
+function createKernelTest(db,log,config,workId,kernelPath){
+  if(workId!=='rainforest')throw new Error('本轮测试只属于雨林作品');
+  const bytes=fs.readFileSync(kernelPath);const text=bytes.toString('utf8');
+  if(!text.trim()||text.length>12000)throw new Error('故事内核为空或超过本轮范围');
+  const scope={kind:'kernel_only',title:'雨林 · 故事内核独立测试',source:{id:'kernel-only',title:'故事内核 v1（唯一故事输入）',kind:'core',available:true,text,sha256:hash(bytes)}};
+  return createBatch(db,log,config,workId,'仅故事内核测试 '+scope.source.sha256+'；全剧候选规划，第一集90秒互动剧正文及独立审核；无旧资料，无自动批准',1,1,scope);
+}
+function kernelTestView(db,id){
+ const b=db.prepare('SELECT * FROM script_assistant_batches WHERE batch_id=?').get(id);
+ if(!b?.input_scope_json)throw new Error('不是故事内核隔离测试');
+ const scope=JSON.parse(b.input_scope_json);
+ const items=db.prepare('SELECT * FROM script_assistant_batch_items WHERE batch_id=? ORDER BY episode_no').all(id);
+ return {work_id:b.work_id,title:scope.title,source:scope.source,batches:[{...b,items}],candidates:items.map(i=>db.prepare('SELECT * FROM script_assistant_episode_candidates WHERE candidate_id=?').get(i.candidate_id))};
 }
 async function executeBatch(db,log,config,batchId){
   if(ACTIVE_BATCH_EXECUTIONS.has(batchId)) return;
@@ -230,16 +248,19 @@ async function executeBatch(db,log,config,batchId){
   if(b.status==='running' && b.current_episode != null) return;
   if (b.planning_status === 'pending' || b.planning_status === 'running' || b.planning_status === 'experts') {
     if (!b.planning_task_id) { db.prepare("UPDATE script_assistant_batches SET planning_status='failed',status='failed',error_text='Producer策划任务缺失' WHERE batch_id=?").run(batchId); return; }
+    const originalPlan=managed.getTask(db,b.planning_task_id);
+    if(originalPlan?.session_id && ['incomplete','awaiting_recovery'].includes(originalPlan.task_status)) await managed.refreshTask(db,b.planning_task_id);
     const plan = await waitTask(db,b.planning_task_id).catch(e=>({task_status:'incomplete',error_text:e.message}));
     const recoverable=['incomplete','awaiting_recovery','running','submitted','starting'].includes(plan.task_status);
     if (plan.task_status!=='completed' || !plan.output_text) { db.prepare("UPDATE script_assistant_batches SET planning_status=?,status=?,error_text=?,updated_at=? WHERE batch_id=?").run(recoverable?'awaiting_recovery':'failed',recoverable?'paused':'failed',`Producer策划${recoverable?'等待恢复':'失败'}：${plan.error_text||plan.task_status}`,new Date().toISOString(),batchId); return; }
     let expertIds=[]; try { expertIds=JSON.parse(b.planning_expert_task_ids_json||'[]'); } catch { expertIds=[]; }
     if (!expertIds.length) {
-      const selected=planAgents(plan.output_text||'');
+      const scope=b.input_scope_json ? JSON.parse(b.input_scope_json) : null;
+      const selected=scope ? ['agent-20261011131626-3w9ao','agent-20261011131703-mbc7o','agent-20261011131619-47ft8'] : planAgents(plan.output_text||'');
       if (!selected.length) selected.push('agent-20261011131626-3w9ao','agent-20261011131619-47ft8');
       const labels={ 'agent-20261011131619-47ft8':'Story Writer','agent-20261011131626-3w9ao':'Relationship Writer','agent-20261011131703-mbc7o':'Interactive Designer' };
-      for (const agent of selected.slice(0,2)) {
-        const expertInput=`${plan.output_text}\n\n你是${labels[agent]||'专业剧本专家'}。只针对第${b.episode_start}-${b.episode_end}集提出可执行的补充资料：人物/关系状态、互动设计或故事结构与节拍。不要写完整剧本，不调用工具或文件，不修改Canon。输出具体事实、风险和每集建议，供Story Writer使用。`;
+      for (const agent of selected.slice(0,scope ? 3 : 2)) {
+        const expertInput=`${scope ? '本轮唯一故事原始输入：\n'+scope.source.text+'\n禁止读取旧资料、历史Session或加载Skill。以下Producer输出是本次新规划。请在3000字以内给出本专业方案。\n' : ''}${plan.output_text}\n\n你是${labels[agent]||'专业剧本专家'}。只针对第${b.episode_start}-${b.episode_end}集提出可执行的补充资料：人物/关系状态、互动设计或故事结构与节拍。不要写完整剧本，不调用工具或文件，不修改Canon。输出具体事实、风险和每集建议，供Story Writer使用。`;
         const task=managed.createTask(db,log,{agent_id:agent,work_id:b.work_id,input:expertInput,orchestration:true,episode_id:`batch-expert:${batchId}:${agent}`,context_hash:hash(expertInput)});
         expertIds.push(task.task_id);
       }
@@ -248,12 +269,12 @@ async function executeBatch(db,log,config,batchId){
     const expertTasks=[];
     for (const id of expertIds) {
       let task=managed.getTask(db,id);
-      if (task && task.task_status==='queued') task=await waitTask(db,id).catch(e=>({task_status:'incomplete',error_text:e.message}));
+      if (task && ['queued','starting','submitted','running'].includes(task.task_status)) task=await waitTask(db,id).catch(e=>({task_status:'incomplete',error_text:e.message}));
       else if (task && ['incomplete','awaiting_recovery','running','submitted','starting'].includes(task.task_status)) task=await managed.refreshTask(db,id);
       expertTasks.push(task);
     }
     const incompleteExpert=expertTasks.find(t=>!t||t.task_status!=='completed'||!t.output_text);
-    if(incompleteExpert){const recoverable=['incomplete','awaiting_recovery','running','submitted','starting'].includes(incompleteExpert.task_status);db.prepare("UPDATE script_assistant_batches SET planning_status=?,status='paused',error_text=?,updated_at=? WHERE batch_id=?").run(recoverable?'awaiting_recovery':'failed',`专家策划${recoverable?'等待恢复':'失败'}：${incompleteExpert.error_text||incompleteExpert.task_status||'unknown'}`,new Date().toISOString(),batchId);return;}
+    if(incompleteExpert){const recoverable=['incomplete','awaiting_recovery','running','submitted','starting'].includes(incompleteExpert?.task_status);db.prepare("UPDATE script_assistant_batches SET planning_status=?,status='paused',error_text=?,updated_at=? WHERE batch_id=?").run(recoverable?'awaiting_recovery':'failed',`专家策划${recoverable?'等待恢复':'失败'}：${incompleteExpert?.error_text||incompleteExpert?.task_status||'unknown'}`,new Date().toISOString(),batchId);return;}
     const expertOutputs=expertTasks.map(t=>`专家(${t.agent_id})：\n${t.output_text}`);
     const combined=`Producer策划：\n${plan.output_text}\n\n${expertOutputs.join('\n\n')}`;
     db.prepare("UPDATE script_assistant_batches SET planning_status='completed',planning_output=?,planning_hash=?,planning_expert_outputs_json=?,planning_completed_at=?,error_text=NULL,updated_at=? WHERE batch_id=?").run(combined,hash(combined),JSON.stringify(expertOutputs),new Date().toISOString(),new Date().toISOString(),batchId);
@@ -325,7 +346,7 @@ async function recoverEpisodeCandidate(db,log,config,candidateId){
       if(attempts >= 2) throw new Error('Editor 已有一次受控重试且仍无有效终态，保留证据并停止重试');
       editorId=null; editorCandidateId=`${candidateId}:editor:retry1`;
     }
-    let et; if(!editorId){const input=`你是Independent Editor。独立审核第${c.episode_no}集完整候选，输出 PASS、CONDITIONAL PASS 或 FAIL，并列出最多5条具体证据。不得改写正文，不得把候选视为Canon。\n正文：\n${text}`;const created=managed.createTask(db,log,{agent_id:EDITOR,work_id:c.work_id,input,orchestration:true,episode_id:`ep${c.episode_no}`,candidate_id:editorCandidateId,candidate_sha256:hash(text),context_hash:hash(input)});editorId=created.task_id;db.prepare("UPDATE script_assistant_episode_candidates SET status='reviewing',editor_task_id=? WHERE candidate_id=?").run(editorId,candidateId);et=await waitTask(db,editorId);}else{et=existingEditor;if(et && ['awaiting_recovery','incomplete','running','submitted','starting'].includes(et.task_status))et=await managed.refreshTask(db,editorId);}if(et?.task_status!=='completed'||!et.output_text||reviewVerdict(et.output_text)==='UNKNOWN')throw new Error('Editor 尚无可验证审核终态，批次保持暂停');db.prepare("UPDATE script_assistant_episode_candidates SET status='completed',editor_task_id=?,editor_review=?,completed_at=?,error_text=NULL WHERE candidate_id=?").run(editorId,et.output_text,new Date().toISOString(),candidateId);
+    let et; if(!editorId){const reviewBatch=db.prepare('SELECT b.planning_output FROM script_assistant_batches b JOIN script_assistant_batch_items i ON i.batch_id=b.batch_id WHERE i.candidate_id=?').get(candidateId);const input=`你是Independent Editor。独立审核第${c.episode_no}集完整候选，开头输出评定：PASS、CONDITIONAL PASS 或 FAIL，并列出最多5条具体证据。检查故事逻辑与人物动机、冲突节奏、反转与集尾钩子、策划和节拍落实、连续性、格式对白动作、预计时长与可拍摄性。不得调用工具、改写正文或把候选视为Canon。\n本次策划：\n${reviewBatch?.planning_output || '未提供，不能宣称核对过策划'}\n正文：\n${text}`;const created=managed.createTask(db,log,{agent_id:EDITOR,work_id:c.work_id,input,orchestration:true,episode_id:`ep${c.episode_no}`,candidate_id:editorCandidateId,candidate_sha256:hash(text),context_hash:hash(input)});editorId=created.task_id;db.prepare("UPDATE script_assistant_episode_candidates SET status='reviewing',editor_task_id=? WHERE candidate_id=?").run(editorId,candidateId);et=await waitTask(db,editorId);}else{et=existingEditor;if(et && ['awaiting_recovery','incomplete','running','submitted','starting'].includes(et.task_status))et=await managed.refreshTask(db,editorId);}if(et?.task_status!=='completed'||!et.output_text||reviewVerdict(et.output_text)==='UNKNOWN')throw new Error('Editor 尚无可验证审核终态，批次保持暂停');db.prepare("UPDATE script_assistant_episode_candidates SET status='completed',editor_task_id=?,editor_review=?,completed_at=?,error_text=NULL WHERE candidate_id=?").run(editorId,et.output_text,new Date().toISOString(),candidateId);
   }
   return db.prepare('SELECT * FROM script_assistant_episode_candidates WHERE candidate_id=?').get(candidateId);
 }
@@ -609,4 +630,4 @@ function budget(db) {
   return { chat: { used: chatUsed, limit: chatLimit, remaining: chatLimit > 0 ? Math.max(0, chatLimit - chatUsed) : null }, orchestration: { used: orchestrationUsed, limit: orchestrationLimit, remaining: orchestrationLimit > 0 ? Math.max(0, orchestrationLimit - orchestrationUsed) : null }, in_flight: db.prepare("SELECT count(*) n FROM managed_agent_tasks WHERE task_status IN ('queued','starting','submitted','running')").get().n };
 }
 
-module.exports = { ensureTable, works, loadWork, registerWork, summary, messages, buildInput, classifyCreativeRequest, createMessage, budget, runs, createRun, revisions, episodeCandidates, batches, createEpisodeCandidate, retryEpisodeCandidate, createBatch, pauseBatch, resumeBatch, approveEpisodeCandidate, reviewDecisions, saveReviewDecision, createRevision, approveRevision, refreshRevision, createEditorRecovery, recoverEpisodeCandidate, PRODUCER, _validateBatchRange: validateBatchRange, _episodePlanning: episodePlanning, _latestEpisodeContext: latestEpisodeContext, _continuityContext: continuityContext };
+module.exports = { createKernelTest, kernelTestView, ensureTable, works, loadWork, registerWork, summary, messages, buildInput, classifyCreativeRequest, createMessage, budget, runs, createRun, revisions, episodeCandidates, batches, createEpisodeCandidate, retryEpisodeCandidate, createBatch, pauseBatch, resumeBatch, approveEpisodeCandidate, reviewDecisions, saveReviewDecision, createRevision, approveRevision, refreshRevision, createEditorRecovery, recoverEpisodeCandidate, PRODUCER, _validateBatchRange: validateBatchRange, _episodePlanning: episodePlanning, _latestEpisodeContext: latestEpisodeContext, _continuityContext: continuityContext };

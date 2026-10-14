@@ -113,3 +113,12 @@
 本轮新增 `script_assistant_episode_candidates`、`script_assistant_batches` 和 `script_assistant_batch_items`，新集候选正文、哈希、Writer/Editor 任务、审核结论和批准状态与原有 Revision 分离；批次逐集执行，保存当前集和已完成数，支持暂停/恢复与服务重启后的可恢复状态，已完成集跳过以避免重复收费。新增接口用于新集候选、批次查询、创建、暂停和恢复。由于当前 Runtime 只有《雨林》既有资料，没有隔离测试作品，本轮没有启动《雨林》第四集，也未声称通过真实新集验收。
 
 本轮新收费请求为零。历史真实 Producer/Writer/Editor 证据继续复用；新端到端调用若必要，需先获取明确付费授权。当前模型价格未核实，不编造金额。雨林正文、候选稿与人工批准状态不修改，不写 Canon，不进入视频生产。
+
+
+## 2026-10-15 雨林仅故事内核测试：真实第一集已交付
+
+Producer + Relationship + Interactive + Story结构设计 → Writer → Editor，共6次真实请求。仅故事内核SHA d7e17e433dde4414c0d2b41c17d4ed11a100a266da2904158603885efbb4f05a，Writer输入逐字allowlist匹配。策划13,675字符，正文4,979字符，Editor CONDITIONAL PASS，not_approved。旧剧情未加载，未生成第二集，未改Canon。
+
+批次batch_30df930d-a129-4b18-a65f-e19619fe0eea；候选cand_f9680c40-ad8b-4b53-9322-29dc5bc72514。3014隔离视图可查看并导出专业策划、全文和评定；下载逐字核验、刷新和浏览器Console验证完成。云端链23分06.6秒；本地恢复确认含服务中断延迟，另记。输入62,789/输出61,346/缓存26,448，价格未配置，金额未知。完整证据与局限见RAINFOREST_KERNEL_TEST_ACCEPTANCE.md。
+
+当前唯一下一动作：交由用户阅读本次新测试版与五项真实Editor意见；只有用户要求时定向修改。不要自动续写第二集或批准正式稿。此次完成单集内容生产，不宣称全剧并行产品已完成。

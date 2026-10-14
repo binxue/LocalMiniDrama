@@ -10,8 +10,8 @@
       <h2>继续创作已有作品</h2>
       <p>选择作品，阅读剧本或修改版本；直接告诉 AI 创作助手你希望改善什么。团队协作会创建独立草稿，原稿保持不变。</p>
       <el-button @click="mode='chat'">开始对话</el-button>
-      <el-button link @click="mode='team'">查看高级审阅</el-button>
-      <el-button link @click="showIntake = true">登记原创 / 小说改编</el-button>
+      <el-button v-if="!route.query.kernelTest" link @click="mode='team'">查看高级审阅</el-button>
+      <el-button v-if="!route.query.kernelTest" link @click="showIntake = true">登记原创 / 小说改编</el-button>
       <p class="muted">直接告诉助手你想创作、修改或审核什么；后台会按需安排专业协作。</p>
     </section>
     <div class="assistant-layout" v-loading="loading">
@@ -50,8 +50,8 @@
       </section>
       <section v-if="episodeCandidates.length || batches.length" class="creation-progress">
         <h3>分集创作进度</h3>
-        <article v-for="batch in batches.slice(0, 3)" :key="batch.batch_id" class="progress-row"><div><strong>第 {{ batch.episode_start }}—{{ batch.episode_end }} 集 · {{ batchStatusLabel(batch.status) }}</strong><p class="muted">已完成 {{ batch.completed_count }}/{{ batch.total_count }} · 当前第 {{ batch.current_episode || '等待' }} 集</p><details v-if="batch.planning_output"><summary>查看本次专业创作方案</summary><div class="markdown-body" v-html="renderReply(batch.planning_output, null)"></div></details><p v-if="batch.error_text" class="error-text">{{ batch.error_text }}</p></div><div class="progress-actions"><el-button v-if="['queued','running','pause_requested'].includes(batch.status)" size="small" @click="pauseBatch(batch)">暂停</el-button><el-button v-if="['paused','failed'].includes(batch.status)" size="small" type="primary" @click="resumeBatch(batch)">继续</el-button></div></article>
-        <article v-for="candidate in episodeCandidates.slice(0, 5)" :key="candidate.candidate_id" class="progress-row"><div><strong>第 {{ candidate.episode_no }} 集 · {{ candidateStatusLabel(candidate.status) }}</strong><p class="muted">审核：{{ editorLabel(candidate.editor_review) }} · {{ candidate.approval_status === 'not_approved' ? '尚未确认' : '已确认，待发布' }}</p><p v-if="candidate.error_text" class="error-text">{{ candidate.error_text }}</p></div><div class="progress-actions"><el-button v-if="candidate.candidate_text" size="small" @click="openEpisodeCandidate(candidate)">阅读剧本与审核</el-button><el-button v-if="candidate.candidate_text" size="small" @click="exportText(`第${candidate.episode_no}集 · 候选稿`,candidate.candidate_text)">导出草稿</el-button><el-button v-if="candidate.status==='awaiting_recovery'" size="small" @click="recoverEpisode(candidate)">回查原任务</el-button></div></article>
+        <article v-for="batch in batches.slice(0, 3)" :key="batch.batch_id" class="progress-row"><div><strong>第 {{ batch.episode_start }}—{{ batch.episode_end }} 集 · {{ batch.planning_status === 'running' ? '正在故事策划' : batch.planning_status === 'experts' ? '正在专业团队设计' : batchStatusLabel(batch.status) }}</strong><p class="muted">已完成 {{ batch.completed_count }}/{{ batch.total_count }} · 当前第 {{ batch.current_episode || '等待' }} 集</p><details v-if="batch.planning_output"><summary>查看本次专业创作方案</summary><el-button size="small" @click="exportText(context?.title + ' · 专业策划',batch.planning_output)">导出专业策划</el-button><div class="markdown-body" v-html="renderReply(batch.planning_output, null)"></div></details><p v-if="batch.error_text" class="error-text">{{ batch.error_text }}</p></div><div class="progress-actions"><el-button v-if="['queued','running','pause_requested'].includes(batch.status)" size="small" @click="pauseBatch(batch)">暂停</el-button><el-button v-if="['paused','failed'].includes(batch.status)" size="small" type="primary" @click="resumeBatch(batch)">继续</el-button></div></article>
+        <article v-for="candidate in episodeCandidates.slice(0, 5)" :key="candidate.candidate_id" class="progress-row"><div><strong>第 {{ candidate.episode_no }} 集 · {{ candidateStatusLabel(candidate.status) }}</strong><p class="muted">审核：{{ editorLabel(candidate.editor_review) }} · {{ candidate.approval_status === 'not_approved' ? '尚未确认' : '已确认，待发布' }}</p><p v-if="candidate.error_text" class="error-text">{{ candidate.error_text }}</p></div><div class="progress-actions"><el-button v-if="candidate.candidate_text" size="small" @click="openEpisodeCandidate(candidate)">阅读剧本与审核</el-button><el-button v-if="candidate.candidate_text" size="small" @click="exportText(`${route.query.kernelTest ? '雨林 · 故事内核独立测试 · ' : ''}第${candidate.episode_no}集 · 候选稿`,candidate.candidate_text)">导出草稿</el-button><el-button v-if="candidate.status==='awaiting_recovery'" size="small" @click="recoverEpisode(candidate)">回查原任务</el-button></div></article>
       </section>
         <p v-if="lastIntentNotice" class="intent-notice">{{ lastIntentNotice }}</p>
         <details v-if="mode === 'team'" open class="advanced-tools">
@@ -76,7 +76,7 @@
           <article v-for="revision in revisions" :key="revision.revision_id" :data-revision="revision.revision_id" class="run-card"><header class="revision-heading"><strong>{{ revision.revision_id.startsWith('acceptance_test_') ? '验收测试副本（不代表真实审阅） · ' : '' }}{{ revision.source_id === 'ep3' ? '第三集 · 修改版本' : revision.source_id }} · {{ statusLabel(revision.status) }}</strong><span>Editor：{{ editorLabel(revision.editor_review) }} · 最终确认：{{ revision.approval_status === 'not_approved' ? '尚未最终确认' : '已确认，待发布' }}</span></header><div v-if="revision.candidate_text" class="diff-toolbar"><el-radio-group v-model="diffMode[revision.revision_id]" size="small"><el-radio-button label="changes">只看修改</el-radio-button><el-radio-button label="all">查看全文</el-radio-button></el-radio-group><el-button size="small" @click="exportText((revisionSource[revision.revision_id]?.title || revision.source_id) + ' · 独立修改稿',revision.candidate_text)">导出修改稿（草稿）</el-button><span>{{ diffBlocks(revision).filter(b => b.type !== 'unchanged').length }} 处修改 · {{ decisions[revision.revision_id]?.length || 0 }} 项审阅决定</span></div><div class="revision-workbench"><div v-if="revision.candidate_text" class="diff-blocks"><section v-for="block in visibleDiffBlocks(revision)" :key="block.id" class="diff-block" :class="block.type"><div class="block-label">{{ block.type === 'added' ? '新增' : block.type === 'removed' ? '删除' : block.type === 'unchanged' ? '未修改' : '修改' }} · 原稿第 {{ block.oldLine }} 行 / 修改稿第 {{ block.newLine }} 行</div><div class="revision-diff"><pre class="source-document"><span v-for="(part,i) in block.oldParts" :key="i" :class="{ 'diff-removed-text': part.removed }">{{ part.value }}</span></pre><pre class="source-document"><span v-for="(part,i) in block.newParts" :key="i" :class="{ 'diff-added-text': part.added }">{{ part.value }}</span></pre></div><el-input v-if="block.type !== 'unchanged'" v-model="reviewNotes[block.id]" type="textarea" :maxlength="2000" placeholder="填写你的修改意见（可选）" /><div v-if="block.type !== 'unchanged'" class="review-actions"><el-button size="small" @click="decideRevision(revision,block,'accept')">接受修改</el-button><el-button size="small" @click="decideRevision(revision,block,'reject')">退回修改</el-button><el-button size="small" @click="decideRevision(revision,block,'revise')">要求继续修订</el-button><el-button size="small" @click="decideRevision(revision,block,'undecided')">暂不决定</el-button><span>{{ decisionLabel(decisions[revision.revision_id],block.id) }}</span></div></section></div><div v-else class="revision-diff"><pre class="source-document">{{ revisionSource[revision.revision_id]?.text || '原稿加载中…' }}</pre><pre class="source-document">{{ revision.candidate_text || '候选稿尚未生成' }}</pre></div><aside v-if="revision.editor_review" class="editor-review"><h4>Independent Editor · 全局意见 / 待定位</h4><div class="markdown-body" v-html="renderReply(revision.editor_review, null)"></div></aside></div><details class="trace"><summary>技术详情</summary><p>Revision：{{ revision.revision_id }}<br>原稿 SHA256：{{ revision.source_sha256 }}<br>候选 SHA256：{{ revision.candidate_sha256 || '等待生成' }}<br>Writer Task：{{ revision.writer_task_id || '无' }} · Editor Task：{{ revision.editor_task_id || '无' }}</p></details><el-button v-if="['failed','awaiting_recovery','awaiting_next_authorization'].includes(revision.status) && (revision.editor_task_id || revision.writer_task_id || revision.producer_task_id)" size="small" @click="recoverRevision(revision.revision_id)">恢复原任务状态（不重发）</el-button><el-button v-if="revision.status === 'completed' && revision.approval_status === 'not_approved' && ['审核通过','审核有条件通过，仍需修改或确认'].includes(editorLabel(revision.editor_review))" type="primary" size="small" @click="approveRevision(revision.revision_id)">确认完整修改版本</el-button></article>
         </section>
         </details>
-        <div v-if="!messages.length" class="empty-chat">
+        <div v-if="!route.query.kernelTest && !messages.length" class="empty-chat">
           <el-icon :size="32"><ChatDotRound /></el-icon>
           <h3>从已有作品开始聊</h3>
           <p>发送问题时，会读取并核对原始资料，按长度预算提供片段；未提供的内容会明确列出。</p>
@@ -131,6 +131,7 @@
     <el-dialog v-model="showSource" :title="sourceView?.title || '作品原文件'" width="min(850px, 94vw)">
       <p class="muted">{{ sourceView?.path }}<br>SHA256：{{ sourceView?.sha256 }}</p>
       <el-button :disabled="!sourceView?.available" @click="exportText(sourceView.title,sourceView.raw_text || sourceView.text)">导出当前剧本草稿</el-button>
+      <el-button v-if="sourceView?.editor_review" @click="exportText(sourceView.title + ' · 专业评定',sourceView.editor_review)">导出专业评定</el-button>
       <template v-if="sourceView?.editor_review"><el-divider /><h3>Independent Editor 审核意见</h3><div class="markdown-body" v-html="renderReply(sourceView.editor_review, null)"></div><p class="muted">审核结论不等于人工批准：当前版本仍需明确确认。</p></template>
       <el-alert v-if="citationNotice" :title="citationNotice" type="warning" :closable="false" />
       <div v-if="sourceView?.is_candidate && sourceView?.available" class="markdown-body" v-html="renderReply(sourceView.text, null)"></div><pre v-else class="source-document">{{ sourceView?.available ? sourceView.text : sourceView?.error }}</pre>
@@ -146,7 +147,7 @@ import { ElMessageBox } from 'element-plus'
 import { revisionDiff } from '@/utils/revisionDiff'
 import { useRouter, useRoute } from 'vue-router'
 import { ArrowLeft, ChatDotRound } from '@element-plus/icons-vue'
-import { getAssistantWorks, registerAssistantWork, getAssistantContext, getAssistantIntent, getAssistantMessages, sendAssistantMessage, refreshAssistantMessage, getAssistantSource, getAssistantRuns, createAssistantRun, getAssistantRevisions, createAssistantRevision, approveAssistantRevision, refreshAssistantRevision, recoverAssistantEditor, getReviewDecisions, saveReviewDecision, getAssistantCandidates, getAssistantBatches, createAssistantEpisode, createAssistantBatch, pauseAssistantBatch, resumeAssistantBatch, recoverAssistantEpisode } from '@/api/scriptAssistant'
+import { getKernelTest, getAssistantWorks, registerAssistantWork, getAssistantContext, getAssistantIntent, getAssistantMessages, sendAssistantMessage, refreshAssistantMessage, getAssistantSource, getAssistantRuns, createAssistantRun, getAssistantRevisions, createAssistantRevision, approveAssistantRevision, refreshAssistantRevision, recoverAssistantEditor, getReviewDecisions, saveReviewDecision, getAssistantCandidates, getAssistantBatches, createAssistantEpisode, createAssistantBatch, pauseAssistantBatch, resumeAssistantBatch, recoverAssistantEpisode } from '@/api/scriptAssistant'
 
 const router = useRouter(), route = useRoute()
 const works = ref([]), selected = ref(''), context = ref(null), messages = ref([]), draft = ref(''), budget = ref({})
@@ -167,7 +168,7 @@ const lastIntentNotice = computed(() => {
 const prompts = ['我们前三集剧本现在是什么状态？', '第一集和第三集之间，有哪些需要注意的连续性问题？', '你建议先修改前三集，还是开始第四集？说明依据。']
 let timer, requestKey = null, submittedText = null, generation = 0, alive = true
 const isActive = task => ['queued', 'starting', 'submitted', 'running'].includes(task?.task_status)
-const canSend = computed(() => selected.value && draft.value.trim() && !sending.value && !messages.value.some(m => isActive(m.task)) && (!budget.value.chat?.limit || budget.value.chat.remaining > 0) && !context.value?.gaps?.length)
+const canSend = computed(() => !route.query.kernelTest && selected.value && draft.value.trim() && !sending.value && !messages.value.some(m => isActive(m.task)) && (!budget.value.chat?.limit || budget.value.chat.remaining > 0) && !context.value?.gaps?.length)
 const episodeTitle = id => context.value?.scripts?.find(s => s.id === id)?.title || id
 const statusLabel = state => ({ queued: '排队', starting: '创建 Session', submitted: '已提交', running: '执行中', completed: '回复已返回', failed: '执行失败', incomplete: '正文不完整', interrupted: '服务重启中断' }[state] || state)
 const batchStatusLabel = state => ({ queued: '等待创作', running: '创作中', pause_requested: '即将暂停', paused: '已暂停', completed: '已完成', failed: '需要处理' }[state] || state)
@@ -195,6 +196,7 @@ async function reloadMessages() {
   messages.value = data.messages; budget.value = data.budget
 }
 async function reload() {
+  if(route.query.kernelTest){const x=await getKernelTest(route.query.kernelTest);selected.value=x.work_id;works.value=[{id:x.work_id,title:x.title}];context.value={title:x.title,sources:[x.source],scripts:[],approval_notice:'本轮仅使用故事内核，旧规划与旧稿未加载；新测试版本未批准。'};batches.value=x.batches;episodeCandidates.value=x.candidates;return;}
   if (!selected.value) return
   error.value = ''
   try { await reloadMessages(); context.value = await getAssistantContext(selected.value); runs.value = (await getAssistantRuns(selected.value)).runs; revisions.value = (await getAssistantRevisions(selected.value)).revisions; episodeCandidates.value=(await getAssistantCandidates(selected.value)).candidates; batches.value=(await getAssistantBatches(selected.value)).batches; await loadRevisionDetails() } catch (e) { error.value = e.message }
@@ -206,6 +208,7 @@ async function loadRevisionDetails() {
   }
 }
 async function changeWork() {
+  if(route.query.kernelTest){await reload();return;}
   generation++; messages.value = []; context.value = null; error.value = ''; loading.value = true
   requestKey = null; submittedText = null
   await router.replace({ query: { work: selected.value } })
@@ -219,7 +222,7 @@ function diffBlocks(revision) {
   return revisionDiff(source.text, revision.candidate_text || '', revision.source_sha256, revision.candidate_sha256)
 }
 function visibleDiffBlocks(revision) { const blocks = diffBlocks(revision); return diffMode.value[revision.revision_id] === 'all' ? blocks : blocks.filter(b => b.type !== 'unchanged') }
-function editorLabel(text) { const m = String(text || '').split('\n').slice(0,4).join('\n').match(/(?:结论|裁定|判定|评定|Verdict)[^\n:：]*[:：]\s*(?:\*\*)?(CONDITIONAL PASS|PASS|FAIL)\b/i); return m ? ({ PASS: '审核通过', 'CONDITIONAL PASS': '审核有条件通过，仍需修改或确认', FAIL: '审核发现问题' }[m[1].toUpperCase()]) : '审核结论待核实' }
+function editorLabel(text) { const heading = String(text || '').split('\n').slice(0,4).join('\n'); const m = heading.match(/(?:结论|裁定|判定|评定|Verdict)[^\n:：]*[:：]\s*(?:\*\*)?(CONDITIONAL PASS|PASS|FAIL)\b/i) || heading.match(/^\s*(?:#{1,6}\s+)?(?:\*\*)?(CONDITIONAL PASS|PASS|FAIL)(?:\*\*)?\s*$/im); return m ? ({ PASS: '审核通过', 'CONDITIONAL PASS': '审核有条件通过，仍需修改或确认', FAIL: '审核发现问题' }[m[1].toUpperCase()]) : '审核结论待核实' }
 function exportText(title, text) {
   const body = `# ${title}\n\n> 草稿导出，尚未最终确认；AI 审核不替代人工批准。\n\n${text}`
   const url = URL.createObjectURL(new Blob([body], { type: 'text/markdown;charset=utf-8' }))
@@ -235,8 +238,10 @@ async function startRun() {
   try { await createAssistantRun(selected.value, runRequest.value.trim()); runRequest.value = ''; await reload() } catch (e) { error.value = e.message } finally { runSending.value = false }
 }
 async function openRevision(id) { mode.value = 'team'; await reload(); requestAnimationFrame(() => document.querySelector(`[data-revision="${CSS.escape(id)}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })) }
-function openEpisodeCandidate(candidate) { sourceView.value = { title: `第${candidate.episode_no}集候选稿`, text: candidate.candidate_text, is_candidate: true, available: true, sha256: candidate.candidate_sha256, editor_review: candidate.editor_review }; showSource.value = true }
+function openEpisodeCandidate(candidate) { sourceView.value = { title: `${route.query.kernelTest ? '雨林 · 故事内核独立测试 · ' : ''}第${candidate.episode_no}集候选稿`, text: candidate.candidate_text, is_candidate: true, available: true, sha256: candidate.candidate_sha256, editor_review: candidate.editor_review }; showSource.value = true }
 async function send() {
+  if(route.query.kernelTest){error.value='本次测试仅交付第一集；不在此输入隔离视图启动其他创作。';return;}
+
   if (!canSend.value) return
   const text = draft.value.trim()
   sending.value = true; error.value = ''
@@ -274,6 +279,7 @@ async function refreshTask(m) {
   try { await refreshAssistantMessage(selected.value, m.id); await reloadMessages() } catch (e) { error.value = e.message }
 }
 async function openSource(id) {
+  if(route.query.kernelTest){sourceView.value=context.value.sources.find(x=>x.id===id);showSource.value=true;return;}
   try { sourceView.value = await getAssistantSource(selected.value, id); showSource.value = true } catch (e) { error.value = e.message }
 }
 function renderReply(text, context) {
@@ -305,9 +311,11 @@ onMounted(async () => {
   document.addEventListener('click', onCitationClick)
   loading.value = true
   try {
+    if(route.query.kernelTest){await reload()} else {
     const data = await getAssistantWorks(); works.value = data.works; budget.value = data.budget
     selected.value = works.value.find(w => w.id === route.query.work)?.id || works.value[0]?.id || ''
     if (selected.value) await changeWork()
+    }
   } catch (e) { error.value = e.response?.status === 404 ? '本服务尚未启用剧本助手，请使用已配置的 M1 工作台服务。' : e.message }
   finally { loading.value = false }
   timer = setInterval(() => { if (selected.value && (batches.value.some(b => ['queued','running','pause_requested'].includes(b.status)) || episodeCandidates.value.some(c => ['writing','reviewing'].includes(c.status)) || messages.value.some(m => isActive(m.task)) || runs.value.some(r => ['queued','planning','experts','reviewing','deciding'].includes(r.status)) || revisions.value.some(r => ['queued','planning','writing','reviewing'].includes(r.status)))) reload().catch(e => { error.value = e.message }) }, 5000)

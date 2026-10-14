@@ -24,3 +24,5 @@ export const refreshAssistantRevision = id => request.post(`/script-assistant/re
 export const recoverAssistantEditor = id => request.post(`/script-assistant/revisions/${encodeURIComponent(id)}/recover-editor`)
 export const getReviewDecisions = id => request.get(`/script-assistant/revisions/${encodeURIComponent(id)}/review-decisions`)
 export const saveReviewDecision = (id, body) => request.post(`/script-assistant/revisions/${encodeURIComponent(id)}/review-decisions`, body)
+
+export const getKernelTest = id => request.get(`/script-assistant/kernel-tests/${encodeURIComponent(id)}`)
