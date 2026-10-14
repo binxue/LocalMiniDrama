@@ -1390,6 +1390,7 @@ async function processImageGeneration(db, log, imageGenId) {
         storageRoot: storageLocalPath,
       });
       if (guidance?.prompt) finalPrompt = guidance.prompt;
+      if (guidance?.references) reference_image_urls = guidance.references;
     }
 
     const result = await imageClient.callImageApi(db, log, {

@@ -47,6 +47,9 @@ test('billable send is preceded by durable UNKNOWN and binds actual attached-ima
 });
 test('narrative/invalid Agent JSON cannot become mock success; credential strings are redacted', () => {
   assert.throws(() => parseAgentJson('Agent unavailable; use historical 88 score'));
+  assert.deepEqual(parseAgentJson('Review complete.\n{"decision":"REVISE"}'), { decision:'REVISE' });
+  assert.throws(() => parseAgentJson('Review complete.\n{"decision":"PASS"}\nUnsupported trailing prose'));
+  assert.throws(() => parseAgentJson('Two objects: {"decision":"PASS"}{"decision":"REVISE"}'));
   assert.equal(redact('api_key=TEST_SECRET Bearer TEST_TOKEN').includes('TEST_SECRET'), false);
   assert.equal(redact('api_key=TEST_SECRET Bearer TEST_TOKEN').includes('TEST_TOKEN'), false);
 });
@@ -66,4 +69,18 @@ test('resume collects the existing turn with inclusive cursor without any billab
   assert.equal(result.execution.result_event_id, 'reply-test-only');
   assert.equal(result.execution.previous_errors.length, 1);
   assert.equal(result.execution.submit_event_id, 'send-test-only');
+});
+test('historical turns preceding the exact cursor cannot trigger concurrency or supply a stale reply', async () => {
+  const execution = { execution_id:'current-execution',input_hash:'current-hash',session_id:'session-fixture',submit_event_id:'current-send',execution_status:'UNKNOWN' };
+  const client = new ManagedAgentWorkbenchClient({root:os.tmpdir()});
+  client.command = async () => ({data:[
+    {id:'historical-send',type:'user.message'},
+    {id:'historical-reply',type:'agent.message',content:[{type:'text',text:'historical reply is not JSON'}]},
+    {id:'historical-idle',type:'session.status_idle'},
+    {id:'current-send',type:'user.message'},
+    {id:'current-reply',type:'agent.message',content:[{type:'text',text:JSON.stringify({execution_id:'current-execution',input_hash:'current-hash',verdict:'REVISE'})}]},
+    {id:'current-idle',type:'session.status_idle'},
+  ]});
+  const result=await client.collect(execution);
+  assert.equal(result.execution.result_event_id,'current-reply');
 });

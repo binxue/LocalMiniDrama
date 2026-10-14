@@ -9,6 +9,7 @@ foreach ($taskPort in @(5681, 3015)) {
 $env:LOCALMINIDRAMA_CONFIG_PATH = Join-Path $taskRuntime 'config.yaml'
 $env:LOCALMINIDRAMA_SAFE_RESTART = '1'
 $env:LOCALMINIDRAMA_STATIC_EVIDENCE_ROOT = Join-Path $taskRuntime 'evidence'
+$env:LOCALMINIDRAMA_IDENTITY_TRANSFER_MANIFEST = Join-Path $taskRuntime 'reference-transfer/manifest.json'
 $env:LOCALMINIDRAMA_FRONTEND_HOST = '127.0.0.1'
 $env:LOCALMINIDRAMA_FRONTEND_PORT = '3015'
 $env:LOCALMINIDRAMA_BACKEND_URL = 'http://127.0.0.1:5681'

@@ -2,6 +2,54 @@
 
 Date: 2026-10-15 (Asia/Shanghai). Stage: INCOMPLETE.
 
+## Current checkpoint (supersedes the earlier upload blocker below)
+
+The original PNG was preserved and normalized to JPEG solely for transport,
+without crop, resize or retouch. The source and transfer SHA-256 values are
+recorded in runtime/reference-transfer/manifest.json. Six real files were
+mounted read-only into the same official Session. No image generation was
+repeated, and historical UNKNOWN generation jobs remain unchanged.
+
+Mounted run: mounted-team-b001ec4d-e7b1-4d0d-a9ba-8ce0bc0d8206.
+Execution: exec-81367f75-921d-48b1-bfe4-d95592643b14.
+Submit: sevt-20261014173931-ww43x.
+Result: sevt-20261014174349-gn8x9.
+The real coordinator invoked photographer xkwim, inspector mxs79 and
+continuity bq81h (full child IDs and raw events retained in the run evidence).
+All three finished with end_turn. The director returned bound JSON after a
+prose preamble; the adapter now accepts one complete trailing JSON object
+without synthesizing fields, and reads all event pages before cursor slicing.
+
+Both reviewed shots 5/6, media 36/37, are REVISE. Real findings were imported
+through the existing isolated quality-check API, with no invented score or
+producer approval. Specialist identity disagreement is explicitly preserved.
+Recommendations suggesting a younger age/personality are not authorized:
+the original approximately-25-year-old script standard remains frozen.
+
+Native guidance now supplies the original identity to the image provider,
+excludes historical generated identity references in both path and data-URL
+forms, and requires a bound identity PASS rather than composition PASS alone.
+This is offline-verified implementation, not a proven new production result.
+Focused tests pass; full backend regression passed 125 tests before the final
+path-filter amendment, then the focused suite passed again.
+
+Existing 13 CNY plus two 10 CNY review reservations = 33 CNY retained in the
+original ledger structure. This is NOT actual spending or verified remaining
+budget. Actual settlement remains unknown. A read-only official billing query
+for director endpoint ep-m-20261011163555-x5rmp, October 2026, failed because
+the account has not enabled split billing. Do not treat this as zero cost.
+New paid production is paused until authoritative EP01 spending/remaining
+budget can be reconciled; no budget expansion or paid video is authorized.
+
+Isolated services were found no longer listening and restarted only on
+3015/5681. No existing service was terminated. Both rejected media reviews
+are now stored in the runnable workbench. Source-preservation verification
+again reports unchanged source DB, Git status and all media, quick_check=ok.
+
+Remaining: budget reconciliation; native paid-flow budget integration and
+live identity validation; original ordered first-scene production, whole-scene
+review and continuous preview; producer viewing acceptance. Stage incomplete.
+
 ## Source and ownership
 
 Formal source: H:/localminidrama-clean, branch

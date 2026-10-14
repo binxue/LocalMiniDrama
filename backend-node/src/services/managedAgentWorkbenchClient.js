@@ -11,6 +11,9 @@ function parseAgentJson(text) {
   let raw = String(text || '').trim();
   const fence = String.fromCharCode(96).repeat(3);
   if (raw.startsWith(fence) && raw.endsWith(fence)) raw = raw.slice(3, -3).replace(/^json\s*/i, '').trim();
+  // Preserve the remote envelope in evidence; accept one complete trailing
+  // object after prose without synthesizing or repairing its fields.
+  if (!raw.startsWith('{') && raw.includes('{')) raw = raw.slice(raw.indexOf('{'));
   return JSON.parse(raw);
 }
 function redact(text) {
@@ -74,6 +77,7 @@ class ManagedAgentWorkbenchClient {
       const definition = agent.Result || agent;
       if (definition.Id !== agentId || definition.Name !== agentName) throw new Error('Agent identity mismatch');
       execution.model = definition.Model;
+      execution.multiagent = definition.Multiagent || null;
       execution.execution_status = 'UNKNOWN';
       persist();
       const created = await this.command(['agent', 'session', 'create', '--agent-id', agentId,
@@ -127,13 +131,17 @@ class ManagedAgentWorkbenchClient {
     try {
       const events = new Map();
       let cursor = execution.submit_event_id;
-      const deadline = Date.now() + 240000;
+      const deadline = Date.now() + (execution.multiagent?.Type === 'coordinator' ? 900000 : 240000);
       let pageIndex = 0, idle = false;
       while (Date.now() < deadline) {
         const page = await this.command(['agent', 'session', 'events', 'list', execution.session_id,
-          '--after', cursor, '--order', 'asc', '--limit', '100'], prefix + '-events-' + pageIndex++);
+          '--after', cursor, '--order', 'asc', '--limit', '100', '--page-all'], prefix + '-events-' + pageIndex++);
         if (!Array.isArray(page.data)) throw new Error('Event response schema is invalid');
-        for (const event of page.data) {
+        // The service can include history preceding an inclusive cursor.
+        // Start at the exact cursor when present, retaining real later-turn checks.
+        const cursorIndex = page.data.findIndex(event => event.id === cursor);
+        const currentEvents = cursorIndex >= 0 ? page.data.slice(cursorIndex + 1) : page.data;
+        for (const event of currentEvents) {
           if (!event.id) continue;
           // Current CLI/server may include the cursor event and earlier status
           // events from the same timestamp. The exact submitted message is not
