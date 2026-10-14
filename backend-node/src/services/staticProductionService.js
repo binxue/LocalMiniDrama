@@ -50,6 +50,18 @@ function context(db, cfg, storyboardId = 3) {
     const sceneAsset = db.prepare('SELECT location, local_path FROM scenes WHERE drama_id = ? AND location = ? AND local_path IS NOT NULL ORDER BY id LIMIT 1').get(sb.drama_id, sb.location);
     if (sceneAsset) shot.references.unshift({ label: '场景', path: sceneAsset.local_path });
   }
+  // Use the storyboard's persisted prop bindings as the authoritative asset
+  // source; proposal labels can be descriptive and need not match library names.
+  const boundProps = db.prepare(`
+    SELECT p.name, p.local_path FROM storyboard_props sp
+    JOIN props p ON p.id = sp.prop_id
+    WHERE sp.storyboard_id = ? AND p.local_path IS NOT NULL
+  `).all(sb.id);
+  for (const prop of boundProps) {
+    if (!shot.references.some(item => item.path === prop.local_path)) {
+      shot.references.push({ label: prop.name, path: prop.local_path });
+    }
+  }
   const root = fs.realpathSync(path.resolve(cfg.storage?.local_path || 'data/storage'));
   const refs = [...(shot.references || [])];
   let characterRefs = [];
