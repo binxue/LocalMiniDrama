@@ -6,6 +6,8 @@
 
 第二集原 Writer Task `mat_177d7139-fca6-4b3c-a83c-75682a586060` / Session `sesn-20261014043634-864i3` 只读恢复仍为 `incomplete`，无 `agent.message`、正文或 Editor；候选 `cand_c56a9d18-3edc-4ecb-bc76-932673c9ca62` 保持 `awaiting_recovery`，不得重复提交。第一集 `cand_f97b6eb3-b6bb-4564-9c2e-9fce640ee3a3` 保持真实正文、Editor `CONDITIONAL PASS`、`not_approved`。
 
+5688 已安全切换到最新代码：当前 PID `27404`、Runtime 配置为 `m1-independent-runtime-20261012`、健康版本 `m4.3-session-isolation-recovery`；3014 返回 200，3013/5679 保留。新增 retry 仅在原任务明确终止且无其他活动候选时允许一次新候选；第二集当前 `incomplete` 实测被拒绝，仍保持恢复态。
+
 真实连续两集、批次暂停/恢复和 3014 两集阅读仍未通过，原因是第二集官方数据面没有形成终态正文；本轮新增真实调用 0、Token 0、价格未配置。下一步应等待/按授权窗口再次只读回查该 Session；仅在云端真实形成正文后创建一次必要 Editor，继续隔离作品验收，不启动《雨林》新集。
 
 ## 2026-10-14 新集创作链路阻塞收口

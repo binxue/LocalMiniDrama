@@ -159,6 +159,18 @@ function createEpisodeCandidate(db, log, config, workId, episodeNo, request='') 
   const prior=db.prepare('SELECT candidate_id,candidate_sha256 FROM script_assistant_episode_candidates WHERE work_id=? AND episode_no=? AND status=? ORDER BY created_at DESC LIMIT 1').get(workId,episodeNo-1,'completed');
   const id=`cand_${crypto.randomUUID()}`, now=new Date().toISOString(); db.prepare('INSERT INTO script_assistant_episode_candidates(candidate_id,work_id,episode_no,title,status,request,continuity_source_candidate_id,continuity_source_sha256,created_at) VALUES(?,?,?,?,?,?,?,?,?)').run(id,workId,episodeNo,`第${episodeNo}集`,'queued',String(request||'').slice(0,1200),prior?.candidate_id||null,prior?.candidate_sha256||null,now); setImmediate(()=>executeEpisodeCandidate(db,log,config,id)); return db.prepare('SELECT * FROM script_assistant_episode_candidates WHERE candidate_id=?').get(id);
 }
+function retryEpisodeCandidate(db, log, config, candidateId) {
+  const c = db.prepare('SELECT * FROM script_assistant_episode_candidates WHERE candidate_id=?').get(candidateId);
+  if (!c || !c.writer_task_id) throw new Error('没有可重试的原 Writer 候选');
+  const task = managed.getTask(db, c.writer_task_id);
+  const events = task?.events || [];
+  const terminal = task?.task_status === 'failed' && events.some(e => ['session.status_failed','session.status_terminated','session.error'].includes(e.type) || (e.type === 'span.model_request_end' && e.is_error));
+  if (!terminal) throw new Error('原 Writer 尚未有明确终止证据，保持恢复态，不允许新尝试');
+  const active = db.prepare("SELECT 1 FROM script_assistant_episode_candidates WHERE work_id=? AND episode_no=? AND candidate_id<>? AND status IN ('queued','writing','reviewing','awaiting_recovery')").get(c.work_id,c.episode_no,candidateId);
+  if (active) throw new Error('该集仍有活动或待恢复候选，不能重复提交');
+  db.prepare("UPDATE script_assistant_episode_candidates SET status='failed',error_text='原 Writer 已明确终止；保留为历史尝试' WHERE candidate_id=? AND status='awaiting_recovery'").run(candidateId);
+  return createEpisodeCandidate(db, log, config, c.work_id, c.episode_no, c.request);
+}
 function createBatch(db, log, config, workId, request, start, end) {
   start=Number(start); end=Number(end); if(!Number.isInteger(start)||!Number.isInteger(end)||start<1||end<start||end-start>4) throw new Error('连续创作范围必须为1–5集'); ensureTable(db); const now=new Date().toISOString(); const id=`batch_${crypto.randomUUID()}`;
   const duplicate=db.prepare("SELECT * FROM script_assistant_batches WHERE work_id=? AND request=? AND episode_start=? AND episode_end=? AND status IN ('queued','running','pause_requested','paused') ORDER BY created_at DESC LIMIT 1").get(workId,String(request||''),start,end);
@@ -450,4 +462,4 @@ function budget(db) {
   return { chat: { used: chatUsed, limit: chatLimit, remaining: chatLimit > 0 ? Math.max(0, chatLimit - chatUsed) : null }, orchestration: { used: orchestrationUsed, limit: orchestrationLimit, remaining: orchestrationLimit > 0 ? Math.max(0, orchestrationLimit - orchestrationUsed) : null }, in_flight: db.prepare("SELECT count(*) n FROM managed_agent_tasks WHERE task_status IN ('queued','starting','submitted','running')").get().n };
 }
 
-module.exports = { ensureTable, works, loadWork, summary, messages, buildInput, classifyCreativeRequest, createMessage, budget, runs, createRun, revisions, episodeCandidates, batches, createEpisodeCandidate, createBatch, pauseBatch, resumeBatch, approveEpisodeCandidate, reviewDecisions, saveReviewDecision, createRevision, approveRevision, refreshRevision, createEditorRecovery, recoverEpisodeCandidate, PRODUCER, _latestEpisodeContext: latestEpisodeContext, _continuityContext: continuityContext };
+module.exports = { ensureTable, works, loadWork, summary, messages, buildInput, classifyCreativeRequest, createMessage, budget, runs, createRun, revisions, episodeCandidates, batches, createEpisodeCandidate, retryEpisodeCandidate, createBatch, pauseBatch, resumeBatch, approveEpisodeCandidate, reviewDecisions, saveReviewDecision, createRevision, approveRevision, refreshRevision, createEditorRecovery, recoverEpisodeCandidate, PRODUCER, _latestEpisodeContext: latestEpisodeContext, _continuityContext: continuityContext };

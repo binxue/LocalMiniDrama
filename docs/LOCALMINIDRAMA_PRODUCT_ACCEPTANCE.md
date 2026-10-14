@@ -80,6 +80,10 @@
 
 针对第二集候选 `cand_c56a9d18-3edc-4ecb-bc76-932673c9ca62` 的原 Writer `mat_177d7139-fca6-4b3c-a83c-75682a586060` / Session `sesn-20261014043634-864i3` 已再次只读回查；云端仍为 `incomplete`，没有 `agent.message`、正文或 Editor Task，接口返回“批次保持暂停”，没有新增模型调用。第一集候选与真实 Editor `CONDITIONAL PASS` 未改变。后端全量测试 95/95 通过；本轮新增真实调用 0，Token 0，价格未配置。
 
+本轮服务恢复证据：5688 曾运行旧 PID `20584`，已在确认无本地活动任务后安全停止并按 Runtime 配置 `H:/localminidrama-runtime-creative-20261011-source/evidence/m1-independent-runtime-20261012/config.yaml` 重启；当前健康返回 `managed_agent_build=m4.3-session-isolation-recovery`、工作目录为 `H:/localminidrama-active/backend-node`，新 PID `27404`，端口 `127.0.0.1:5688`。3014 仍返回 200，3013 与 5679 未关闭。
+
+新增有界 retry 路由仅接受原 Writer 具有明确云端终止事件的候选；`incomplete`、未知状态或仍可恢复状态会被拒绝，不会覆盖历史任务或重复收费。第二集 retry 实测返回“原 Writer 尚未有明确终止证据，保持恢复态，不允许新尝试”。因此本轮没有新 Writer、Editor、Token 或费用。真实两集创作、批次暂停恢复和两集浏览器业务验收仍被第二集官方数据面阻断。
+
 已将“优化第N集”从普通聊天入口接入现有 Revision 链：服务端先做确定性意图与作品集数校验，再创建已有 Producer→Writer→Editor 修订任务；缺少可核验原稿时不调用模型。前端默认展示作品对话和最近创作成果，Agent/Revision 细节放入高级审阅。
 
 本轮新增 `script_assistant_episode_candidates`、`script_assistant_batches` 和 `script_assistant_batch_items`，新集候选正文、哈希、Writer/Editor 任务、审核结论和批准状态与原有 Revision 分离；批次逐集执行，保存当前集和已完成数，支持暂停/恢复与服务重启后的可恢复状态，已完成集跳过以避免重复收费。新增接口用于新集候选、批次查询、创建、暂停和恢复。由于当前 Runtime 只有《雨林》既有资料，没有隔离测试作品，本轮没有启动《雨林》第四集，也未声称通过真实新集验收。
