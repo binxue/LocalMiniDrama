@@ -1,7 +1,7 @@
 <template>
-  <section class="static-production" aria-label="A 镜智能静态制作">
+  <section class="static-production" :aria-label="`${shotTitle}智能静态制作`">
     <div class="production-header">
-      <strong>A 镜 · 智能静态制作</strong>
+      <strong>{{ shotTitle }} · 智能静态制作</strong>
       <el-tag>{{ labels[run?.status] || '可开始' }}</el-tag>
     </div>
     <p>摄影指导分析 → 优化首帧提示词 → 候选图 → 真实 Agent 审片 → 最佳候选</p>
@@ -14,7 +14,7 @@
       <el-button type="primary" :loading="starting || busy" :disabled="hasUnknown || hasPendingImages" @click="start">启动智能制作</el-button>
       <el-button @click="refresh">刷新状态</el-button>
       <el-button v-if="run && !busy" :loading="checkingBilling" @click="checkBilling">核对实际账单</el-button>
-      <el-button v-if="hasUnknown && !busy" type="warning" :loading="starting" @click="resume">继续查询 Agent 结果</el-button>
+      <el-button v-if="(hasUnknown || run?.status === 'BUDGET_BLOCKED') && !busy" type="warning" :loading="starting" @click="resume">继续智能制作</el-button>
       <el-button v-if="run?.pending_image_generation_id && run?.generation_error && !run?.candidates.length && !busy" type="warning" :loading="starting" @click="resumeWithExisting">复用合规历史候选并真实审核</el-button>
       <el-button v-if="run?.status === 'NEEDS_REVISION' && !busy" type="warning" :loading="starting" @click="reviseFromReview">按真实审片意见修正候选</el-button>
       <el-button v-if="canRecoverTransport" type="warning" :loading="starting" @click="startTransportRecovery">使用修正分析发起独立新图片请求</el-button>
@@ -32,7 +32,8 @@
         :title="`原图片任务 #${unknown.image_generation_id} 未交付，云端状态与费用未知，原记录保留。`" />
       <p v-if="run.transmission_recovery_of" class="production-meta">独立新请求；复用已完成的修正分析，不恢复原图片任务。分析响应：{{ run.reused_analysis?.execution.result_event_id }}</p>
       <div class="production-cost">
-        <span>累计预算预留：¥{{ reserved.toFixed(2) }} / 10</span>
+        <span>累计预算预留：¥{{ reserved.toFixed(2) }} / {{ budgetLimit }}</span>
+        <span :class="{ 'budget-warning': reserved >= budgetWarning }">可用额度：¥{{ Math.max(0, budgetLimit - reserved).toFixed(2) }}{{ reserved >= budgetWarning ? '（已达 80% 预警）' : '' }}</span>
         <span>已返回用量估算：{{ hasUsage ? '¥' + estimated.toFixed(4) + '（未返回执行不计入）' : '尚未返回用量' }}</span>
         <span>实际结算：{{ run.costs?.actual_cost_cny == null ? '待账单确认' : '¥' + run.costs.actual_cost_cny }}</span>
       </div>
@@ -90,6 +91,8 @@ import request from '@/utils/request'
 import { qualityChecksAPI } from '@/api/qualityChecks'
 import { assetImageUrl } from '@/utils/mediaUrl'
 const emit = defineEmits(['updated'])
+const props = defineProps({ storyboardId: { type: [Number, String], required: true }, shotTitle: { type: String, default: '当前镜头' } })
+const shotTitle = computed(() => props.shotTitle || '当前镜头')
 const state = ref({ runs: [] })
 const strategy = ref('generate')
 const starting = ref(false)
@@ -104,6 +107,8 @@ const canRecoverTransport = computed(() => !busy.value && !hasUnknown.value && r
   && run.value?.pending_image_generation_id && run.value?.generation_error && !run.value?.transmission_recovery_of
   && run.value?.executions.some(item => item.stage === 'analysis-2' && item.execution_status === 'COMPLETED'))
 const quarantineCount = computed(() => (state.value.quarantined_checks || 0) + (state.value.unverified_checks || 0))
+const budgetLimit = computed(() => Number(state.value.budget_limit_cny || 100))
+const budgetWarning = computed(() => Number(state.value.budget_warning_cny || 80))
 const reserved = computed(() => state.value.runs.reduce((sum, item) => sum + (item.costs?.reservations || []).reduce((n, cost) => n + cost.reserved_cny, 0), 0))
 const estimated = computed(() => state.value.runs.reduce((sum, item) => sum
   + (item.executions || []).reduce((n, exec) => n + (exec.estimated_cost_cny || 0), 0)
@@ -118,7 +123,7 @@ async function refresh() {
   if (refreshing) return
   refreshing = true
   try {
-    state.value = await request.get('/storyboards/3/static-production')
+    state.value = await request.get(`/storyboards/${props.storyboardId}/static-production`)
     const current = run.value
     if (current?.status === 'RUNNING') lastTerminalRun = ''
     if (current && current.status !== 'RUNNING' && lastTerminalRun !== current.run_id) {
@@ -132,15 +137,15 @@ async function start() {
   if (starting.value || busy.value || hasUnknown.value) return
   starting.value = true
   try {
-    await request.post('/storyboards/3/static-production', { request_id: crypto.randomUUID(), candidate_strategy: strategy.value })
+    await request.post(`/storyboards/${props.storyboardId}/static-production`, { request_id: crypto.randomUUID(), candidate_strategy: strategy.value })
     await refresh()
   } catch (e) { error.value = e.message } finally { starting.value = false }
 }
 async function decide(candidate, decision) {
   try {
-    await qualityChecksAPI.recordProducerDecision(3, { decision, image_generation_id: candidate.image_generation_id,
+    await qualityChecksAPI.recordProducerDecision(props.storyboardId, { decision, image_generation_id: candidate.image_generation_id,
       notes: '智能静态制作候选 ' + candidate.version, decided_by: 'producer' })
-    decisions.value = (await qualityChecksAPI.getProducerDecisions(3)).items || []
+    decisions.value = (await qualityChecksAPI.getProducerDecisions(props.storyboardId)).items || []
     ElMessage.success('制作人决策已记录，视频仍需另行授权')
     emit('updated')
   } catch (e) { error.value = e.message }
@@ -149,7 +154,7 @@ async function resume() {
   if (starting.value || busy.value) return
   starting.value = true
   try {
-    await request.post('/storyboards/3/static-production/' + run.value.run_id + '/resume', {})
+    await request.post(`/storyboards/${props.storyboardId}/static-production/${run.value.run_id}/resume`, {})
     await refresh()
   } catch (e) { error.value = e.message } finally { starting.value = false }
 }
@@ -157,7 +162,7 @@ async function resumeWithExisting() {
   if (starting.value || busy.value) return
   starting.value = true
   try {
-    await request.post('/storyboards/3/static-production/' + run.value.run_id + '/resume', { reuse_existing: true })
+    await request.post(`/storyboards/${props.storyboardId}/static-production/${run.value.run_id}/resume`, { reuse_existing: true })
     await refresh()
   } catch (e) { error.value = e.message } finally { starting.value = false }
 }
@@ -165,7 +170,7 @@ async function reviseFromReview() {
   if (starting.value || busy.value) return
   starting.value = true
   try {
-    await request.post('/storyboards/3/static-production/' + run.value.run_id + '/resume', { revise_from_review: true })
+    await request.post(`/storyboards/${props.storyboardId}/static-production/${run.value.run_id}/resume`, { revise_from_review: true })
     await refresh()
   } catch (e) { error.value = e.message } finally { starting.value = false }
 }
@@ -173,7 +178,7 @@ async function checkBilling() {
   if (checkingBilling.value || busy.value) return
   checkingBilling.value = true
   try {
-    await request.post('/storyboards/3/static-production/' + run.value.run_id + '/billing-check', {})
+    await request.post(`/storyboards/${props.storyboardId}/static-production/${run.value.run_id}/billing-check`, {})
     await refresh()
   } catch (e) { error.value = e.message } finally { checkingBilling.value = false }
 }
@@ -181,13 +186,13 @@ async function startTransportRecovery() {
   if (starting.value || busy.value) return
   starting.value = true
   try {
-    await request.post('/storyboards/3/static-production', { request_id: crypto.randomUUID(), candidate_strategy: 'generate', transmission_recovery_of: run.value.run_id })
+    await request.post(`/storyboards/${props.storyboardId}/static-production`, { request_id: crypto.randomUUID(), candidate_strategy: 'generate', transmission_recovery_of: run.value.run_id })
     await refresh()
   } catch (e) { error.value = e.message } finally { starting.value = false }
 }
 onMounted(async () => {
   await refresh()
-  try { decisions.value = (await qualityChecksAPI.getProducerDecisions(3)).items || [] } catch (_) {}
+  try { decisions.value = (await qualityChecksAPI.getProducerDecisions(props.storyboardId)).items || [] } catch (_) {}
   timer = setInterval(refresh, 3000)
 })
 onBeforeUnmount(() => clearInterval(timer))

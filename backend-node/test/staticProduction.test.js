@@ -42,7 +42,7 @@ test('simulated 88 score and fake production round are isolated with original ev
 test('budget is cumulative across runs and blocks BEFORE another billable write', () => {
   const approval = { id: 'approved-test' };
   const run = { run_id: 'current-test', approval_sha256: hash(JSON.stringify(approval)), costs: { reservations: [] } };
-  const db = database({ approval, static_production_runs: [{ run_id: 'old-test', costs: { reservations: [{ reserved_cny: 8 }] } }, run] });
+  const db = database({ approval, static_production_runs: [{ run_id: 'old-test', costs: { reservations: [{ reserved_cny: 98 }] } }, run] });
   try {
     reserve(db, run, 'managed_agent', 2, 'test-stage');
     assert.throws(() => reserve(db, run, 'seedream_image', 0.6, 'test-image'), /BUDGET_BLOCKED/);

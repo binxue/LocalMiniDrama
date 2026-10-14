@@ -14,6 +14,8 @@ const AGENTS = {
   review: { agentId: 'agent-20261011103929-0cx2g', agentName: 'film-visual-inspector' },
 };
 const ENVIRONMENT_ID = 'env-20261011083635-eeeu2';
+const BUDGET_LIMIT_CNY = 100;
+const BUDGET_WARNING_CNY = 80;
 function approvedStoryboard(db, storyboardId = 3) {
   const sb = db.prepare('SELECT s.*, e.drama_id FROM storyboards s JOIN episodes e ON e.id = s.episode_id WHERE s.id = ? AND s.deleted_at IS NULL').get(storyboardId);
   if (!sb || sb.drama_id !== 2 || sb.episode_id !== 2) throw new Error('业务数据不匹配');
@@ -98,8 +100,9 @@ function status(db, storyboardId = null) {
     const desc = readDescription(db, Number(storyboardId));
     const runs = desc.static_production_runs || [];
     if (!runs.length) return { storyboard_id: Number(storyboardId), status: 'NOT_STARTED', model: MODEL,
-      size: '1440x2560', budget_limit_cny: 10, runs: [], quarantined_checks: (desc.quarantined_quality_checks || []).length,
+      size: '1440x2560', budget_limit_cny: BUDGET_LIMIT_CNY, budget_warning_cny: BUDGET_WARNING_CNY, runs: [], quarantined_checks: (desc.quarantined_quality_checks || []).length,
       unverified_checks: (desc.quality_checks || []).filter(check => !check.evidence?.result_event_id).length,
+      budget: budgetSummary(db),
       historical_unknown_tasks: [23, 24, 25, 26, 27], video_authorized: false };
   }
   const desc = storyboardId ? readDescription(db, storyboardId) : {};
@@ -124,8 +127,8 @@ function status(db, storyboardId = null) {
     }
   }
   return {
-    storyboard_id: storyboardId, model: MODEL, size: '1440x2560', budget_limit_cny: 10,
-    runs,
+    storyboard_id: storyboardId, model: MODEL, size: '1440x2560', budget_limit_cny: BUDGET_LIMIT_CNY, budget_warning_cny: BUDGET_WARNING_CNY,
+    runs, budget: budgetSummary(db),
     quarantined_checks: (desc.quarantined_quality_checks || []).length,
     unverified_checks: (desc.quality_checks || []).filter(check => !check.evidence?.result_event_id).length,
     historical_unknown_tasks: [23, 24, 25, 26, 27],
@@ -147,10 +150,11 @@ function validateReview(result) {
 function reserve(db, run, kind, amount, stage) {
   const persistedSpent = db.prepare('SELECT description FROM storyboards').all().flatMap(row => {
     try { return JSON.parse(row.description || '{}').static_production_runs || []; } catch (_) { return []; }
-  }).reduce((sum, item) => sum + (item.costs?.reservations || []).reduce((n, cost) => n + Number(cost.reserved_cny || 0), 0), 0);
+  }).filter(item => item.run_id !== run.run_id)
+    .reduce((sum, item) => sum + (item.costs?.reservations || []).reduce((n, cost) => n + Number(cost.reserved_cny || 0), 0), 0);
   const currentSpent = (run.costs?.reservations || []).reduce((sum, cost) => sum + Number(cost.reserved_cny || 0), 0);
   const spent = persistedSpent + currentSpent;
-  if (spent + amount > 10) throw new Error('BUDGET_BLOCKED: A 镜累计静态预算不足，停止新增调用');
+  if (spent + amount > BUDGET_LIMIT_CNY) throw new Error('BUDGET_BLOCKED: EP01 累计非视频预算不足，停止新增调用');
   run.costs.reservations.push({ kind, stage, reserved_cny: amount, actual_cost_cny: null, billing_status: 'PENDING_SETTLEMENT' });
   persist(db, run);
 }
@@ -165,6 +169,16 @@ function releaseUnsubmittedReservations(run) {
       reservation.release_reason = 'Control-plane preflight failed before session creation or message submission';
     }
   }
+}
+function budgetSummary(db) {
+  const runs = db.prepare('SELECT description FROM storyboards').all().flatMap(row => {
+    try { return JSON.parse(row.description || '{}').static_production_runs || []; } catch (_) { return []; }
+  });
+  const reservations = runs.flatMap(run => run.costs?.reservations || []);
+  const reserved = reservations.reduce((sum, item) => sum + Number(item.reserved_cny || 0), 0);
+  const estimated = runs.flatMap(run => run.executions || []).reduce((sum, item) => sum + Number(item.estimated_cost_cny || 0), 0);
+  return { limit_cny: BUDGET_LIMIT_CNY, warning_cny: BUDGET_WARNING_CNY, reserved_cny: reserved,
+    estimated_cny: estimated, available_cny: Math.max(0, BUDGET_LIMIT_CNY - reserved), warning: reserved >= BUDGET_WARNING_CNY };
 }
 function assertNewCorrectivePrompt(run, prompt, round) {
   const originalPrompt = run.executions.find(item => item.stage === 'analysis-1')?.result?.optimized_prompt;
@@ -213,16 +227,17 @@ async function execute(db, cfg, log, run, dependencies = {}) {
       update(analyzeStage, round === 1 ? 'Agent 专业分析与首帧提示词优化' : 'Agent 根据真实审片缺陷修正提示词', 10 + (round - 1) * 40);
       const analysis = await agentStage(analyzeStage, { ...AGENTS.analyze, environmentId: ENVIRONMENT_ID, stage: analyzeStage,
         images: [...initial.files, ...(round > 1 ? [safeMedia(initial.root, run.candidates.at(-1).local_path)] : [])],
-        input: { instructions: '你是专业摄影指导。仅分析已批准 A 镜首帧，不修改导演方案。禁止调用任何工具或生成媒体。'
-          + '三张图片按顺序为场景、手机、茶杯。首帧是动作起点：右手在手机边缘尚未推送，手机位于画面右侧，中央偏左留空，远侧右角漏雨处有半满无柄琥珀玻璃茶杯。'
-          + '无面部、身体、黎夏、第二只手或手机。冷雨清晨写实 POV，不要在图片画文字对白。'
-          + '返回 JSON: {execution_id,input_hash,analysis,optimized_prompt,negative_prompt}，提示词为中文。'
+        input: { instructions: '你是专业摄影指导。仅分析当前 approved_shot 对应镜头，不修改导演方案。禁止调用任何工具或生成媒体。'
+          + '参考图顺序与用途必须以 approved_shot.references 为准，不得套用其他镜头合同；核对剧情动作、构图、角色、场景道具、连续性和提示词可执行性。'
+          + '不得自行添加未批准的角色、道具或动作；不要在图片画文字对白。'
+          + '只有全部生成前条件满足时 generation_gate 才能返回 APPROVE，否则返回 BLOCKED 或 REVISE 并说明 gate_reasons。返回 JSON: {execution_id,input_hash,analysis,optimized_prompt,negative_prompt,generation_gate,gate_reasons}。'
           + (round > 1 ? '第4张是上一轮实际候选，仅用于诊断修正，生成参考仍固定前三张。' : '')
           + 'optimized_prompt 必须可直接用于 Seedream 首帧图生图；写清 Image 1/2/3 对应关系。总回复不超过1800汉字。',
           context: { approved_shot: initial.shot, first_last_frames: initial.desc.first_last_frames,
             model: MODEL, size: '1440x2560', correction } },
       });
       validateAnalysis(analysis.result);
+      if (analysis.result.generation_gate !== 'APPROVE') throw new Error('PRECHECK_BLOCKED: Agent 未批准收费图片生成：' + JSON.stringify(analysis.result.gate_reasons || {}));
       run.optimized_prompt = analysis.result.optimized_prompt;
       run.analysis = analysis.result.analysis;
       persist(db, run);
@@ -352,13 +367,13 @@ function start(db, cfg, log, body = {}) {
   if (!['generate', 'reuse_latest'].includes(strategy)) throw new Error('候选策略无效');
   if (!recovery && strategy === 'generate' && previous.some(item => item.unresolved_image_generations?.length)) throw new Error('已有未知图片请求，不能重新开始同一生成；请基于真实审片意见修正或核实云端状态');
   if (recovery && (strategy !== 'generate' || !process.env.LOCALMINIDRAMA_ARK_IMAGE_LOCAL_ADDRESS)) throw new Error('独立传输修复请求需要已配置的方舟物理网卡出口');
-  if (recovery && status(db).runs.reduce((sum, item) => sum + (item.costs?.reservations || []).reduce((n, cost) => n + cost.reserved_cny, 0), 0) + 2 > 10) throw new Error('BUDGET_BLOCKED: 新图片和一次真实审核需要预留 ¥2');
+  if (recovery && status(db).runs.reduce((sum, item) => sum + (item.costs?.reservations || []).reduce((n, cost) => n + cost.reserved_cny, 0), 0) + 2 > BUDGET_LIMIT_CNY) throw new Error('BUDGET_BLOCKED: 新图片和一次真实审核需要预留 ¥2');
   quarantine(db, storyboardId);
   const task = taskService.createTask(db, log, 'static_production', String(storyboardId));
   const run = { run_id: 'static-' + crypto.randomUUID(), request_id: body.request_id, task_id: task.id,
     storyboard_id: storyboardId, drama_id: ctx.sb.drama_id, episode_id: ctx.sb.episode_id, shot_key: ctx.sb.title, status: 'RUNNING', stage: 'queued',
     model: MODEL, size: '1440x2560', candidate_strategy: strategy, approval_sha256: ctx.approvalHash,
-    plan_sha256: PLAN_HASH, executions: [], candidates: [], costs: { currency: 'CNY', budget_limit: 10,
+    plan_sha256: PLAN_HASH, executions: [], candidates: [], costs: { currency: 'CNY', budget_limit: BUDGET_LIMIT_CNY,
       reservations: [], actual_cost_cny: null, billing_status: 'PENDING_SETTLEMENT',
       estimate_basis: '2026-10-13账号目录：evolving输入0.006/千tokens，输出0.03/千tokens；Seedream5.0pro大图0.6/张；预算预留不等于结算费用' },
     created_at: new Date().toISOString() };
@@ -392,6 +407,8 @@ function resume(db, cfg, log, runId, options = {}) {
   const located = findRun(db, runId);
   const run = located && located.run;
   if (!run) throw new Error('制作任务不存在');
+  run.costs = run.costs || { currency: 'CNY', reservations: [] };
+  run.costs.budget_limit = BUDGET_LIMIT_CNY;
   context(db, cfg, run.storyboard_id);
   if (running.has(runId)) return run;
   const reuseAfterUnknownImage = options.reuse_existing === true && run.pending_image_generation_id && run.generation_error && run.candidates.length === 0;
@@ -417,7 +434,12 @@ function resume(db, cfg, log, runId, options = {}) {
       source_review_execution_id: reviewed.review_execution_id, new_prompt_required: true,
       unknown_image_requests_preserved: true };
     delete run.correction_blocker;
-  } else if (!run.executions.some(item => ['UNKNOWN', 'RUNNING'].includes(item.execution_status) && item.session_id && item.submit_event_id)) throw new Error('没有可继续查询的 Agent 提交；禁止重发');
+  }
+  if (run.status === 'BUDGET_BLOCKED' && !run.executions.length && !run.pending_image_generation_id) {
+    run.message = '预算上限已更新，继续原运行记录的专业预审';
+  } else if (!run.executions.some(item => ['UNKNOWN', 'RUNNING'].includes(item.execution_status) && item.session_id && item.submit_event_id)) {
+    throw new Error('没有可继续查询的 Agent 提交；禁止重发');
+  }
   run.previous_errors = [...(run.previous_errors || []), ...(run.error ? [run.error] : [])];
   delete run.error;
   run.status = 'RUNNING';
