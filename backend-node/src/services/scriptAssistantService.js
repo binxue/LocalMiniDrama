@@ -360,7 +360,7 @@ function kernelTestView(db,id){
  if(!b?.input_scope_json)throw new Error('不是故事内核隔离测试');
  const scope=JSON.parse(b.input_scope_json);
  const items=db.prepare('SELECT * FROM script_assistant_batch_items WHERE batch_id=? ORDER BY episode_no').all(id);
- return {work_id:b.work_id,title:scope.title,source:scope.source,batches:[{...b,items}],candidates:items.map(i=>db.prepare('SELECT * FROM script_assistant_episode_candidates WHERE candidate_id=?').get(i.candidate_id))};
+ return {capabilities:{scoped_conversation:1},work_id:b.work_id,title:scope.title,source:scope.source,batches:[{...b,items}],candidates:items.map(i=>db.prepare('SELECT * FROM script_assistant_episode_candidates WHERE candidate_id=?').get(i.candidate_id))};
 }
 async function executeBatch(db,log,config,batchId){
   if(ACTIVE_BATCH_EXECUTIONS.has(batchId)) return;

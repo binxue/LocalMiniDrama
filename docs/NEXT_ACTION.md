@@ -207,3 +207,9 @@ Continue from project 6 and immutable shooting-draft manuscript hashes. First ep
 ## 2026-10-15 全集入口的总集数修复
 
 普通作品意图路由纳入plan/outline/beat资料，不从旧剧本正文推断总集数；用户本句明确总集数优先，资料总集数冲突时澄清，available=false资料不参与。中文数字支持百位（执行范围仍受既有50集边界约束）。隔离雨林仍走空历史资料的意图路径，不开放全集/第二集。定向20/20通过，无新模型调用。全集跨缺口、并行效率及完整浏览器生产验收仍未完成。
+
+## 2026-10-15 运行实证与隔离兼容保护
+
+只读健康与works接口核验：5688 PID30556，cwd为本工程，仍未返回preferred_kernel_test，是旧路由；健康ok不能当作新版本部署。新前端在后端kernelTestView明确返回capabilities.scoped_conversation=1后才查询隔离修订列表、开放修改对话；旧后端只读当前隔离成果，不请求会忽略scope的旧revision接口。雨林普通入口在缺少隔离批次标识时不再退回历史资料，也不开放普通发送。
+
+kernel路由回归通过、前端build通过。新增模型调用0，未覆盖剧本。需要让最新后端正常加载后继续实际操作验收；既有进程控制/浏览器策略拒绝未通过替代控制方式绕过。

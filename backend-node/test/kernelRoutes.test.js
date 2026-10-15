@@ -7,6 +7,7 @@ test('kernel intent and revisions never load ordinary sources or historical revi
  db.prepare("INSERT INTO script_assistant_batch_items(batch_id,episode_no,candidate_id,status,created_at,updated_at) VALUES('scope',1,'current','completed','now','now')").run();
  const insert=db.prepare("INSERT INTO script_assistant_revisions(revision_id,work_id,source_id,source_sha256,status,created_at,candidate_id,candidate_text) VALUES(?,'rainforest','candidate','sha','completed','now',?,?)");
  insert.run('visible','current','本轮修改');insert.run('forbidden','historical','旧剧本不得读取');
+ assert.equal(service.kernelTestView(db,'scope').capabilities.scoped_conversation,1);
  const load=service.loadWork,revisions=service.revisions;
  service.loadWork=()=>{throw new Error('must not load historical manifest');};service.revisions=()=>{throw new Error('must not list historical revisions');};
  const response=()=>({statusCode:0,body:null,status(n){this.statusCode=n;return this;},json(x){this.body=x;}});

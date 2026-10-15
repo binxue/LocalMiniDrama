@@ -40,6 +40,7 @@
           <h2>与 AI 创作助手对话</h2>
           <el-button size="small" @click="reload" :disabled="loading">刷新记录</el-button>
         </div>
+      <el-alert v-if="route.query.kernelTest && !scopedConversationReady" title="当前服务尚未支持此隔离版本的修改对话。现有成果仍可阅读和导出；加载最新后端后刷新即可继续。" type="warning" :closable="false" />
       <p class="conversation-note">直接描述创作目标。明确的单集修改会自动生成独立候选并安排审核；分镜、视频生成及制作验收由视频模块负责。</p>
       <CreativeWorkflow ref="workflow" :revisions="revisions" :work-id="selected" :isolated="!!route.query.kernelTest" @reload="reload" :batches="batches" :candidates="episodeCandidates" :context="context" :render="renderReply" @open-candidate="openEpisodeCandidate" @export="exportText" />
       <section v-if="revisions.length" class="creation-progress">
@@ -158,6 +159,7 @@ const router = useRouter(), route = useRoute()
 const works = ref([]), selected = ref(''), context = ref(null), messages = ref([]), draft = ref(''), budget = ref({})
 const workflow = ref(null)
 const readingCandidate = ref(null)
+const scopedConversationReady = ref(false)
 const loading = ref(false), sending = ref(false), error = ref(''), showSource = ref(false), sourceView = ref(null), citationNotice = ref('')
 const mode = ref('chat'), runRequest = ref(''), runs = ref([]), runSending = ref(false)
 const revisions = ref([]), revisionSending = ref(false), revisionTarget = ref('ep3'), revisionGoal = ref(''), episodeCandidates = ref([]), batches = ref([])
@@ -175,7 +177,7 @@ const lastIntentNotice = computed(() => {
 const prompts = ['我们前三集剧本现在是什么状态？', '第一集和第三集之间，有哪些需要注意的连续性问题？', '你建议先修改前三集，还是开始第四集？说明依据。']
 let timer, requestKey = null, submittedText = null, generation = 0, alive = true
 const isActive = task => ['queued', 'starting', 'submitted', 'running'].includes(task?.task_status)
-const canSend = computed(() => selected.value && draft.value.trim() && !sending.value && !messages.value.some(m => isActive(m.task)) && (!budget.value.chat?.limit || budget.value.chat.remaining > 0) && !context.value?.gaps?.length)
+const canSend = computed(() => selected.value && (selected.value !== 'rainforest' || !!route.query.kernelTest) && (!route.query.kernelTest || scopedConversationReady.value) && draft.value.trim() && !sending.value && !messages.value.some(m => isActive(m.task)) && (!budget.value.chat?.limit || budget.value.chat.remaining > 0) && !context.value?.gaps?.length)
 const statusLabel = state => ({ queued: '排队', starting: '创建 Session', submitted: '已提交', running: '执行中', planning: '正在策划', writing: '正在修改', reviewing: '正在审核', awaiting_recovery: '等待恢复', completed: '回复已返回', failed: '执行失败', incomplete: '正文不完整', interrupted: '服务重启中断' }[state] || state)
 const batchStatusLabel = state => ({ queued: '等待创作', running: '创作中', pause_requested: '即将暂停', paused: '已暂停', completed: '已完成', failed: '需要处理' }[state] || state)
 const candidateStatusLabel = state => ({ queued: '等待创作', writing: '正在创作', reviewing: '正在审核', awaiting_recovery: '等待恢复', completed: '候选已完成', failed: '创作失败' }[state] || state)
@@ -204,7 +206,7 @@ async function reloadMessages() {
   messages.value = data.messages; budget.value = data.budget
 }
 async function reload() {
-  if(route.query.kernelTest){messages.value=[];runs.value=[];revisionSource.value={};decisions.value={};const x=await getKernelTest(route.query.kernelTest);selected.value=x.work_id;works.value=[{id:x.work_id,title:x.title}];context.value={title:x.title,sources:[x.source],scripts:[],approval_notice:'本轮仅使用故事内核，旧规划与旧稿未加载；新测试版本未批准。'};batches.value=x.batches;episodeCandidates.value=x.candidates;revisions.value=(await getAssistantRevisions(x.work_id,route.query.kernelTest)).revisions;return;}
+  if(route.query.kernelTest){scopedConversationReady.value=false;revisions.value=[];messages.value=[];runs.value=[];revisionSource.value={};decisions.value={};const x=await getKernelTest(route.query.kernelTest);selected.value=x.work_id;works.value=[{id:x.work_id,title:x.title}];context.value={title:x.title,sources:[x.source],scripts:[],approval_notice:'本轮仅使用故事内核，旧规划与旧稿未加载；新测试版本未批准。'};batches.value=x.batches;episodeCandidates.value=x.candidates;scopedConversationReady.value=x.capabilities?.scoped_conversation===1;if(scopedConversationReady.value)revisions.value=(await getAssistantRevisions(x.work_id,route.query.kernelTest)).revisions;return;}
   if (!selected.value) return
   error.value = ''
   try { await reloadMessages(); context.value = await getAssistantContext(selected.value); runs.value = (await getAssistantRuns(selected.value)).runs; revisions.value = (await getAssistantRevisions(selected.value)).revisions; episodeCandidates.value=(await getAssistantCandidates(selected.value)).candidates; batches.value=(await getAssistantBatches(selected.value)).batches; await loadRevisionDetails() } catch (e) { error.value = e.message }
@@ -223,6 +225,7 @@ async function changeWork() {
     await reload();return
   }
   if(route.query.kernelTest){await reload();return;}
+  if(selected.value==='rainforest' && !preferred){context.value=null;messages.value=[];revisions.value=[];runs.value=[];episodeCandidates.value=[];batches.value=[];error.value='运行服务尚未提供雨林故事内核入口，请加载最新后端后刷新；未读取历史剧本。';return;}
   generation++; readingCandidate.value = null; messages.value = []; context.value = null; error.value = ''; loading.value = true
   requestKey = null; submittedText = null
   await router.replace({ query: { work: selected.value } })
