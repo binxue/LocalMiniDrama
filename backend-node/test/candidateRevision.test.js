@@ -67,3 +67,16 @@ test('Editor recovery submits full source exactly once and preserves an existing
     assert.equal(db.prepare("SELECT approval_status FROM script_assistant_revisions WHERE revision_id='r'").get().approval_status,'not_approved');
   } finally {managed.createTask=create;managed.getTask=get;db.close();}
 });
+test('resumed revision reuses completed Producer and only submits Writer and Editor', async()=>{
+ const db=new Database(':memory:');service.ensureTable(db);
+ const source='完整冻结原文';
+ db.prepare("INSERT INTO script_assistant_episode_candidates(candidate_id,work_id,episode_no,status,candidate_text,candidate_sha256,created_at) VALUES('c','resume-test',1,'completed',?,?,'now')").run(source,sha(source));
+ db.prepare("INSERT INTO script_assistant_revisions(revision_id,work_id,source_id,source_sha256,status,created_at,candidate_id,source_text_snapshot,producer_task_id) VALUES('r','resume-test','candidate:c',?,'queued','now','c',?,'old-producer')").run(sha(source),source);
+ db.prepare("INSERT INTO script_assistant_batches(batch_id,work_id,request,episode_start,episode_end,status,total_count,created_at,updated_at,input_scope_json) VALUES('scope','resume-test','kernel',1,1,'completed',1,'now','now',?)").run(JSON.stringify({kind:'kernel_only',title:'隔离内核测试',source:{id:'kernel',kind:'core',available:true,text:'本轮唯一故事内核'}}));
+ db.prepare("INSERT INTO script_assistant_batch_items(batch_id,episode_no,candidate_id,status,created_at,updated_at) VALUES('scope',1,'c','completed','now','now')").run();
+ const get=managed.getTask,create=managed.createTask,calls=[],tasks=new Map([['old-producer',{task_id:'old-producer',task_status:'completed',output_text:'仅强化结尾，不改动其他内容。'}]]);
+ managed.getTask=(_db,id)=>tasks.get(id);
+ managed.createTask=(_db,_log,args)=>{calls.push(args);const id='new-'+calls.length;tasks.set(id,{task_id:id,task_status:'completed',output_text:calls.length===1?'完整修改正文':'评定：PASS\n结构清楚。'});return {task_id:id};};
+ try {await service._executeRevision(db,{error(){}},{},'r');assert.equal(calls.length,2);assert.ok(calls.every(c=>c.agent_id!==service.PRODUCER));assert.ok(calls[0].input.includes('完整冻结原文'));assert.equal(calls[0].candidate_id,'revision:r:writer');assert.equal(db.prepare("SELECT status FROM script_assistant_revisions WHERE revision_id='r'").get().status,'completed');}
+ finally {managed.getTask=get;managed.createTask=create;db.close();}
+});

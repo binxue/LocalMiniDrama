@@ -109,7 +109,8 @@
           </section>
         </article>
         <form class="composer" @submit.prevent="send">
-          <el-input v-model="draft" type="textarea" :rows="3" :maxlength="1200" show-word-limit placeholder="向 Producer 提问，例如：前三集现在是什么状态？" aria-label="给 Producer 的消息" />
+          <p v-if="readingCandidate">当前阅读第{{ readingCandidate.episode_no }}集；未指定集数的修改意见将用于这一集。</p>
+          <el-input v-model="draft" type="textarea" :rows="3" :maxlength="1200" show-word-limit placeholder="告诉我想写什么，或打开剧本后提出修改意见" aria-label="创作要求" />
           <div class="composer-footer"><span>作品对话 · 发送前会显示费用配置状态 · 不自动重试</span>
             <el-button native-type="submit" type="primary" :loading="sending" :disabled="!canSend">发送给创作助手</el-button></div>
           <p class="muted">发送前费用预估：价格未配置；将显示真实 Token 用量，无法可靠估算金额。</p>
@@ -153,6 +154,7 @@ import { createCreativePlan, getKernelTest, getAssistantWorks, registerAssistant
 
 const router = useRouter(), route = useRoute()
 const works = ref([]), selected = ref(''), context = ref(null), messages = ref([]), draft = ref(''), budget = ref({})
+const readingCandidate = ref(null)
 const loading = ref(false), sending = ref(false), error = ref(''), showSource = ref(false), sourceView = ref(null), citationNotice = ref('')
 const mode = ref('chat'), runRequest = ref(''), runs = ref([]), runSending = ref(false)
 const revisions = ref([]), revisionSending = ref(false), revisionTarget = ref('ep3'), revisionGoal = ref(''), episodeCandidates = ref([]), batches = ref([])
@@ -212,7 +214,7 @@ async function loadRevisionDetails() {
 }
 async function changeWork() {
   if(route.query.kernelTest){await reload();return;}
-  generation++; messages.value = []; context.value = null; error.value = ''; loading.value = true
+  generation++; readingCandidate.value = null; messages.value = []; context.value = null; error.value = ''; loading.value = true
   requestKey = null; submittedText = null
   await router.replace({ query: { work: selected.value } })
   try { context.value = await getAssistantContext(selected.value); await reloadMessages(); runs.value = (await getAssistantRuns(selected.value)).runs; revisions.value = (await getAssistantRevisions(selected.value)).revisions; episodeCandidates.value=(await getAssistantCandidates(selected.value)).candidates; batches.value=(await getAssistantBatches(selected.value)).batches; for (const r of revisions.value) { decisions.value[r.revision_id] = (await getReviewDecisions(r.revision_id)).decisions; for (const d of decisions.value[r.revision_id]) reviewNotes.value[d.block_id] = d.note || ''; if (r.source_text_snapshot) revisionSource.value[r.revision_id] = { title:r.source_title, text:r.source_text_snapshot, sha256:r.source_sha256, available:true }; else if (r.candidate_text) { const s = context.value.sources.find(x => x.id === r.source_id); if (s) revisionSource.value[r.revision_id] = await getAssistantSource(selected.value, s.id) } } } catch (e) { error.value = e.message } finally { loading.value = false }
@@ -241,7 +243,7 @@ async function startRun() {
   try { await createAssistantRun(selected.value, runRequest.value.trim()); runRequest.value = ''; await reload() } catch (e) { error.value = e.message } finally { runSending.value = false }
 }
 async function openRevision(id) { mode.value = 'team'; await reload(); requestAnimationFrame(() => document.querySelector(`[data-revision="${CSS.escape(id)}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })) }
-function openEpisodeCandidate(candidate) { sourceView.value = { title: `${route.query.kernelTest ? '雨林 · 故事内核独立测试 · ' : ''}第${candidate.episode_no}集候选稿`, text: candidate.candidate_text, is_candidate: true, available: true, sha256: candidate.candidate_sha256, editor_review: candidate.editor_review }; showSource.value = true }
+function openEpisodeCandidate(candidate) { readingCandidate.value = { candidate_id:candidate.candidate_id, episode_no:Number(candidate.episode_no) }; sourceView.value = { title: `${route.query.kernelTest ? '雨林 · 故事内核独立测试 · ' : ''}第${candidate.episode_no}集候选稿`, text: candidate.candidate_text, is_candidate: true, available: true, sha256: candidate.candidate_sha256, editor_review: candidate.editor_review }; showSource.value = true }
 async function send() {
   if(route.query.kernelTest){error.value='本次测试仅交付第一集；不在此输入隔离视图启动其他创作。';return;}
 
@@ -252,11 +254,13 @@ async function send() {
     const route = await getAssistantIntent(selected.value, text)
     if (route.intent?.intent === 'plan' && route.intent.status === 'ready') { await createCreativePlan(selected.value,{episode_start:route.intent.episode_start,episode_end:route.intent.episode_end,request:text}); draft.value='';await reload();return }
     if (route.intent?.intent === 'create_episode') { await createAssistantEpisode(selected.value,route.intent.episode,text);draft.value='';await reload();return }
-    if (route.intent?.intent === 'revise_episode' && route.intent.episode) {
-      const n = route.intent.episode
+    if (route.intent?.intent === 'revise_episode' && route.intent.status === 'ready') {
+      const n = route.intent.episode || readingCandidate.value?.episode_no
+      if (!n) throw new Error('请先打开要修改的剧本，或说明集数，例如：优化第二集。')
       const numeral = ({1:'一',2:'二',3:'三',4:'四',5:'五',6:'六',7:'七',8:'八',9:'九',10:'十'})[n]
       const source = context.value?.scripts?.find(s => new RegExp(`(?:第\\s*(?:${n}|${numeral})\\s*集|\\bep0*${n}\\b)`, 'i').test(`${s.title} ${s.id}`))
-      const candidate = [...episodeCandidates.value].filter(c => Number(c.episode_no) === n && c.status === 'completed' && c.candidate_text).sort((a,b) => String(b.created_at).localeCompare(String(a.created_at)))[0]
+      const reading = !route.intent.episode && readingCandidate.value ? episodeCandidates.value.find(c=>c.candidate_id===readingCandidate.value.candidate_id) : null
+      const candidate = reading || [...episodeCandidates.value].filter(c => Number(c.episode_no) === n && c.status === 'completed' && c.candidate_text).sort((a,b) => String(b.created_at).localeCompare(String(a.created_at)))[0]
       if (candidate) await createAssistantCandidateRevision(selected.value, candidate.candidate_id, text)
       else if (source) await createAssistantRevision(selected.value, source.id, text)
       else throw new Error(`当前作品资料中没有可核验的第${n}集原稿或候选稿，未启动修改。`)
