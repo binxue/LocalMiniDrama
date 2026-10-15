@@ -142,6 +142,9 @@ test('classifyCreativeRequest routes natural language without model calls', () =
   assert.deepEqual(service.classifyCreativeRequest('帮我优化第三集', [{ id: 'ep3', available: true }]), { intent: 'revise_episode', status: 'ready', episode: 3, available_scripts: ['ep3'] });
   assert.equal(service.classifyCreativeRequest('按现在的剧情写下一集').intent, 'next_episode');
   assert.equal(service.classifyCreativeRequest('查看已经完成的剧本').intent,'read_scripts');
+  assert.deepEqual(service.classifyCreativeRequest('查看剧情拆解'),{intent:'read_plan',status:'ready',stage:'outline'});
+  assert.deepEqual(service.classifyCreativeRequest('打开人物关系'),{intent:'read_plan',status:'ready',stage:'characters'});
+  assert.deepEqual(service.classifyCreativeRequest('先拆解第一集'),{intent:'plan',status:'ready',episode_start:1,episode_end:1});
   assert.deepEqual(service.classifyCreativeRequest('导出第二集剧本'),{intent:'export_script',status:'ready',episode:2});
   assert.equal(service.classifyCreativeRequest('重写第三集').intent, 'revise_episode');
   assert.equal(service.classifyCreativeRequest('优化第三集到第五集').status, 'clarification_required');

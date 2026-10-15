@@ -254,6 +254,15 @@ async function send() {
   sending.value = true; error.value = ''
   try {
     const route = await getAssistantIntent(selected.value, text)
+    if(route.intent?.intent==='export_plan') {
+      if(!workflow.value?.exportPlan(route.intent.stage)) throw new Error('尚无可导出的策划，请先打开已有方案或完成策划。')
+      draft.value='';return
+    }
+    if(route.intent?.intent==='read_plan') {
+      workflow.value?.showPlan(route.intent.stage)
+      document.querySelector('.creative-workflow')?.scrollIntoView({behavior:'smooth'})
+      draft.value='';return
+    }
     if (['read_scripts','export_script'].includes(route.intent?.intent)) {
       const number=route.intent.episode || (route.intent.intent==='export_script' ? readingCandidate.value?.episode_no : null)
       const unique=readableEpisodes(episodeCandidates.value,revisions.value,number)

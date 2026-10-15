@@ -98,7 +98,7 @@ const props=defineProps({batches:{type:Array,default:()=>[]},candidates:{type:Ar
 const emit=defineEmits(['open-candidate','export','reload'])
 const goal=ref(''),start=ref(1),end=ref(1),creating=ref(false)
 const costNotice='使用现有文本Agent；价格未配置时无法预估金额，实际Token留存。'
-defineExpose({showScripts:()=>{stage.value='scripts'}})
+defineExpose({exportPlan:(target)=>{if(!planView.value?.raw)return false;stage.value=['outline','characters','beats'].includes(target)?target:'outline';exportStage();return true},showScripts:()=>{stage.value='scripts'},showPlan:(target)=>{stage.value=['outline','characters','beats'].includes(target)?target:'outline'}})
 const stage=ref('outline'),batchId=ref(''),planView=ref(null),loading=ref(false),error=ref(''),editing=ref(false),saving=ref(false),draft=ref(null),note=ref(''),episodeNo=ref(1)
 const stages={settings:'创作设定',outline:'剧情拆解',characters:'人物关系',beats:'场次与节拍',scripts:'分集剧本',review:'专业评定'}
 const fields={title:'本集标题',goal:'剧情及人物目标',conflict:'核心冲突',reversal:'反转',hook:'集尾钩子',continuity:'继承事实与结束状态',requirements:'时长、场景与表达要求'}

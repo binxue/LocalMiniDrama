@@ -788,9 +788,11 @@ function classifyCreativeRequest(text, scripts = []) {
   const episodeNumber = episode ? chineseNumber(episode[1]) : null;
   const range = q.match(/第\s*(\d+|[零一二两三四五六七八九十百]+)\s*集?\s*(?:到|至|-|—)\s*第?\s*(\d+|[零一二两三四五六七八九十百]+)\s*集/);
   if (!q) return { intent: 'chat', status: 'ready' };
+  if (/(?:查看|阅读|打开).*(?:策划|大纲|剧情拆解|人物关系|节拍|场次)/.test(q)) return {intent:'read_plan',status:'ready',stage:/人物关系/.test(q)?'characters':/节拍|场次/.test(q)?'beats':'outline'};
+  if (/导出.*(?:策划|大纲|剧情拆解|人物关系|节拍|场次)/.test(q)) return {intent:'export_plan',status:'ready',stage:/人物关系/.test(q)?'characters':/节拍|场次/.test(q)?'beats':'outline'};
   if (/导出/.test(q)) return {intent:'export_script',status:'ready',episode:episodeNumber};
   if (/(?:查看|阅读|打开).*(?:剧本|正文|成果)|(?:剧本|正文).*在哪里/.test(q)) return {intent:'read_scripts',status:'ready',episode:episodeNumber};
-  if (/剧情拆解|分集策划|剧情规划|先做.*策划/.test(q)) return range ? {intent:'plan',status:'ready',episode_start:chineseNumber(range[1]),episode_end:chineseNumber(range[2])} : episodeNumber ? {intent:'plan',status:'ready',episode_start:episodeNumber,episode_end:episodeNumber} : {intent:'plan',status:'clarification_required',reason:'请说明要拆解的集数范围，例如：先拆解第1到第5集。'};
+  if (/拆解|分集策划|剧情规划|先做.*策划/.test(q)) return range ? {intent:'plan',status:'ready',episode_start:chineseNumber(range[1]),episode_end:chineseNumber(range[2])} : episodeNumber ? {intent:'plan',status:'ready',episode_start:episodeNumber,episode_end:episodeNumber} : {intent:'plan',status:'clarification_required',reason:'请说明要拆解的集数范围，例如：先拆解第1到第5集。'};
   if (/优化|修改|加强|润色|返修|重写/.test(q)) {
     if (range) return { intent:'revise_episode', status:'clarification_required', reason:'请先指定要修改的一集；多集修改不会按新集创作提交。' };
     return { intent:'revise_episode', status:'ready', episode:episodeNumber, available_scripts:scripts.filter(s=>s.available).map(s=>s.id) };

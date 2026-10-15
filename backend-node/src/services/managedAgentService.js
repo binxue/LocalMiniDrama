@@ -49,7 +49,7 @@ function ensureTable(db) {
     completed_at TEXT, updated_at TEXT NOT NULL
   )`);
   const columns = new Set(db.prepare('PRAGMA table_info(managed_agent_tasks)').all().map(c => c.name));
-  for (const column of ['model_id', 'session_create_json', 'send_json', 'attempt_id', 'episode_id', 'revision_id', 'candidate_id', 'source_sha256', 'candidate_sha256', 'context_hash', 'task_mode']) {
+  for (const column of ['model_id', 'session_create_json', 'send_json', 'attempt_id', 'episode_id', 'revision_id', 'candidate_id', 'source_sha256', 'candidate_sha256', 'context_hash', 'task_mode', 'threads_json']) {
     if (!columns.has(column)) db.exec(`ALTER TABLE managed_agent_tasks ADD COLUMN ${column} TEXT`);
   }
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_managed_agent_session_unique ON managed_agent_tasks(session_id) WHERE session_id IS NOT NULL");
@@ -128,6 +128,22 @@ function extract(events) {
   return { text, usage, messages: messages.length, terminal: events.at(-1)?.type || null };
 }
 
+function teamComplete(events, threads) {
+  if(!events.some(e=>e.type==='session.thread_created')) return true;
+  if(!Array.isArray(threads)||!threads.length) return false;
+  if(events.some(e=>e.type==='session.thread_status_terminated')) return false;
+  return threads.every(t=>t.status==='idle');
+}
+async function readTeam(sessionId, events) {
+  if(!events.some(e=>e.type==='session.thread_created')) return {threads:[],complete:true};
+  try {
+    const out=await runArk(['--page-all','--page-limit','10','agent','session','threads','list',sessionId,'--limit','100','--format','json'],60000);
+    const data=parseJson(out);
+    if(!Array.isArray(data.data)||data.next_page) return {threads:null,complete:false};
+    return {threads:data.data,complete:teamComplete(events,data.data)};
+  } catch { return {threads:null,complete:false}; }
+}
+
 async function execute(db, log, taskId) {
   const task = row(db, taskId);
   if (!task || task.task_status !== 'queued') return;
@@ -148,7 +164,9 @@ async function execute(db, log, taskId) {
     const result = extract(events);
     const idle = [...events].reverse().find(e => e.type === 'session.status_idle')?.stop_reason?.type === 'end_turn';
     const failed = events.some(e => ['session.status_failed', 'session.status_terminated', 'session.error'].includes(e.type) || (e.type === 'span.model_request_end' && e.is_error));
-    const status = failed ? 'failed' : (idle && result.text.trim() ? 'completed' : 'incomplete');
+    const team=await readTeam(sessionId,events);
+    update(db,taskId,{threads_json:JSON.stringify(team.threads)});
+    const status = failed ? 'failed' : (idle && result.text.trim() && team.complete ? 'completed' : 'incomplete');
     const recoveryError = polled.pollError ? `事件回查暂时失败，Session 仍可恢复：${polled.pollError}` : `云端终态 ${result.terminal || 'unknown'}，正文消息=${result.messages}`;
     update(db, taskId, { task_status: status, output_text: result.text || null, output_version: result.text ? sha(result.text) : null, events_json: JSON.stringify(events), usage_json: JSON.stringify(result.usage), error_text: status === 'completed' ? null : recoveryError, completed_at: status === 'completed' || status === 'failed' ? now() : null });
     log.info('Managed Agent task finished', { task_id: taskId, status, session_id: sessionId });
@@ -198,7 +216,9 @@ async function refreshTask(db, taskId) {
   const result = extract(events);
   const idle = [...events].reverse().find(e => e.type === 'session.status_idle')?.stop_reason?.type === 'end_turn';
   const failed = events.some(e => ['session.error', 'session.status_failed', 'session.status_terminated'].includes(e.type) || (e.type === 'span.model_request_end' && e.is_error));
-  const status = failed ? 'failed' : idle && result.text.trim() ? 'completed' : task.task_status;
+  const team=await readTeam(task.session_id,events);
+  update(db,taskId,{threads_json:JSON.stringify(team.threads)});
+  const status = failed ? 'failed' : idle && result.text.trim() && team.complete ? 'completed' : (!team.complete ? 'awaiting_recovery' : task.task_status);
   update(db, taskId, { task_status: status, events_json: JSON.stringify(events), usage_json: JSON.stringify(result.usage), output_text: result.text || null, output_version: result.text ? sha(result.text) : null,
     error_text: status === 'completed' ? null : task.error_text, completed_at: ['completed', 'failed'].includes(status) ? task.completed_at || now() : null });
   return row(db, taskId);
@@ -217,4 +237,4 @@ function recoverOnStartup(db, log) {
   return result.changes;
 }
 
-module.exports = { ensureTable, createTask, getTask, listTasks, refreshTask, recoverOnStartup, ALLOWED_AGENTS, extract, _sessionArgs: (agentId, title, options = {}) => { const args = ['agent', 'session', 'create', '--agent-id', agentId, '--environment-id', process.env.ARK_AGENT_ENVIRONMENT_ID || 'env-20261011083635-eeeu2', '--title', title]; if (options.controlledEpisodeAgent) args.push('--agent-overrides', JSON.stringify({ System: '你只执行当前用户给出的单轮剧本任务。不得调用工具、读取或写入文件、搜索网络、加载Skill、研究项目或调用其他Agent；所有必要上下文已经在用户消息中提供。Producer 只返回可执行策划，不写正文；前期专家按当前任务返回专业设计；Writer 仅在当前任务明确要求正文时返回完整剧本正文；Editor 只返回 PASS、CONDITIONAL PASS 或 FAIL 及最多5条证据和建议。不要解释执行过程，不要创作任务之外的内容。', Skills: [] })); return args; } };
+module.exports = { _teamComplete:teamComplete, ensureTable, createTask, getTask, listTasks, refreshTask, recoverOnStartup, ALLOWED_AGENTS, extract, _sessionArgs: (agentId, title, options = {}) => { const args = ['agent', 'session', 'create', '--agent-id', agentId, '--environment-id', process.env.ARK_AGENT_ENVIRONMENT_ID || 'env-20261011083635-eeeu2', '--title', title]; if (options.controlledEpisodeAgent) args.push('--agent-overrides', JSON.stringify({ System: '你只执行当前用户给出的单轮剧本任务。不得调用工具、读取或写入文件、搜索网络、加载Skill、研究项目或调用其他Agent；所有必要上下文已经在用户消息中提供。Producer 只返回可执行策划，不写正文；前期专家按当前任务返回专业设计；Writer 仅在当前任务明确要求正文时返回完整剧本正文；Editor 只返回 PASS、CONDITIONAL PASS 或 FAIL 及最多5条证据和建议。不要解释执行过程，不要创作任务之外的内容。', Skills: [] })); return args; } };

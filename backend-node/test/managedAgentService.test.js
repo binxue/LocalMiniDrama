@@ -93,3 +93,14 @@ test('restart keeps tasks with cloud sessions recoverable', () => {
   db.close();
 });
 
+
+test('native team completion requires verified idle child threads',()=>{
+ const events=[{type:'session.thread_created'},{type:'agent.message'},{type:'session.status_idle',stop_reason:{type:'end_turn'}}];
+ assert.equal(service._teamComplete(events,null),false);
+ assert.equal(service._teamComplete(events,[]),false);
+ assert.equal(service._teamComplete(events,[{status:'running'}]),false);
+ assert.equal(service._teamComplete(events,[{status:'rescheduling'}]),false);
+ assert.equal(service._teamComplete(events,[{status:'idle'},{status:'idle'}]),true);
+ assert.equal(service._teamComplete([...events,{type:'session.thread_status_terminated'}],[{status:'idle'}]),false);
+ assert.equal(service._teamComplete([{type:'agent.message'}],null),true);
+});
