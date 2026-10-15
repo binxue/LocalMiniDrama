@@ -16,10 +16,13 @@ module.exports = function scriptAssistant(db, log, config) {
     catch (err) { response.badRequest(res, err.message); }
   };
   return {
-    works: wrap(() => ({ works: service.works(config, db).map(w => ({ id: w.id, title: w.title })), budget: service.budget(db) })),
+    works: wrap(() => ({ works: service.works(config, db).map(w => ({ id: w.id, title: w.title, preferred_kernel_test: w.id==='rainforest' ? db.prepare("SELECT batch_id FROM script_assistant_batches WHERE work_id=? AND input_scope_json IS NOT NULL ORDER BY created_at DESC,rowid DESC LIMIT 1").get(w.id)?.batch_id || null : null })), budget: service.budget(db) })),
     registerWork: wrap(req => service.registerWork(db, req.body)),
     context: wrap(req => service.summary(service.loadWork(config, req.params.work_id, db))),
-    intent: wrap(req => { const work=service.loadWork(config,req.params.work_id,db); return { intent: service.classifyCreativeRequest(req.query?.text || '', work.sources.filter(s=>['script','continuity','core'].includes(s.kind))) }; }),
+    intent: wrap(req => {
+      if(req.query?.kernelTest) { const scope=service.kernelTestView(db,req.query.kernelTest); if(scope.work_id!==req.params.work_id)throw new Error('作品与隔离版本不匹配'); return {intent:service.classifyCreativeRequest(req.query?.text||'',[])}; }
+      const work=service.loadWork(config,req.params.work_id,db);return {intent:service.classifyCreativeRequest(req.query?.text||'',work.sources.filter(s=>['script','continuity','core'].includes(s.kind)))};
+    }),
     source: wrap(req => {
       const source = service.loadWork(config, req.params.work_id, db).sources.find(s => s.id === req.params.source_id);
       if (!source) throw new Error('资料未关联');
@@ -31,7 +34,10 @@ module.exports = function scriptAssistant(db, log, config) {
     }),
     runs: wrap(req => { service.loadWork(config, req.params.work_id, db); return { runs: service.runs(db, req.params.work_id), budget: service.budget(db) }; }),
     createRun: wrap(req => service.createRun(db, log, config, req.params.work_id, req.body?.request)),
-    revisions: wrap(req => ({ revisions: service.revisions(db, req.params.work_id) })),
+    revisions: wrap(req => {
+      if(req.query?.kernelTest) { const scope=service.kernelTestView(db,req.query.kernelTest);if(scope.work_id!==req.params.work_id)throw new Error('作品与隔离版本不匹配');const ids=scope.candidates.map(c=>c.candidate_id);return {revisions:ids.length?db.prepare(`SELECT * FROM script_assistant_revisions WHERE work_id=? AND candidate_id IN (${ids.map(()=>'?').join(',')}) ORDER BY created_at DESC`).all(req.params.work_id,...ids):[]}; }
+      return {revisions:service.revisions(db,req.params.work_id)};
+    }),
     candidates: wrap(req => ({ candidates: service.episodeCandidates(db, req.params.work_id) })),
     batches: wrap(req => ({ batches: service.batches(db, req.params.work_id) })),
     createEpisode: wrap(req => service.createEpisodeCandidate(db, log, config, req.params.work_id, req.body?.episode_no, req.body?.request)),

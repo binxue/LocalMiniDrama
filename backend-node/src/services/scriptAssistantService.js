@@ -134,7 +134,7 @@ function createRevision(db, log, config, workId, sourceId, request = '') { ensur
 function createCandidateRevision(db, log, config, workId, candidateId, request = '') {
   ensureTable(db);
   if (typeof request !== 'string' || !request.trim() || request.length > 1200) throw new Error('修改目标需为1–1200字符');
-  if (revisions(db,workId).some(r => ['queued','planning','writing','reviewing','awaiting_recovery','awaiting_next_authorization'].includes(r.status))) throw new Error('已有进行中或待恢复的修改任务，请等待或回查原任务，不能重复提交');
+  if (db.prepare("SELECT 1 FROM script_assistant_revisions WHERE work_id=? AND status IN ('queued','planning','writing','reviewing','awaiting_recovery','awaiting_next_authorization') LIMIT 1").get(workId)) throw new Error('已有进行中或待恢复的修改任务，请等待或回查原任务，不能重复提交');
   const c=db.prepare('SELECT * FROM script_assistant_episode_candidates WHERE candidate_id=? AND work_id=?').get(candidateId,workId);
   if(!c||c.status!=='completed'||!c.candidate_text||hash(c.candidate_text)!==c.candidate_sha256) throw new Error('候选稿不可用或版本已变化');
   const latest=db.prepare("SELECT * FROM script_assistant_revisions WHERE work_id=? AND candidate_id=? AND status='completed' ORDER BY created_at DESC,rowid DESC LIMIT 1").get(workId,candidateId);
