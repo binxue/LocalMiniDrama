@@ -235,7 +235,7 @@ async function executeEpisodeCandidate(db, log, config, candidateId) {
 }
 function createEpisodeCandidate(db, log, config, workId, episodeNo, request='') {
   ensureTable(db); episodeNo=Number(episodeNo); if (!Number.isInteger(episodeNo)||episodeNo<1) throw new Error('集数无效');
-  const active=db.prepare("SELECT 1 FROM script_assistant_episode_candidates WHERE work_id=? AND episode_no=? AND status IN ('queued','writing','reviewing')").get(workId,episodeNo); if(active) throw new Error(`第${episodeNo}集已有进行中的创作任务`);
+  const active=db.prepare("SELECT 1 FROM script_assistant_episode_candidates c WHERE c.work_id=? AND c.episode_no=? AND c.status IN ('queued','writing','reviewing','awaiting_recovery') AND NOT EXISTS (SELECT 1 FROM script_assistant_batch_items i JOIN script_assistant_batches b ON b.batch_id=i.batch_id WHERE i.candidate_id=c.candidate_id AND b.planning_only=1)").get(workId,episodeNo); if(active) throw new Error(`第${episodeNo}集已有进行中的创作任务`);
   const batch=createBatch(db,log,config,workId,request,episodeNo,episodeNo);
   const item=batch.items.find(i=>i.episode_no===episodeNo);
   return db.prepare('SELECT * FROM script_assistant_episode_candidates WHERE candidate_id=?').get(item.candidate_id);
@@ -284,6 +284,13 @@ function retryEpisodeCandidate(db, log, config, candidateId) {
 }
 function createBatch(db, log, config, workId, request, start, end, scope = null, options = {}) {
   ({start,end}=validateBatchRange(start,end)); ensureTable(db); const now=new Date().toISOString(); const id=`batch_${crypto.randomUUID()}`;
+  if (!scope && !options.planningOnly) {
+    const preview=db.prepare("SELECT batch_id FROM script_assistant_batches WHERE work_id=? AND episode_start=? AND episode_end=? AND planning_only=1 AND status='paused' AND planning_status='completed' ORDER BY created_at DESC,rowid DESC LIMIT 1").get(workId,start,end);
+    if(preview) {
+      const current=creativePlan.view(db,preview.batch_id);
+      if(current.plan) return startPlannedBatch(db,log,config,preview.batch_id,{version_id:current.version_id,plan_sha256:current.plan_sha256,request:String(request||'')});
+    }
+  }
   const duplicate=db.prepare("SELECT * FROM script_assistant_batches WHERE work_id=? AND request=? AND episode_start=? AND episode_end=? AND status IN ('queued','running','pause_requested','paused') ORDER BY created_at DESC LIMIT 1").get(workId,String(request||''),start,end);
   if(duplicate) return scope ? kernelTestView(db,duplicate.batch_id).batches[0] : batches(db,workId).find(x=>x.batch_id===duplicate.batch_id);
   if(!options.planningOnly && db.prepare("SELECT 1 FROM script_assistant_episode_candidates WHERE work_id=? AND episode_no BETWEEN ? AND ? AND status IN ('queued','writing','reviewing','awaiting_recovery') LIMIT 1").get(workId,start,end)) throw new Error('范围内已有创作或待恢复任务，请复用原批次，不重复提交');
@@ -336,7 +343,15 @@ function startPlannedBatch(db,log,config,id,expected={}){
       AND NOT EXISTS (SELECT 1 FROM script_assistant_batch_items other JOIN script_assistant_batches ob ON ob.batch_id=other.batch_id WHERE other.candidate_id=c.candidate_id AND ob.planning_only=1)
     LIMIT 1`).get(b.work_id,b.episode_start,b.episode_end,id);
   if (conflict) throw new Error(`第${conflict.episode_no}集已有创作或待恢复任务，请先处理原任务，不重复提交`);
-  const changed=db.prepare("UPDATE script_assistant_batches SET planning_only=0,status='queued',planning_status='completed',error_text=NULL WHERE batch_id=? AND planning_only=1 AND status='paused'").run(id);
+  if(expected.request !== undefined && (typeof expected.request!=='string' || expected.request.length>1200)) throw new Error('写作要求最多1200字符');
+  const changed=db.transaction(()=>{
+    const claimed=db.prepare("UPDATE script_assistant_batches SET planning_only=0,status='queued',planning_status='completed',error_text=NULL WHERE batch_id=? AND planning_only=1 AND status='paused'").run(id);
+    if(claimed.changes && expected.request?.trim()) {
+      db.prepare('UPDATE script_assistant_batches SET request=? WHERE batch_id=?').run(expected.request.trim(),id);
+      db.prepare("UPDATE script_assistant_episode_candidates SET request=? WHERE candidate_id IN (SELECT candidate_id FROM script_assistant_batch_items WHERE batch_id=?) AND status='queued' AND writer_task_id IS NULL").run(expected.request.trim(),id);
+    }
+    return claimed;
+  })();
   if(!changed.changes)throw new Error('专业策划仍在运行或已开始，请刷新');
   setImmediate(()=>executeBatch(db,log,config,id));return batches(db,b.work_id).find(x=>x.batch_id===id);
 }
@@ -773,6 +788,8 @@ function classifyCreativeRequest(text, scripts = []) {
   const episodeNumber = episode ? chineseNumber(episode[1]) : null;
   const range = q.match(/第\s*(\d+|[零一二两三四五六七八九十百]+)\s*集?\s*(?:到|至|-|—)\s*第?\s*(\d+|[零一二两三四五六七八九十百]+)\s*集/);
   if (!q) return { intent: 'chat', status: 'ready' };
+  if (/导出/.test(q)) return {intent:'export_script',status:'ready',episode:episodeNumber};
+  if (/(?:查看|阅读|打开).*(?:剧本|正文|成果)|(?:剧本|正文).*在哪里/.test(q)) return {intent:'read_scripts',status:'ready',episode:episodeNumber};
   if (/剧情拆解|分集策划|剧情规划|先做.*策划/.test(q)) return range ? {intent:'plan',status:'ready',episode_start:chineseNumber(range[1]),episode_end:chineseNumber(range[2])} : episodeNumber ? {intent:'plan',status:'ready',episode_start:episodeNumber,episode_end:episodeNumber} : {intent:'plan',status:'clarification_required',reason:'请说明要拆解的集数范围，例如：先拆解第1到第5集。'};
   if (/优化|修改|加强|润色|返修|重写/.test(q)) {
     if (range) return { intent:'revise_episode', status:'clarification_required', reason:'请先指定要修改的一集；多集修改不会按新集创作提交。' };

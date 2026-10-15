@@ -41,7 +41,7 @@
           <el-button size="small" @click="reload" :disabled="loading">刷新记录</el-button>
         </div>
       <p class="conversation-note">直接描述创作目标。明确的单集修改会自动生成独立候选并安排审核；分镜、视频生成及制作验收由视频模块负责。</p>
-      <CreativeWorkflow :revisions="revisions" :work-id="selected" :isolated="!!route.query.kernelTest" @reload="reload" :batches="batches" :candidates="episodeCandidates" :context="context" :render="renderReply" @open-candidate="openEpisodeCandidate" @export="exportText" />
+      <CreativeWorkflow ref="workflow" :revisions="revisions" :work-id="selected" :isolated="!!route.query.kernelTest" @reload="reload" :batches="batches" :candidates="episodeCandidates" :context="context" :render="renderReply" @open-candidate="openEpisodeCandidate" @export="exportText" />
       <section v-if="revisions.length" class="creation-progress">
         <h3>最近创作成果</h3>
         <article v-for="revision in revisions.slice(0, 3)" :key="revision.revision_id" class="progress-row">
@@ -148,12 +148,14 @@ import DOMPurify from 'dompurify'
 import { ElMessageBox } from 'element-plus'
 import CreativeWorkflow from '@/components/CreativeWorkflow.vue'
 import { revisionDiff } from '@/utils/revisionDiff'
+import { readableEpisodes, nextEpisodeNumber } from '@/utils/scriptResults'
 import { useRouter, useRoute } from 'vue-router'
 import { ArrowLeft, ChatDotRound } from '@element-plus/icons-vue'
 import { createCreativePlan, getKernelTest, getAssistantWorks, registerAssistantWork, getAssistantContext, getAssistantIntent, getAssistantMessages, sendAssistantMessage, refreshAssistantMessage, getAssistantSource, getAssistantRuns, createAssistantRun, getAssistantRevisions, createAssistantRevision, createAssistantCandidateRevision, approveAssistantRevision, refreshAssistantRevision, recoverAssistantEditor, getReviewDecisions, saveReviewDecision, getAssistantCandidates, getAssistantBatches, createAssistantEpisode, createAssistantBatch, pauseAssistantBatch, resumeAssistantBatch, recoverAssistantEpisode } from '@/api/scriptAssistant'
 
 const router = useRouter(), route = useRoute()
 const works = ref([]), selected = ref(''), context = ref(null), messages = ref([]), draft = ref(''), budget = ref({})
+const workflow = ref(null)
 const readingCandidate = ref(null)
 const loading = ref(false), sending = ref(false), error = ref(''), showSource = ref(false), sourceView = ref(null), citationNotice = ref('')
 const mode = ref('chat'), runRequest = ref(''), runs = ref([]), runSending = ref(false)
@@ -252,6 +254,16 @@ async function send() {
   sending.value = true; error.value = ''
   try {
     const route = await getAssistantIntent(selected.value, text)
+    if (['read_scripts','export_script'].includes(route.intent?.intent)) {
+      const number=route.intent.episode || (route.intent.intent==='export_script' ? readingCandidate.value?.episode_no : null)
+      const unique=readableEpisodes(episodeCandidates.value,revisions.value,number)
+      if(!unique.length) throw new Error('没有找到可阅读的候选正文，请先完成创作或指定已有集数。')
+      if(route.intent.intent==='export_script') exportText(context.value?.title || '剧本',unique.map(c=>`# 第${c.episode_no}集\n\n${c.candidate_text}`).join('\n\n'))
+      else if(number) openEpisodeCandidate(unique[0])
+      else {workflow.value?.showScripts(); document.querySelector('.creative-workflow')?.scrollIntoView({behavior:'smooth'})}
+      draft.value='';return
+    }
+
     if (route.intent?.intent === 'plan' && route.intent.status === 'ready') { await createCreativePlan(selected.value,{episode_start:route.intent.episode_start,episode_end:route.intent.episode_end,request:text}); draft.value='';await reload();return }
     if (route.intent?.intent === 'create_episode') { await createAssistantEpisode(selected.value,route.intent.episode,text);draft.value='';await reload();return }
     if (route.intent?.intent === 'revise_episode' && route.intent.status === 'ready') {
@@ -267,8 +279,7 @@ async function send() {
       draft.value = ''; mode.value = 'chat'; await reload(); return
     }
     if (['next_episode','continue_episodes'].includes(route.intent?.intent)) {
-      const nums = [...(context.value?.scripts || []).map(s => Number((s.id.match(/(?:ep|episode)[_-]?(\d+)/i)||[])[1])), ...(episodeCandidates.value || []).filter(c=>c.candidate_text||c.writer_task_id).map(c => Number(c.episode_no))].filter(Number.isFinite)
-      const next = Math.max(0, ...nums) + 1
+      const next = nextEpisodeNumber(context.value?.scripts,episodeCandidates.value)
       const pending = episodeCandidates.value.find(c => ['queued','writing','reviewing','awaiting_recovery'].includes(c.status));
       if (pending) throw new Error(`第${pending.episode_no}集仍在处理中或等待恢复，请先继续原创作任务，避免跳过剧情。`)
       if (route.intent.intent === 'continue_episodes') await createAssistantBatch(selected.value, next, next + route.intent.count - 1, text)
@@ -279,8 +290,9 @@ async function send() {
       await createAssistantBatch(selected.value, route.intent.episode_start, route.intent.episode_end, text); draft.value = ''; await reload(); return
     }
     if (route.intent?.intent === 'create_all' && route.intent?.status === 'ready') {
-      const existing = [...(context.value?.scripts || []).map(s => Number((s.id.match(/(?:ep|episode)[_-]?(\d+)/i) || [])[1])), ...episodeCandidates.value.filter(c=>c.candidate_text||c.writer_task_id).map(c => Number(c.episode_no))].filter(Number.isFinite)
-      const start = Math.max(0, ...existing) + 1
+      const start = nextEpisodeNumber(context.value?.scripts,episodeCandidates.value)
+      const later=episodeCandidates.value.find(c=>c.candidate_text && Number(c.episode_no)>start && Number(c.episode_no)<=route.intent.total_episodes)
+      if(later) throw new Error(`第${start}集尚缺失，但后面已有候选。请先创作第${start}集并检查连续性，再继续全集；已有成果不会被静默重写。`)
       if (start > route.intent.total_episodes) throw new Error(`已存在第${route.intent.total_episodes}集或更高集数，没有可创建的剩余集数。`)
       await createAssistantBatch(selected.value, start, route.intent.total_episodes, text); draft.value = ''; await reload(); return
     }

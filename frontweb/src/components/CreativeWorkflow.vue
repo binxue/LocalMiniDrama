@@ -92,11 +92,13 @@
 
 <script setup>
 import { ref, computed, watch } from 'vue'
+import { displayedCandidate } from '@/utils/scriptResults'
 import { getCreativePlan, saveCreativePlan, createCreativePlan, startCreativeWriting } from '@/api/scriptAssistant'
 const props=defineProps({batches:{type:Array,default:()=>[]},candidates:{type:Array,default:()=>[]},context:Object,render:Function,workId:String,isolated:Boolean,revisions:{type:Array,default:()=>[]}})
 const emit=defineEmits(['open-candidate','export','reload'])
 const goal=ref(''),start=ref(1),end=ref(1),creating=ref(false)
 const costNotice='使用现有文本Agent；价格未配置时无法预估金额，实际Token留存。'
+defineExpose({showScripts:()=>{stage.value='scripts'}})
 const stage=ref('outline'),batchId=ref(''),planView=ref(null),loading=ref(false),error=ref(''),editing=ref(false),saving=ref(false),draft=ref(null),note=ref(''),episodeNo=ref(1)
 const stages={settings:'创作设定',outline:'剧情拆解',characters:'人物关系',beats:'场次与节拍',scripts:'分集剧本',review:'专业评定'}
 const fields={title:'本集标题',goal:'剧情及人物目标',conflict:'核心冲突',reversal:'反转',hook:'集尾钩子',continuity:'继承事实与结束状态',requirements:'时长、场景与表达要求'}
@@ -114,10 +116,7 @@ const expertDocuments=computed(()=>{
 })
 const selectedCandidates=computed(()=>{
   const b=props.batches.find(b=>b.batch_id===batchId.value),ids=new Set(b?.items?.map(i=>i.candidate_id)||[])
-  return props.candidates.filter(c=>ids.has(c.candidate_id)).map(c=>{
-    const latest=props.revisions.filter(r=>r.candidate_id===c.candidate_id && r.status==='completed' && r.candidate_text).sort((a,b)=>String(b.created_at).localeCompare(String(a.created_at)))[0]
-    return latest ? {...c,candidate_text:latest.candidate_text,candidate_sha256:latest.candidate_sha256,editor_review:latest.editor_review,approval_status:latest.approval_status,original:c,is_revision:true} : c
-  })
+  return props.candidates.filter(c=>ids.has(c.candidate_id)).map(c=>displayedCandidate(c,props.revisions))
 })
 let generation=0
 async function load(){if(!batchId.value)return;const id=batchId.value,token=++generation;loading.value=true;error.value='';try{const x=await getCreativePlan(id);if(token!==generation)return;planView.value=x;editing.value=false;episodeNo.value=x.plan?.episodes[0]?.episode_no||x.range[0]}catch(e){if(token===generation)error.value=e.message}finally{if(token===generation)loading.value=false}}

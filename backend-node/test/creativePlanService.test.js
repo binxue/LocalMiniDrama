@@ -170,3 +170,15 @@ test('pause during Producer completion prevents submission of experts and Writer
  try {await service._executeBatch(db,{}, {},'pause-plan');assert.equal(calls,0);const b=db.prepare("SELECT * FROM script_assistant_batches WHERE batch_id='pause-plan'").get();assert.equal(b.status,'paused');assert.equal(b.planning_task_id,'producer');}
  finally {managed.getTask=get;managed.createTask=create;db.close();}
 });
+
+test('natural writing request starts an existing exact-range preview instead of duplicating it',()=>{
+ const db=new Database(':memory:'),service=require('../src/services/scriptAssistantService');service.ensureTable(db);
+ const raw='```json\n'+JSON.stringify(fixture())+'\n```';
+ db.prepare("INSERT INTO script_assistant_batches(batch_id,work_id,request,episode_start,episode_end,status,total_count,created_at,updated_at,planning_status,planning_output,planning_only) VALUES('preview','w','先做策划',1,2,'paused',2,'now','now','completed',?,1)").run(raw);
+ const immediate=global.setImmediate;global.setImmediate=()=>1;
+ try {
+  const started=service.createBatch(db,{}, {},'w','按方案写第一集到第二集',1,2);
+  assert.equal(started.batch_id,'preview');assert.equal(started.planning_only,0);assert.equal(started.status,'queued');assert.equal(started.request,'按方案写第一集到第二集');
+  assert.equal(db.prepare('SELECT count(*) n FROM script_assistant_batches').get().n,1);assert.equal(db.prepare('SELECT count(*) n FROM managed_agent_tasks').get().n,0);
+ }finally{global.setImmediate=immediate;db.close();}
+});
