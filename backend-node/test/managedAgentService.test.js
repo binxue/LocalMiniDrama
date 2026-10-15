@@ -120,3 +120,13 @@ test('ordinary agent sessions inherit deployed capabilities without empty overri
   assert.equal(args.includes('--agent-overrides'), false);
   assert.deepEqual(args.slice(-2), ['--format', 'json']);
 });
+
+test('idle native child awaiting tool action is not completed',()=>{
+ const events=[{type:'session.thread_created'}],threads=[{id:'child',status:'idle'}];
+ const waiting={type:'session.status_idle',stop_reason:{type:'requires_action',event_ids:['tool']}};
+ assert.equal(service._teamComplete(events,threads,{child:[waiting]}),false);
+ assert.equal(service._teamComplete(events,[{...threads[0],stop_reason:{type:'requires_action'}}]),false);
+ assert.equal(service._teamComplete(events,threads,{child:[waiting,{type:'session.status_idle',stop_reason:{type:'end_turn'}}]}),true);
+ assert.equal(service._teamComplete(events,threads,{child:[{type:'session.status_terminated'}]}),false);
+ assert.equal(service._teamComplete([...events,{type:'session.thread_status_idle',session_thread_id:'child',stop_reason:{type:'requires_action'}}],threads),false);
+});

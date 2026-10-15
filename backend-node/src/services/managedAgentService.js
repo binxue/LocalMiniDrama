@@ -133,11 +133,20 @@ function extract(events) {
   return { text, usage, messages: messages.length, terminal: events.at(-1)?.type || null };
 }
 
-function teamComplete(events, threads) {
+function teamComplete(events, threads, threadEvents = {}) {
   if(!events.some(e=>e.type==='session.thread_created')) return true;
   if(!Array.isArray(threads)||!threads.length) return false;
-  if(events.some(e=>e.type==='session.thread_status_terminated')) return false;
-  return threads.every(t=>t.status==='idle');
+  if([...events,...Object.values(threadEvents).flat()].some(e=>e.type==='session.thread_status_terminated' || e.type==='session.status_terminated' || e.type==='session.status_failed')) return false;
+  return threads.every(thread => {
+    if (thread.status !== 'idle') return false;
+    if (thread.stop_reason?.type && thread.stop_reason.type !== 'end_turn') return false;
+    // Inspect each ordered stream independently; arrival order across streams
+    // cannot establish that a requires_action state has ended.
+    const own = threadEvents[thread.id] || [];
+    const idle = [...own].reverse().find(e => e.type === 'session.status_idle' || e.type === 'session.thread_status_idle');
+    const announced = [...events].reverse().find(e => e.type === 'session.thread_status_idle' && e.session_thread_id === thread.id);
+    return [idle, announced].every(e => !e?.stop_reason?.type || e.stop_reason.type === 'end_turn');
+  });
 }
 function teamUsage(events, threadEvents = {}) {
   const merged=[...new Map([...events,...Object.values(threadEvents).flat()].map(e=>[e.id || JSON.stringify(e),e])).values()];
@@ -159,7 +168,7 @@ async function readTeam(sessionId, events) {
       if(!Array.isArray(result.data)||result.next_page) return {threads,threadEvents,complete:false};
       threadEvents[thread.id]=result.data;
     }
-    return {threads,threadEvents,complete:teamComplete([...events,...Object.values(threadEvents).flat()],threads)};
+    return {threads,threadEvents,complete:teamComplete(events,threads,threadEvents)};
   } catch { return {threads,threadEvents,complete:false}; }
 }
 

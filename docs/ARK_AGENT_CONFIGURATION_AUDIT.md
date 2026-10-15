@@ -48,3 +48,9 @@ managedAgentService在观察到session.thread_created后，使用已核验CLI命
 依据已读取的arkcli-agent配套references/session-files.md，Session overrides中的Tools/Skills是替换语义；references/agent.md明确空Tools数组可关闭工具。受控单轮任务现在显式Tools: []，不再只靠System的禁止文字，同时继承云端全部工具。未改云端Agent配置、未修改既有Session、未恢复Skills，也未启用原生Multiagent。
 
 createSession与测试使用同一个sessionArgs构造器，移除此前单独复制给测试的请求构造代码。普通会话不增加覆盖，仍继承已有配置。后端129/129通过，仅证明本地请求结构；未真实提交新Session，服务端空数组生效与实际运行仍待验证。新增收费调用0。
+
+## 2026-10-15 官方639版与等待确认语义
+
+本次重新只读查询Producer，仍Version=1，返回未包含Multiagent；Skills与Tools仍存在。完整读取官方《编排Multi Agent》revision639三块正文：https://ark.volcengine.com/region:cn-beijing/docs/multi-agent 。官方确认idle可能为requires_action，必须处理所有event_ids后等end_turn；子线程自动rescheduling不得并行手动重试。
+
+本地修复：每个线程独立检查最后idle的stop_reason，requires_action/retries_exhausted不能被idle状态掩盖；子线程终止/失败证据也阻止成功。检查保持各流独立，不用跨流到达顺序推断后续完成。定向12/12通过，fixture不是真实原生协作证据。未创建Session、未发送消息、未更新Agent，新增模型调用0。原生协调与Skills接入依旧未验收。
