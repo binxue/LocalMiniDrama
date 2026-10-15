@@ -37,6 +37,10 @@ module.exports = function scriptAssistant(db, log, config) {
     createEpisode: wrap(req => service.createEpisodeCandidate(db, log, config, req.params.work_id, req.body?.episode_no, req.body?.request)),
     createKernelTest: wrap(req => { const supplied=String(req.body?.kernel_path||'').replaceAll('\\','/'); if(supplied!=='H:/互动剧/雨林/故事内核_v1.md')throw new Error('本轮只允许指定雨林故事内核文件'); return service.createKernelTest(db,log,config,req.params.work_id,supplied); }),
     kernelTest: wrap(req => service.kernelTestView(db,req.params.batch_id)),
+    createPlan: wrap(req => service.createBatch(db,log,config,req.params.work_id,req.body?.request,req.body?.episode_start,req.body?.episode_end,null,{planningOnly:true})),
+    startPlan: wrap(req => service.startPlannedBatch(db,log,config,req.params.batch_id,req.body||{})),
+    plan: wrap(req => require('../services/creativePlanService').view(db,req.params.batch_id)),
+    savePlan: wrap(req => require('../services/creativePlanService').save(db,req.params.batch_id,req.body || {})),
     createBatch: wrap(req => service.createBatch(db, log, config, req.params.work_id, req.body?.request, req.body?.episode_start, req.body?.episode_end)),
     approveEpisode: wrap(req => service.approveEpisodeCandidate(db, req.params.candidate_id, req.body?.actor || 'user', req.body)),
     recoverEpisode: wrap(async req => { const candidate = await service.recoverEpisodeCandidate(db, log, config, req.params.candidate_id); if (candidate.status !== 'completed') db.prepare("UPDATE script_assistant_episode_candidates SET status='awaiting_recovery',error_text='已有云端任务仍未形成可验证终态；请继续回查，禁止重发' WHERE candidate_id=?").run(req.params.candidate_id); return db.prepare('SELECT * FROM script_assistant_episode_candidates WHERE candidate_id=?').get(req.params.candidate_id); }),
@@ -47,7 +51,7 @@ module.exports = function scriptAssistant(db, log, config) {
     saveReviewDecision: wrap(req => {
       const r = db.prepare('SELECT * FROM script_assistant_revisions WHERE revision_id=?').get(req.params.revision_id);
       if (!r) throw new Error('修改版本不存在');
-      const s = service.loadWork(config, r.work_id, db).sources.find(x => x.id === r.source_id);
+      const s = r.candidate_id ? { available: true, text: r.source_text_snapshot, sha256: require('crypto').createHash('sha256').update(r.source_text_snapshot || '').digest('hex') } : service.loadWork(config, r.work_id, db).sources.find(x => x.id === r.source_id);
       if (!s?.available || s.sha256 !== r.source_sha256) throw new Error('原稿已变更或不可用，不能提交审阅');
       const { diffLines } = require('diff');
       const parts = diffLines(s.text, r.candidate_text || '');
@@ -66,9 +70,10 @@ module.exports = function scriptAssistant(db, log, config) {
       return { decisions: service.saveReviewDecision(db, r.revision_id, req.body?.block_id, req.body?.action, req.body?.note, req.body) };
     }),
     createRevision: wrap(req => service.createRevision(db, log, config, req.params.work_id, req.body?.source_id, req.body?.request)),
+    createCandidateRevision: wrap(req => service.createCandidateRevision(db, log, config, req.params.work_id, req.params.candidate_id, req.body?.request)),
     approveRevision: wrap(req => service.approveRevision(db, req.params.revision_id, req.body?.actor || 'user', req.body)),
-    refreshRevision: wrap(req => service.refreshRevision(db, req.params.revision_id)),
-    recoverEditor: wrap(req => service.createEditorRecovery(db, log, req.params.revision_id)),
+    refreshRevision: wrap(req => service.refreshRevision(db, req.params.revision_id, log, config)),
+    recoverEditor: wrap(req => service.createEditorRecovery(db, log, req.params.revision_id, config)),
     create: wrap(req => service.createMessage(db, log, config, req.params.work_id, req.body)),
     refresh: wrap(async req => {
       const m = service.messages(db, req.params.work_id).find(m => String(m.id) === req.params.message_id);

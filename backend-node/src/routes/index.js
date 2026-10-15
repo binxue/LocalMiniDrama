@@ -182,8 +182,13 @@ function setupRouter(cfg, db, log) {
     r.post('/script-assistant/candidates/:candidate_id/recover', assistant.recoverEpisode);
     r.post('/script-assistant/candidates/:candidate_id/retry', assistant.retryEpisode);
     r.post('/script-assistant/batches/:batch_id/pause', assistant.pauseBatch);
+    r.post('/script-assistant/works/:work_id/plans', assistant.createPlan);
+    r.post('/script-assistant/batches/:batch_id/start-writing', assistant.startPlan);
+    r.get('/script-assistant/batches/:batch_id/plan', assistant.plan);
+    r.post('/script-assistant/batches/:batch_id/plan-versions', assistant.savePlan);
     r.post('/script-assistant/batches/:batch_id/resume', assistant.resumeBatch);
     r.post('/script-assistant/works/:work_id/revisions', assistant.createRevision);
+    r.post('/script-assistant/works/:work_id/candidates/:candidate_id/revisions', assistant.createCandidateRevision);
     r.post('/script-assistant/revisions/:revision_id/approve', assistant.approveRevision);
     r.get('/script-assistant/revisions/:revision_id/review-decisions', assistant.reviewDecisions);
     r.post('/script-assistant/revisions/:revision_id/review-decisions', assistant.saveReviewDecision);

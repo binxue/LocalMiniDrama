@@ -41,6 +41,7 @@
           <el-button size="small" @click="reload" :disabled="loading">刷新记录</el-button>
         </div>
       <p class="conversation-note">直接描述创作目标。明确的单集修改会自动生成独立候选并安排审核；分镜、视频生成及制作验收由视频模块负责。</p>
+      <CreativeWorkflow :revisions="revisions" :work-id="selected" :isolated="!!route.query.kernelTest" @reload="reload" :batches="batches" :candidates="episodeCandidates" :context="context" :render="renderReply" @open-candidate="openEpisodeCandidate" @export="exportText" />
       <section v-if="revisions.length" class="creation-progress">
         <h3>最近创作成果</h3>
         <article v-for="revision in revisions.slice(0, 3)" :key="revision.revision_id" class="progress-row">
@@ -144,10 +145,11 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import { ElMessageBox } from 'element-plus'
+import CreativeWorkflow from '@/components/CreativeWorkflow.vue'
 import { revisionDiff } from '@/utils/revisionDiff'
 import { useRouter, useRoute } from 'vue-router'
 import { ArrowLeft, ChatDotRound } from '@element-plus/icons-vue'
-import { getKernelTest, getAssistantWorks, registerAssistantWork, getAssistantContext, getAssistantIntent, getAssistantMessages, sendAssistantMessage, refreshAssistantMessage, getAssistantSource, getAssistantRuns, createAssistantRun, getAssistantRevisions, createAssistantRevision, approveAssistantRevision, refreshAssistantRevision, recoverAssistantEditor, getReviewDecisions, saveReviewDecision, getAssistantCandidates, getAssistantBatches, createAssistantEpisode, createAssistantBatch, pauseAssistantBatch, resumeAssistantBatch, recoverAssistantEpisode } from '@/api/scriptAssistant'
+import { createCreativePlan, getKernelTest, getAssistantWorks, registerAssistantWork, getAssistantContext, getAssistantIntent, getAssistantMessages, sendAssistantMessage, refreshAssistantMessage, getAssistantSource, getAssistantRuns, createAssistantRun, getAssistantRevisions, createAssistantRevision, createAssistantCandidateRevision, approveAssistantRevision, refreshAssistantRevision, recoverAssistantEditor, getReviewDecisions, saveReviewDecision, getAssistantCandidates, getAssistantBatches, createAssistantEpisode, createAssistantBatch, pauseAssistantBatch, resumeAssistantBatch, recoverAssistantEpisode } from '@/api/scriptAssistant'
 
 const router = useRouter(), route = useRoute()
 const works = ref([]), selected = ref(''), context = ref(null), messages = ref([]), draft = ref(''), budget = ref({})
@@ -204,7 +206,8 @@ async function reload() {
 async function loadRevisionDetails() {
   for (const r of revisions.value) {
     decisions.value[r.revision_id] = (await getReviewDecisions(r.revision_id)).decisions; for (const d of decisions.value[r.revision_id]) reviewNotes.value[d.block_id] = d.note || ''
-    if (r.candidate_text) revisionSource.value[r.revision_id] = await getAssistantSource(selected.value, r.source_id)
+    if (r.source_text_snapshot) revisionSource.value[r.revision_id] = { title:r.source_title, text:r.source_text_snapshot, sha256:r.source_sha256, available:true }
+    else if (r.candidate_text) revisionSource.value[r.revision_id] = await getAssistantSource(selected.value, r.source_id)
   }
 }
 async function changeWork() {
@@ -212,7 +215,7 @@ async function changeWork() {
   generation++; messages.value = []; context.value = null; error.value = ''; loading.value = true
   requestKey = null; submittedText = null
   await router.replace({ query: { work: selected.value } })
-  try { context.value = await getAssistantContext(selected.value); await reloadMessages(); runs.value = (await getAssistantRuns(selected.value)).runs; revisions.value = (await getAssistantRevisions(selected.value)).revisions; episodeCandidates.value=(await getAssistantCandidates(selected.value)).candidates; batches.value=(await getAssistantBatches(selected.value)).batches; for (const r of revisions.value) { decisions.value[r.revision_id] = (await getReviewDecisions(r.revision_id)).decisions; for (const d of decisions.value[r.revision_id]) reviewNotes.value[d.block_id] = d.note || ''; if (r.candidate_text) { const s = context.value.sources.find(x => x.id === r.source_id); if (s) revisionSource.value[r.revision_id] = await getAssistantSource(selected.value, s.id) } } } catch (e) { error.value = e.message } finally { loading.value = false }
+  try { context.value = await getAssistantContext(selected.value); await reloadMessages(); runs.value = (await getAssistantRuns(selected.value)).runs; revisions.value = (await getAssistantRevisions(selected.value)).revisions; episodeCandidates.value=(await getAssistantCandidates(selected.value)).candidates; batches.value=(await getAssistantBatches(selected.value)).batches; for (const r of revisions.value) { decisions.value[r.revision_id] = (await getReviewDecisions(r.revision_id)).decisions; for (const d of decisions.value[r.revision_id]) reviewNotes.value[d.block_id] = d.note || ''; if (r.source_text_snapshot) revisionSource.value[r.revision_id] = { title:r.source_title, text:r.source_text_snapshot, sha256:r.source_sha256, available:true }; else if (r.candidate_text) { const s = context.value.sources.find(x => x.id === r.source_id); if (s) revisionSource.value[r.revision_id] = await getAssistantSource(selected.value, s.id) } } } catch (e) { error.value = e.message } finally { loading.value = false }
 }
 async function startRevision() { if (revisionSending.value) return; revisionSending.value=true; error.value=''; try { await createAssistantRevision(selected.value,revisionTarget.value,revisionGoal.value); revisionGoal.value=''; await reload() } catch(e) { error.value=e.message } finally { revisionSending.value=false } }
 async function approveRevision(id) { const r = revisions.value.find(x => x.revision_id === id); const version = {source_sha256:r.source_sha256,candidate_sha256:r.candidate_sha256}; try { await ElMessageBox.confirm('确认指定的完整修改版本？逐项接受不是整集批准。本操作仅记录待发布确认，不写入正式版本或视频制作。', '最终版本确认', { confirmButtonText: '明确确认此版本', cancelButtonText: '继续审阅' }); await approveAssistantRevision(id, version); await reload() } catch(e) { if (e !== 'cancel' && e !== 'close') error.value=e.message } }
@@ -247,24 +250,32 @@ async function send() {
   sending.value = true; error.value = ''
   try {
     const route = await getAssistantIntent(selected.value, text)
+    if (route.intent?.intent === 'plan' && route.intent.status === 'ready') { await createCreativePlan(selected.value,{episode_start:route.intent.episode_start,episode_end:route.intent.episode_end,request:text}); draft.value='';await reload();return }
+    if (route.intent?.intent === 'create_episode') { await createAssistantEpisode(selected.value,route.intent.episode,text);draft.value='';await reload();return }
     if (route.intent?.intent === 'revise_episode' && route.intent.episode) {
       const n = route.intent.episode
       const numeral = ({1:'一',2:'二',3:'三',4:'四',5:'五',6:'六',7:'七',8:'八',9:'九',10:'十'})[n]
       const source = context.value?.scripts?.find(s => new RegExp(`(?:第\\s*(?:${n}|${numeral})\\s*集|\\bep0*${n}\\b)`, 'i').test(`${s.title} ${s.id}`))
-      if (!source) throw new Error(`当前作品资料中没有可核验的第${n}集原稿，未启动修改。`)
-      await createAssistantRevision(selected.value, source.id, text)
+      const candidate = [...episodeCandidates.value].filter(c => Number(c.episode_no) === n && c.status === 'completed' && c.candidate_text).sort((a,b) => String(b.created_at).localeCompare(String(a.created_at)))[0]
+      if (candidate) await createAssistantCandidateRevision(selected.value, candidate.candidate_id, text)
+      else if (source) await createAssistantRevision(selected.value, source.id, text)
+      else throw new Error(`当前作品资料中没有可核验的第${n}集原稿或候选稿，未启动修改。`)
       draft.value = ''; mode.value = 'chat'; await reload(); return
     }
-    if (route.intent?.intent === 'next_episode') {
-      const nums = [...(context.value?.scripts || []).map(s => Number((s.id.match(/(?:ep|episode)[_-]?(\d+)/i)||[])[1])), ...(episodeCandidates.value || []).map(c => Number(c.episode_no))].filter(Number.isFinite)
+    if (['next_episode','continue_episodes'].includes(route.intent?.intent)) {
+      const nums = [...(context.value?.scripts || []).map(s => Number((s.id.match(/(?:ep|episode)[_-]?(\d+)/i)||[])[1])), ...(episodeCandidates.value || []).filter(c=>c.candidate_text||c.writer_task_id).map(c => Number(c.episode_no))].filter(Number.isFinite)
       const next = Math.max(0, ...nums) + 1
-      await createAssistantEpisode(selected.value, next, text); draft.value = ''; await reload(); return
+      const pending = episodeCandidates.value.find(c => ['queued','writing','reviewing','awaiting_recovery'].includes(c.status));
+      if (pending) throw new Error(`第${pending.episode_no}集仍在处理中或等待恢复，请先继续原创作任务，避免跳过剧情。`)
+      if (route.intent.intent === 'continue_episodes') await createAssistantBatch(selected.value, next, next + route.intent.count - 1, text)
+      else await createAssistantEpisode(selected.value, next, text)
+      draft.value = ''; await reload(); return
     }
     if (route.intent?.intent === 'create_episode_range') {
       await createAssistantBatch(selected.value, route.intent.episode_start, route.intent.episode_end, text); draft.value = ''; await reload(); return
     }
     if (route.intent?.intent === 'create_all' && route.intent?.status === 'ready') {
-      const existing = [...(context.value?.scripts || []).map(s => Number((s.id.match(/(?:ep|episode)[_-]?(\d+)/i) || [])[1])), ...episodeCandidates.value.map(c => Number(c.episode_no))].filter(Number.isFinite)
+      const existing = [...(context.value?.scripts || []).map(s => Number((s.id.match(/(?:ep|episode)[_-]?(\d+)/i) || [])[1])), ...episodeCandidates.value.filter(c=>c.candidate_text||c.writer_task_id).map(c => Number(c.episode_no))].filter(Number.isFinite)
       const start = Math.max(0, ...existing) + 1
       if (start > route.intent.total_episodes) throw new Error(`已存在第${route.intent.total_episodes}集或更高集数，没有可创建的剩余集数。`)
       await createAssistantBatch(selected.value, start, route.intent.total_episodes, text); draft.value = ''; await reload(); return

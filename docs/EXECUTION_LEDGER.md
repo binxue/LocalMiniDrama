@@ -1,4 +1,26 @@
+
+## 2026-10-15 助手流程工程交付检查点
+
+已实现：结构化剧情拆解与逐集专业资料、策划复用和版本保护、候选定向返修与连续修改、对应评定与原稿阅读、中文范围及后续N集路由、重叠写作保护。全量后端121/121，前端11/11，build通过。上述自动化含明确标记的stub，不是新增真实Agent产出。
+
+现有服务在运行，最新路由/主成果展示改动尚需后端重新加载与运行验收。浏览器工具对现有页签拒绝访问；不得换浏览器、CDP或其他方式绕过该拒绝。真实候选返修闭环、Producer中断后自动续接、无集数反馈上下文、全集缺口补全、可控并行与官方原生Multi Agent仍未验证/完成，不能宣称产品交付完成。
+
 # LocalMiniDrama Execution Ledger
+
+## 2026-10-15 — Rainforest input-context reconciliation and plan-reuse regression
+
+- Rechecked the active 3014/5688 flow after the user asked why the Rainforest kernel was not being used. The displayed work is the isolated Rainforest Story Kernel flow, not `adapted-intake`.
+- Distinguished the fully reviewed kernel-only Agent run (`batch_30df...`, old name 阿棠, real Editor CONDITIONAL PASS) from the later user-requested rename candidate (`batch_227...`, 黎夏, no new Writer/Editor run; UI correctly says not re-reviewed). Both remain candidates and neither changes Canon.
+- Added regression proving a complete existing creative plan and structured expert design are reused for a requested subrange without creating Producer/expert/Writer/Editor tasks. Added kernel-isolation regression proving an older Rainforest plan cannot leak into the isolated input.
+- Verification: targeted tests 26/26; full backend 114/114; frontend tests 11/11; Vite build passed. No real Agent calls; 0 new model requests and tokens.
+
+## 2026-10-15 — creative planning workflow delivery
+
+- Added the versioned creative-plan/v1 contract and per-episode validation, source/version conflict checks, and plan-only review before writing. Existing Producer/expert output remains preserved; Writer receives the exact selected episode plan plus retained expert design.
+- Unified single-episode requests with the existing batch planning and writing path. Added plan view/save/start endpoints and the 3014 results workflow for settings, plot breakdown, character relations, beats/scenes, scripts and review/export.
+- Real isolated-work Managed Agent acceptance used Producer, Relationship Writer, Interactive Designer, Story Writer and Independent Editor; approximately 5,000 script characters; Editor CONDITIONAL PASS; approval remains not_approved. Recorded aggregate usage: 56,128 input / 34,986 output tokens. Price is unconfigured, so cost is unknown. No new model call was made during this closeout.
+- Verification: full backend suite 111/111; frontend production build succeeded with the existing large-chunk warning; 3014 route and 5688 health endpoint returned HTTP 200; browser showed the saved creative plan and episode-level breakdown.
+- Scope limits: no evidence of Ark native Multi Agent configuration, 50-episode throughput, parallel writing, or measured speed/cost improvement. No Rainforest Canon or official candidate approval changed.
 
 ## 2026-10-15 已交付：专业策划到正文和独立评定
 
@@ -94,3 +116,11 @@ Producer + Relationship + Interactive + Story结构设计 → Writer → Editor�
 批次batch_30df930d-a129-4b18-a65f-e19619fe0eea；候选cand_f9680c40-ad8b-4b53-9322-29dc5bc72514。3014隔离视图可查看并导出专业策划、全文和评定；下载逐字核验、刷新和浏览器Console验证完成。云端链23分06.6秒；本地恢复确认含服务中断延迟，另记。输入62,789/输出61,346/缓存26,448，价格未配置，金额未知。完整证据与局限见RAINFOREST_KERNEL_TEST_ACCEPTANCE.md。
 
 当前唯一下一动作：交由用户阅读本次新测试版与五项真实Editor意见；只有用户要求时定向修改。不要自动续写第二集或批准正式稿。此次完成单集内容生产，不宣称全剧并行产品已完成。
+
+## 2026-10-15 候选定向返修闭环工程修复
+
+复用现有 Revision 与 Producer→Writer→Editor。来源候选与连续返修使用冻结快照和 SHA；再次修改承接最新完成版本；未知返修阻止新提交；Editor 无有效结论不记完成；原 Writer 恢复后可进入必要审核，既有 Editor 不重发；恢复审核发送完整原文和修改稿，采用持久候选幂等键。原候选和 Canon 不变。
+
+后端全量120/120、前端此前build通过、diff check通过。此处新增测试为明确隔离的 Agent stub 程序证据，非真实创作。重启前活动Agent任务数0；5688使用原Runtime配置安全加载最新代码，健康ok，3014 HTTP200。没有新增收费调用。
+
+浏览器工具访问现有3014页签遭URL安全策略拒绝，未绕过；因此最新返修的真实浏览器/Agent验收仍缺失。Producer中断后的自动续接、自然语言省略集数、多集吞吐、官方原生协作仍需后续核验。整体目标未完成。

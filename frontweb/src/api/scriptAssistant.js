@@ -19,6 +19,7 @@ export const pauseAssistantBatch = id => request.post(`/script-assistant/batches
 export const resumeAssistantBatch = id => request.post(`/script-assistant/batches/${encodeURIComponent(id)}/resume`)
 export const recoverAssistantEpisode = id => request.post(`/script-assistant/candidates/${encodeURIComponent(id)}/recover`)
 export const createAssistantRevision = (id, sourceId, goal) => request.post(`${work(id)}/revisions`, { source_id: sourceId, request: goal })
+export const createAssistantCandidateRevision = (id, candidateId, goal) => request.post(`${work(id)}/candidates/${encodeURIComponent(candidateId)}/revisions`, { request: goal })
 export const approveAssistantRevision = (id, version) => request.post(`/script-assistant/revisions/${encodeURIComponent(id)}/approve`, { actor: 'user', ...version })
 export const refreshAssistantRevision = id => request.post(`/script-assistant/revisions/${encodeURIComponent(id)}/refresh`)
 export const recoverAssistantEditor = id => request.post(`/script-assistant/revisions/${encodeURIComponent(id)}/recover-editor`)
@@ -26,3 +27,9 @@ export const getReviewDecisions = id => request.get(`/script-assistant/revisions
 export const saveReviewDecision = (id, body) => request.post(`/script-assistant/revisions/${encodeURIComponent(id)}/review-decisions`, body)
 
 export const getKernelTest = id => request.get(`/script-assistant/kernel-tests/${encodeURIComponent(id)}`)
+
+export const getCreativePlan = id => request.get(`/script-assistant/batches/${encodeURIComponent(id)}/plan`)
+export const saveCreativePlan = (id, body) => request.post(`/script-assistant/batches/${encodeURIComponent(id)}/plan-versions`, body)
+
+export const createCreativePlan = (id, body) => request.post(`${work(id)}/plans`, body)
+export const startCreativeWriting = (id, body) => request.post(`/script-assistant/batches/${encodeURIComponent(id)}/start-writing`, body)

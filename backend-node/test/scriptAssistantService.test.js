@@ -12,6 +12,10 @@ test('kernel-only test never opens the historical manifest or links previous can
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kernel-only-'));
   const kernel = path.join(dir, 'kernel.md'); fs.writeFileSync(kernel, '唯一内核：第一人称互动冒险，阿棠。');
   const db = new Database(':memory:'); service.ensureTable(db);
+  const legacyPlan = { schema:'creative-plan/v1', story:'历史旧分集内容：上一版已经设定旧剧情。', characters:'旧人物设定', episodes:[{episode_no:1,title:'旧版第一集',goal:'旧剧情目标',conflict:'旧冲突',reversal:'旧反转',hook:'旧钩子',continuity:'旧连续性',requirements:'旧时长要求',scenes:['旧场景'],beats:['旧节拍'],plots:[{scene:'旧场景',action:'历史旧分集内容：旧动作',result:'旧结果',emotion:'旧情绪'}]}] };
+  const now = new Date().toISOString();
+  db.prepare(`INSERT INTO script_assistant_batches(batch_id,work_id,request,episode_start,episode_end,status,total_count,planning_status,planning_output,created_at,updated_at)
+    VALUES('historical-rainforest-plan','rainforest','历史已完成策划',1,1,'completed',1,'completed',?,?,?)`).run('```json\n'+JSON.stringify(legacyPlan)+'\n```',now,now);
   let input;
   managed.createTask = (_db, _log, args) => { input = args.input; return { task_id: 'isolated-plan' }; };
   try {
@@ -20,8 +24,11 @@ test('kernel-only test never opens the historical manifest or links previous can
     const view = service.kernelTestView(db, b.batch_id);
     assert.equal(view.source.text, '唯一内核：第一人称互动冒险，阿棠。');
     assert.match(input, /唯一故事输入/);
+    assert.match(input, /女主人公统一按用户最新决定称为黎夏/);
+    assert.doesNotMatch(input, /历史旧分集内容|旧版第一集|旧人物设定/);
     assert.equal(view.candidates[0].continuity_source_candidate_id, null);
     assert.equal(view.candidates.length, 1);
+    assert.equal(db.prepare("SELECT count(*) n FROM script_assistant_plan_versions WHERE batch_id=?").get(b.batch_id).n,0);
   } finally { managed.createTask = original; }
 });
 
@@ -134,10 +141,40 @@ test('script assistant rejects an unverified source hash', () => {
 test('classifyCreativeRequest routes natural language without model calls', () => {
   assert.deepEqual(service.classifyCreativeRequest('帮我优化第三集', [{ id: 'ep3', available: true }]), { intent: 'revise_episode', status: 'ready', episode: 3, available_scripts: ['ep3'] });
   assert.equal(service.classifyCreativeRequest('按现在的剧情写下一集').intent, 'next_episode');
+  assert.equal(service.classifyCreativeRequest('重写第三集').intent, 'revise_episode');
+  assert.equal(service.classifyCreativeRequest('优化第三集到第五集').status, 'clarification_required');
+  assert.deepEqual(service.classifyCreativeRequest('继续写后面三集'), {intent:'continue_episodes',status:'ready',count:3});
+  assert.deepEqual(service.classifyCreativeRequest('继续写后面十集'), {intent:'continue_episodes',status:'ready',count:10});
+  assert.deepEqual(service.classifyCreativeRequest('接着写两集'), {intent:'continue_episodes',status:'ready',count:2});
   assert.equal(service.classifyCreativeRequest('写第5到第8集').status, 'ready');
   assert.equal(service.classifyCreativeRequest('按现在的剧情写下一集').status, 'ready');
   assert.equal(service.classifyCreativeRequest('按照规划把全集写完').reason, '需要先确认总集数和分集规划');
   assert.deepEqual(service.classifyCreativeRequest('按照规划把全集写完', [{ id: 'plan', kind: 'continuity', available: true, text: '本剧共 5 集。' }]), { intent: 'create_all', status: 'ready', total_episodes: 5 });
+  assert.deepEqual(service.classifyCreativeRequest('写第一集到第五集'), { intent: 'create_episode_range', status: 'ready', episode_start: 1, episode_end: 5 });
+  assert.deepEqual(service.classifyCreativeRequest('按照规划把全集写完', [{ id: 'plan', kind: 'continuity', available: true, text: '本剧共十集。' }]), { intent: 'create_all', status: 'ready', total_episodes: 10 });
+});
+
+test('candidate revision keeps a stable candidate source snapshot', () => {
+  const db = new Database(':memory:'), service = require('../src/services/scriptAssistantService'); service.ensureTable(db);
+  service.registerWork(db, { work_id: 'candidate-revision-test', title: '候选修订测试', kind: 'original', premise: '隔离故事' });
+  const text = '第2集候选正文：黎夏在雨夜找到线索。'.repeat(300);
+  const sha = require('crypto').createHash('sha256').update(text).digest('hex');
+  db.prepare('INSERT INTO script_assistant_episode_candidates(candidate_id,work_id,episode_no,title,status,candidate_text,candidate_sha256,created_at) VALUES(?,?,?,?,?,?,?,?)').run('cand-revision','candidate-revision-test',2,'第2集','completed',text,sha,new Date().toISOString());
+  const originalImmediate = global.setImmediate; let scheduled = false;
+  global.setImmediate = callback => { scheduled = typeof callback === 'function'; return 1; };
+  try {
+    const revision = service.createCandidateRevision(db, { error() {} }, {}, 'candidate-revision-test', 'cand-revision', '加强结尾反转');
+    const saved = db.prepare('SELECT * FROM script_assistant_revisions WHERE revision_id=?').get(revision.revision_id);
+    assert.equal(saved.candidate_id, 'cand-revision');
+    assert.equal(saved.source_id, 'candidate:cand-revision');
+    assert.equal(saved.source_sha256, sha);
+    assert.equal(saved.source_text_snapshot, text);
+    assert.equal(saved.approval_status, 'not_approved');
+    assert.ok(saved.source_text_snapshot.length > 4800);
+    assert.equal(db.prepare('SELECT candidate_text FROM script_assistant_episode_candidates WHERE candidate_id=?').get('cand-revision').candidate_text, text);
+    assert.throws(() => service.createCandidateRevision(db, {}, {}, 'other-work', 'cand-revision', '修改'), /候选稿不可用/);
+    assert.equal(scheduled, true);
+  } finally { global.setImmediate = originalImmediate; }
 });
 
 test('new episode candidate and batch tables are isolated from revisions', () => {
