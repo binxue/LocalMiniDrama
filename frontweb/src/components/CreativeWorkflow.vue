@@ -80,6 +80,7 @@
       <template v-else>
         <p v-if="!selectedCandidates.length">该方案尚无分集正文或审核成果。</p>
         <article v-for="c in selectedCandidates" :key="c.candidate_id">
+          <el-alert v-if="c.planning_sha256 && planView?.plan_sha256 && c.planning_sha256 !== planView.plan_sha256" title="本剧本采用的是较早的策划版本；当前策划变更未自动写入正文，请重新检查一致性。" type="warning" :closable="false" />
           <h3>第{{ c.episode_no }}集 · {{ c.approval_status === 'not_approved' ? '候选稿，未批准' : '已确认版本' }}</h3>
           <template v-if="stage === 'scripts'"><p v-if="c.is_revision">当前显示最新完成的修改稿；原稿保留。</p><el-button v-if="c.original" @click="$emit('open-candidate',c.original)">查看原稿</el-button><el-button v-if="c.candidate_text" @click="$emit('open-candidate',c)">阅读完整剧本</el-button><el-button v-if="c.candidate_text" @click="$emit('export',`第${c.episode_no}集 · 候选稿`,c.candidate_text)">导出剧本</el-button><p v-else>正在等待正文，不以聊天总结冒充成果。</p></template>
           <template v-else><div v-if="c.editor_review" class="markdown-body" v-html="render(c.editor_review,null)"></div><p v-else>{{ c.error_text || '尚无有效独立审核。' }}</p><p>专业评定不等于人工批准或实际拍摄验收。</p></template>

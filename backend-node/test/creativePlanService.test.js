@@ -71,6 +71,9 @@ test('episode execution sends only its structured episode plan and expert design
     }
     const candidate=db.prepare("SELECT * FROM script_assistant_episode_candidates WHERE candidate_id='candidate-input-test'").get();
     assert.equal(candidate.status,'completed');
+    assert.match(candidate.plan_input_snapshot,/第二集独有动作：打开封缄盒/);
+    assert.match(candidate.expert_input_snapshot,/第二集专属设计/);
+    assert.equal(candidate.planning_sha256,plan.view(db,'batch-input-test').plan_sha256);
     assert.equal(candidate.approval_status,'not_approved');
     assert.match(candidate.editor_review,/CONDITIONAL PASS/);
   }finally{managed.createTask=originalCreate;managed.getTask=originalGet;db.close();}
@@ -143,4 +146,27 @@ test('starting a plan cannot overlap another active or unknown Writer',()=>{
   assert.throws(()=>service.startPlannedBatch(db,{}, {},'p',{plan_sha256:view.plan_sha256}),/已有创作或待恢复任务/);
   assert.equal(db.prepare("SELECT planning_only FROM script_assistant_batches WHERE batch_id='p'").get().planning_only,1);
   assert.equal(db.prepare('SELECT count(*) n FROM managed_agent_tasks').get().n,0);db.close();
+});
+
+test('planning recovery retains the original stage and never schedules invalid plans',async()=>{
+ const db=new Database(':memory:'),service=require('../src/services/scriptAssistantService');service.ensureTable(db);
+ const immediate=global.setImmediate;let scheduled=0;global.setImmediate=()=>{scheduled++;return 1;};
+ try {
+  for(const [id,expertIds,expected] of [['producer','[]','running'],['expert','["original-expert"]','experts']]) {
+   db.prepare("INSERT INTO script_assistant_batches(batch_id,work_id,request,episode_start,episode_end,status,total_count,created_at,updated_at,planning_status,planning_task_id,planning_expert_task_ids_json) VALUES(?,'w','test',1,1,'paused',1,'now','now','awaiting_recovery','original-producer',?)").run(id,expertIds);
+   const resumed=await service.resumeBatch(db,{}, {},id);assert.equal(resumed.planning_status,expected);assert.equal(resumed.planning_task_id,'original-producer');assert.equal(resumed.planning_expert_task_ids_json,expertIds);
+  }
+  db.prepare("UPDATE script_assistant_batches SET status='paused',planning_status='needs_planning' WHERE batch_id='producer'").run();
+  await assert.rejects(service.resumeBatch(db,{}, {},'producer'),/先补全或修正方案/);assert.equal(scheduled,2);assert.equal(db.prepare('SELECT count(*) n FROM managed_agent_tasks').get().n,0);
+ } finally {global.setImmediate=immediate;db.close();}
+});
+
+test('pause during Producer completion prevents submission of experts and Writer',async()=>{
+ const db=new Database(':memory:'),service=require('../src/services/scriptAssistantService'),managed=require('../src/services/managedAgentService');service.ensureTable(db);
+ db.prepare("INSERT INTO script_assistant_batches(batch_id,work_id,request,episode_start,episode_end,status,total_count,created_at,updated_at,planning_status,planning_task_id) VALUES('pause-plan','w','test',1,2,'queued',2,'now','now','running','producer')").run();
+ const get=managed.getTask,create=managed.createTask;let calls=0;
+ managed.getTask=()=>{db.prepare("UPDATE script_assistant_batches SET status='paused' WHERE batch_id='pause-plan'").run();return {task_id:'producer',task_status:'completed',input_text:'creative-plan/v1',output_text:'```json\n'+JSON.stringify(fixture())+'\n```'};};
+ managed.createTask=()=>{calls++;throw new Error('Paused plan must not submit another task');};
+ try {await service._executeBatch(db,{}, {},'pause-plan');assert.equal(calls,0);const b=db.prepare("SELECT * FROM script_assistant_batches WHERE batch_id='pause-plan'").get();assert.equal(b.status,'paused');assert.equal(b.planning_task_id,'producer');}
+ finally {managed.getTask=get;managed.createTask=create;db.close();}
 });
