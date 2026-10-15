@@ -42,3 +42,9 @@
 managedAgentService在观察到session.thread_created后，使用已核验CLI命令threads list（全分页）查询并持久保存threads_json；线程未知、非idle或出现thread_status_terminated时不记completed。现有单Agent任务保留原完成门槛。后端126/126通过，新增线程判定为fixture测试，不是真实多Agent协作。
 
 仍未接入每个子线程的完整正文与独立usage聚合，也未远端启用Multiagent，不能称为已完成原生协作。Tools正文读取两次因active.json TLS handshake timeout失败；未猜测字段，未删除Skills清空或放开工具。真实Skill受控验证未开始。浏览器与运行重启的策略拒绝仍保持，不绕过。
+
+## 2026-10-15 受控请求配置纠正
+
+依据已读取的arkcli-agent配套references/session-files.md，Session overrides中的Tools/Skills是替换语义；references/agent.md明确空Tools数组可关闭工具。受控单轮任务现在显式Tools: []，不再只靠System的禁止文字，同时继承云端全部工具。未改云端Agent配置、未修改既有Session、未恢复Skills，也未启用原生Multiagent。
+
+createSession与测试使用同一个sessionArgs构造器，移除此前单独复制给测试的请求构造代码。普通会话不增加覆盖，仍继承已有配置。后端129/129通过，仅证明本地请求结构；未真实提交新Session，服务端空数组生效与实际运行仍待验证。新增收费调用0。

@@ -71,14 +71,19 @@ function update(db, id, fields) {
     .run(...values, now(), id);
 }
 
-async function createSession(agentId, title, options = {}) {
+function sessionArgs(agentId, title, options = {}) {
   const args = ['agent', 'session', 'create', '--agent-id', agentId, '--environment-id', process.env.ARK_AGENT_ENVIRONMENT_ID || 'env-20261011083635-eeeu2', '--title', title];
   if (options.controlledEpisodeAgent) args.push('--agent-overrides', JSON.stringify({
     System: '你只执行当前用户给出的单轮剧本任务。不得调用工具、读取或写入文件、搜索网络、加载Skill、研究项目或调用其他Agent；所有必要上下文已经在用户消息中提供。Producer 只返回可执行策划，不写正文；前期专家按当前任务返回专业设计；Writer 仅在当前任务明确要求正文时返回完整剧本正文；Editor 只返回 PASS、CONDITIONAL PASS 或 FAIL 及最多5条证据和建议。不要解释执行过程，不要创作任务之外的内容。',
     Skills: [],
+    Tools: [],
   }));
   args.push('--format', 'json');
-  const out = await runArk(args, 60000);
+  return args;
+}
+
+async function createSession(agentId, title, options = {}) {
+  const out = await runArk(sessionArgs(agentId, title, options), 60000);
   const json = parseJson(out);
   const result = json?.Result || json?.result;
   if (!result?.Id) throw new Error('Managed Agent Session 创建未返回 session id');
@@ -253,4 +258,4 @@ function recoverOnStartup(db, log) {
   return result.changes;
 }
 
-module.exports = { _teamUsage:teamUsage, _teamComplete:teamComplete, ensureTable, createTask, getTask, listTasks, refreshTask, recoverOnStartup, ALLOWED_AGENTS, extract, _sessionArgs: (agentId, title, options = {}) => { const args = ['agent', 'session', 'create', '--agent-id', agentId, '--environment-id', process.env.ARK_AGENT_ENVIRONMENT_ID || 'env-20261011083635-eeeu2', '--title', title]; if (options.controlledEpisodeAgent) args.push('--agent-overrides', JSON.stringify({ System: '你只执行当前用户给出的单轮剧本任务。不得调用工具、读取或写入文件、搜索网络、加载Skill、研究项目或调用其他Agent；所有必要上下文已经在用户消息中提供。Producer 只返回可执行策划，不写正文；前期专家按当前任务返回专业设计；Writer 仅在当前任务明确要求正文时返回完整剧本正文；Editor 只返回 PASS、CONDITIONAL PASS 或 FAIL 及最多5条证据和建议。不要解释执行过程，不要创作任务之外的内容。', Skills: [] })); return args; } };
+module.exports = { _teamUsage:teamUsage, _teamComplete:teamComplete, ensureTable, createTask, getTask, listTasks, refreshTask, recoverOnStartup, ALLOWED_AGENTS, extract, _sessionArgs: sessionArgs };

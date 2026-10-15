@@ -9,6 +9,7 @@ test('episode Writer sessions receive a controlled single-turn system override',
   assert.ok(index >= 0);
   const override = JSON.parse(args[index + 1]);
   assert.deepEqual(override.Skills, []);
+  assert.deepEqual(override.Tools, []);
   assert.match(override.System, /不得调用工具/);
 });
 
@@ -18,6 +19,7 @@ test('episode Editor sessions use the same controlled override as Writer', () =>
   assert.ok(index >= 0);
   const override = JSON.parse(args[index + 1]);
   assert.deepEqual(override.Skills, []);
+  assert.deepEqual(override.Tools, []);
   assert.match(override.System, /PASS、CONDITIONAL PASS 或 FAIL/);
 });
 
@@ -26,6 +28,7 @@ test('batch Producer planning sessions receive a controlled single-turn override
   const index = args.indexOf('--agent-overrides');
   const override = JSON.parse(args[index + 1]);
   assert.deepEqual(override.Skills, []);
+  assert.deepEqual(override.Tools, []);
   assert.match(override.System, /Producer 只返回可执行策划/);
 });
 
@@ -110,4 +113,10 @@ test('team token aggregation deduplicates shared stream events without mixing ou
  const child={id:'child-end',type:'span.model_request_end',model_usage:{input_tokens:20,output_tokens:6}};
  const usage=service._teamUsage([main],{a:[main,child],b:[child]});
  assert.equal(usage.requests,2);assert.equal(usage.input_tokens,30);assert.equal(usage.output_tokens,10);
+});
+
+test('ordinary agent sessions inherit deployed capabilities without empty overrides', () => {
+  const args = service._sessionArgs('agent-20261011131513-17rey', 'ordinary');
+  assert.equal(args.includes('--agent-overrides'), false);
+  assert.deepEqual(args.slice(-2), ['--format', 'json']);
 });
