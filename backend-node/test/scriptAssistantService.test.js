@@ -253,3 +253,12 @@ test('revision review decisions persist without changing approval state', () => 
   assert.throws(() => service.approveRevision(db,'rev1','test',{source_sha256:'source',candidate_sha256:sha}),/审核/);
   assert.equal(db.prepare('SELECT approval_status FROM script_assistant_revisions WHERE revision_id=?').get('rev1').approval_status,'not_approved');
 });
+
+test('whole-drama requests honor explicit totals and ask about conflicting plans',()=>{
+ const classify=service.classifyCreativeRequest;
+ assert.equal(classify('总共五十集，把全集写完').total_episodes,50);
+ assert.equal(classify('总集数为一百零二集，写全剧').total_episodes,102);
+ assert.equal(classify('共十二集，写全集',[{text:'共五集'}]).total_episodes,12);
+ assert.equal(classify('写全集',[{text:'共五集'},{text:'共十集'}]).status,'clarification_required');
+ assert.equal(classify('写全集',[{text:'共五集',available:false}]).status,'clarification_required');
+});

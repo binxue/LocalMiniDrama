@@ -21,7 +21,7 @@ module.exports = function scriptAssistant(db, log, config) {
     context: wrap(req => service.summary(service.loadWork(config, req.params.work_id, db))),
     intent: wrap(req => {
       if(req.query?.kernelTest) { const scope=service.kernelTestView(db,req.query.kernelTest); if(scope.work_id!==req.params.work_id)throw new Error('作品与隔离版本不匹配'); return {intent:service.classifyCreativeRequest(req.query?.text||'',[])}; }
-      const work=service.loadWork(config,req.params.work_id,db);return {intent:service.classifyCreativeRequest(req.query?.text||'',work.sources.filter(s=>['script','continuity','core'].includes(s.kind)))};
+      const work=service.loadWork(config,req.params.work_id,db);return {intent:service.classifyCreativeRequest(req.query?.text||'',work.sources.filter(s=>['plan','outline','beat','continuity','core'].includes(s.kind)))};
     }),
     source: wrap(req => {
       const source = service.loadWork(config, req.params.work_id, db).sources.find(s => s.id === req.params.source_id);

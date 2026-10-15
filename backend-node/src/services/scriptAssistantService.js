@@ -772,17 +772,18 @@ function buildInput(work, history, question) {
 function classifyCreativeRequest(text, scripts = []) {
   const q = String(text || '').trim();
   const chineseNumber = value => {
-    const s = String(value || '').replace(/零/g, '');
+    const s = String(value || '');
     if (/^\d+$/.test(s)) return Number(s);
-    const digits = {一:1,二:2,两:2,三:3,四:4,五:5,六:6,七:7,八:8,九:9};
-    if (s === '十') return 10;
-    const ten = s.indexOf('十');
-    if (ten >= 0) {
-      const left = ten ? (digits[s[ten - 1]] || 1) : 1;
-      const right = ten < s.length - 1 ? (digits[s[ten + 1]] || 0) : 0;
-      return left * 10 + right;
+    const digits = {零:0,一:1,二:2,两:2,三:3,四:4,五:5,六:6,七:7,八:8,九:9};
+    if (!/[十百]/.test(s)) return s.length === 1 ? digits[s] ?? null : null;
+    let result=0, digit=0, lastUnit=1000;
+    for (const char of s) {
+      if (char in digits) { digit=digits[char]; continue; }
+      const unit=char==='百'?100:char==='十'?10:0;
+      if (!unit || unit>=lastUnit) return null;
+      result+=(digit||1)*unit;digit=0;lastUnit=unit;
     }
-    return digits[s] || null;
+    return result+digit;
   };
   const episode = q.match(/第\s*(\d+|[零一二两三四五六七八九十百]+)\s*集/);
   const episodeNumber = episode ? chineseNumber(episode[1]) : null;
@@ -800,9 +801,12 @@ function classifyCreativeRequest(text, scripts = []) {
   if (range && /(?:写|创作|生成|编写)/.test(q)) return { intent: 'create_episode_range', status: 'ready', episode_start: chineseNumber(range[1]), episode_end: chineseNumber(range[2]) };
   if (episodeNumber && /(?:写|创作|生成|编写)(?:出|好|一下|完整的)?\s*第/.test(q)) return {intent:'create_episode',status:'ready',episode:episodeNumber};
   if (/全集|全剧|全部集数/.test(q)) {
-    const plan = scripts.map(s => s.text || '').join('\n');
-    const total = plan.match(/(?:共|总计|总共)\s*(\d+|[零一二两三四五六七八九十百]+)\s*集/);
-    const totalEpisodes = total ? chineseNumber(total[1]) : null;
+    const totals = value => [...String(value).matchAll(/(?:共|总计|总共|总集数(?:为|是|[:：])?)\s*(\d+|[零一二两三四五六七八九十百]+)\s*集/g)].map(m=>chineseNumber(m[1])).filter(n=>Number.isInteger(n)&&n>0);
+    const explicit=totals(q);
+    const declared=explicit.length ? explicit : scripts.filter(s=>s.available!==false).flatMap(s=>totals(s.text||''));
+    const unique=[...new Set(declared)];
+    if(unique.length>1) return {intent:'create_all',status:'clarification_required',reason:'资料中存在不同的总集数，请明确本次采用多少集。'};
+    const totalEpisodes=unique[0];
     return totalEpisodes ? { intent: 'create_all', status: 'ready', total_episodes: totalEpisodes } : { intent: 'create_all', status: 'clarification_required', reason: '需要先确认总集数和分集规划' };
   }
   if (range) return { intent: 'create_episode_range', status: 'ready', episode_start: chineseNumber(range[1]), episode_end: chineseNumber(range[2]) };

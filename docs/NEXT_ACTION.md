@@ -203,3 +203,7 @@ M1 已实现现有 Managed Agent 单任务服务、隔离持久记录、有界�
 LOCALMINIDRAMA_COMMERCIAL_SCRIPT_AND_PRODUCT_ACCEPTANCE
 
 Continue from project 6 and immutable shooting-draft manuscript hashes. First episode native extraction produced 21 shots; independent review findings were corrected through existing isolated asset APIs, with before/after evidence and browser reload/export. Provisional timing is not performance or film acceptance. Calls now total 19 (17 measured, 83412 tokens, estimated $0.03948219 excluding two unmeasured calls); native hidden fanout and reasoning-only length failures are disclosed. Existing nonthinking setting resolved the capacity failure without a new Gateway. Next work remains completing production preparation and evaluating event-led creation in the existing workbench; original/enhanced automatic samples remain quality-rejected, and Agent edits do not establish automatic superiority. Use isolated 5687 Runtime and SQLite, preserve 5679, no new Writer/Store, no unconditional retries. Final author commercial acceptance remains outstanding; Goal stays active.
+
+## 2026-10-15 全集入口的总集数修复
+
+普通作品意图路由纳入plan/outline/beat资料，不从旧剧本正文推断总集数；用户本句明确总集数优先，资料总集数冲突时澄清，available=false资料不参与。中文数字支持百位（执行范围仍受既有50集边界约束）。隔离雨林仍走空历史资料的意图路径，不开放全集/第二集。定向20/20通过，无新模型调用。全集跨缺口、并行效率及完整浏览器生产验收仍未完成。
