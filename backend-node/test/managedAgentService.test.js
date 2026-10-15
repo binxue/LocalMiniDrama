@@ -104,3 +104,10 @@ test('native team completion requires verified idle child threads',()=>{
  assert.equal(service._teamComplete([...events,{type:'session.thread_status_terminated'}],[{status:'idle'}]),false);
  assert.equal(service._teamComplete([{type:'agent.message'}],null),true);
 });
+
+test('team token aggregation deduplicates shared stream events without mixing outputs',()=>{
+ const main={id:'main-end',type:'span.model_request_end',model_usage:{input_tokens:10,output_tokens:4}};
+ const child={id:'child-end',type:'span.model_request_end',model_usage:{input_tokens:20,output_tokens:6}};
+ const usage=service._teamUsage([main],{a:[main,child],b:[child]});
+ assert.equal(usage.requests,2);assert.equal(usage.input_tokens,30);assert.equal(usage.output_tokens,10);
+});
