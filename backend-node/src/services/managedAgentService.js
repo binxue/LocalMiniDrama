@@ -172,11 +172,22 @@ async function readTeam(sessionId, events) {
   } catch { return {threads,threadEvents,complete:false}; }
 }
 
+function claimTask(db, taskId) {
+  return db.prepare("UPDATE managed_agent_tasks SET task_status='starting',updated_at=? WHERE task_id=? AND task_status='queued'").run(now(),taskId).changes === 1;
+}
+function recordExecutionError(db, taskId, err) {
+  const task=row(db,taskId);
+  const recoverable=!!task?.session_id;
+  update(db,taskId,{task_status:recoverable?'awaiting_recovery':'failed',
+    error_text:recoverable?`执行响应未知，先回查原Session，不重复提交：${redact(err.message)}`:redact(err.message),
+    completed_at:recoverable?null:now()});
+  return recoverable;
+}
+
 async function execute(db, log, taskId) {
   const task = row(db, taskId);
-  if (!task || task.task_status !== 'queued') return;
+  if (!task || !claimTask(db,taskId)) return;
   try {
-    update(db, taskId, { task_status: 'starting' });
     const controlledEpisodeAgent = (task.episode_id != null && ['agent-20261011131619-47ft8', 'agent-20261011131710-ncebb'].includes(task.agent_id)) || task.episode_id?.startsWith('batch-plan:') || task.episode_id?.startsWith('batch-expert:');
     const session = await createSession(task.agent_id, `LocalMiniDrama ${task.work_id} ${taskId}`, { controlledEpisodeAgent });
     const sessionId = session.id;
@@ -200,8 +211,8 @@ async function execute(db, log, taskId) {
     update(db, taskId, { task_status: status, output_text: result.text || null, output_version: result.text ? sha(result.text) : null, events_json: JSON.stringify(events), usage_json: JSON.stringify(result.usage), error_text: status === 'completed' ? null : recoveryError, completed_at: status === 'completed' || status === 'failed' ? now() : null });
     log.info('Managed Agent task finished', { task_id: taskId, status, session_id: sessionId });
   } catch (err) {
-    update(db, taskId, { task_status: 'failed', error_text: redact(err.message), completed_at: now() });
-    log.error('Managed Agent task failed', { task_id: taskId, error: err.message });
+    const recoverable=recordExecutionError(db,taskId,err);
+    log.error('Managed Agent execution interrupted', { task_id: taskId, recoverable, error: redact(err.message) });
   }
 }
 
@@ -267,4 +278,4 @@ function recoverOnStartup(db, log) {
   return result.changes;
 }
 
-module.exports = { _teamUsage:teamUsage, _teamComplete:teamComplete, ensureTable, createTask, getTask, listTasks, refreshTask, recoverOnStartup, ALLOWED_AGENTS, extract, _sessionArgs: sessionArgs };
+module.exports = { _claimTask:claimTask, _recordExecutionError:recordExecutionError, _teamUsage:teamUsage, _teamComplete:teamComplete, ensureTable, createTask, getTask, listTasks, refreshTask, recoverOnStartup, ALLOWED_AGENTS, extract, _sessionArgs: sessionArgs };

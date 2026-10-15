@@ -213,3 +213,7 @@ Continue from project 6 and immutable shooting-draft manuscript hashes. First ep
 只读健康与works接口核验：5688 PID30556，cwd为本工程，仍未返回preferred_kernel_test，是旧路由；健康ok不能当作新版本部署。新前端在后端kernelTestView明确返回capabilities.scoped_conversation=1后才查询隔离修订列表、开放修改对话；旧后端只读当前隔离成果，不请求会忽略scope的旧revision接口。雨林普通入口在缺少隔离批次标识时不再退回历史资料，也不开放普通发送。
 
 kernel路由回归通过、前端build通过。新增模型调用0，未覆盖剧本。需要让最新后端正常加载后继续实际操作验收；既有进程控制/浏览器策略拒绝未通过替代控制方式绕过。
+
+## 2026-10-15 收费提交边界修复
+
+managed_agent_tasks在queued到starting之间使用SQLite条件UPDATE原子领取；未领取成功的执行器不创建Session、不发送消息。已有session_id的执行异常保留awaiting_recovery及原Session，不把发送超时当永久失败，不自动重新发送。无Session的创建失败仍为failed。双SQLite连接验证只有一个可领取；仅本地回归，不冒充真实云端恢复。运行后端仍需正常加载新代码，当前未额外请求模型。

@@ -130,3 +130,31 @@ test('idle native child awaiting tool action is not completed',()=>{
  assert.equal(service._teamComplete(events,threads,{child:[{type:'session.status_terminated'}]}),false);
  assert.equal(service._teamComplete([...events,{type:'session.thread_status_idle',session_thread_id:'child',stop_reason:{type:'requires_action'}}],threads),false);
 });
+
+test('queued execution is claimed once and uncertain submission remains recoverable',()=>{
+ const db=new Database(':memory:');service.ensureTable(db);
+ const stamp=new Date().toISOString();
+ const insert=db.prepare("INSERT INTO managed_agent_tasks(task_id,work_id,agent_id,task_status,input_version,input_text,created_at,updated_at,session_id) VALUES(?,'w','agent','queued','sha','input',?,?,?)");
+ insert.run('with-session',stamp,stamp,'ses-known');insert.run('no-session',stamp,stamp,null);
+ assert.equal(service._claimTask(db,'with-session'),true);
+ assert.equal(service._claimTask(db,'with-session'),false);
+ assert.equal(service._recordExecutionError(db,'with-session',new Error('message response timeout')),true);
+ const task=service.getTask(db,'with-session');
+ assert.equal(task.task_status,'awaiting_recovery');assert.equal(task.session_id,'ses-known');assert.equal(task.completed_at,null);
+ assert.equal(service._claimTask(db,'with-session'),false);
+ assert.equal(service._recordExecutionError(db,'no-session',new Error('creation rejected')),false);
+ assert.equal(service.getTask(db,'no-session').task_status,'failed');db.close();
+});
+
+test('independent SQLite connections cannot both claim the same paid task',()=>{
+ const fs=require('node:fs'),os=require('node:os'),path=require('node:path');
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'agent-claim-'));
+ const a=new Database(path.join(dir,'tasks.db')),b=new Database(path.join(dir,'tasks.db'));
+ try {
+  service.ensureTable(a);const stamp=new Date().toISOString();
+  a.prepare("INSERT INTO managed_agent_tasks(task_id,work_id,agent_id,task_status,input_version,input_text,created_at,updated_at) VALUES('shared','w','agent','queued','sha','input',?,?)").run(stamp,stamp);
+  assert.equal(service._claimTask(a,'shared'),true);
+  assert.equal(service._claimTask(b,'shared'),false);
+  assert.equal(service.getTask(b,'shared').task_status,'starting');
+ }finally{a.close();b.close();fs.rmSync(dir,{recursive:true,force:true});}
+});
